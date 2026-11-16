@@ -1,0 +1,163 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/game_ui.gd" id="1_game_ui"]
+
+[node name="UI" type="CanvasLayer"]
+script = ExtResource("1_game_ui")
+
+[node name="UIRoot" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = 640.0
+offset_bottom = 360.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="LeftHUDRegion" type="PanelContainer" parent="UIRoot"]
+clip_contents = true
+layout_mode = 0
+offset_right = 112.0
+offset_bottom = 360.0
+mouse_filter = 0
+
+[node name="HUDColumn" type="VBoxContainer" parent="UIRoot/LeftHUDRegion"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="DayLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+layout_mode = 2
+mouse_filter = 2
+text = "Hari 1"
+clip_text = true
+
+[node name="PhaseLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+layout_mode = 2
+mouse_filter = 2
+text = "Perencanaan"
+clip_text = true
+
+[node name="CashLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+layout_mode = 2
+mouse_filter = 2
+text = "Kas: Rp100000"
+clip_text = true
+
+[node name="GoalLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+layout_mode = 2
+mouse_filter = 2
+text = "Target Hari 7: Rp700000"
+autowrap_mode = 3
+clip_text = true
+
+[node name="GoalProgressBar" type="ProgressBar" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+layout_mode = 2
+mouse_filter = 2
+max_value = 1.0
+step = 0.0
+show_percentage = false
+
+[node name="PlanningBox" type="VBoxContainer" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ForecastQuotaLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
+layout_mode = 2
+mouse_filter = 2
+text = "Target Tamu: 4"
+clip_text = true
+
+[node name="StartServiceButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+text = "Mulai Layanan"
+clip_text = true
+
+[node name="ServiceBox" type="VBoxContainer" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ServiceElapsedLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/ServiceBox"]
+layout_mode = 2
+mouse_filter = 2
+text = "Waktu: 0.0 dtk"
+clip_text = true
+
+[node name="UnspawnedQuotaLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/ServiceBox"]
+layout_mode = 2
+mouse_filter = 2
+text = "Antrean Datang: 4"
+clip_text = true
+
+[node name="InteractionDialogue" type="PanelContainer" parent="UIRoot"]
+visible = false
+z_index = 10
+layout_mode = 0
+offset_left = 144.0
+offset_top = 8.0
+offset_right = 144.0
+offset_bottom = 8.0
+mouse_filter = 2
+
+[node name="DialogueColumn" type="VBoxContainer" parent="UIRoot/InteractionDialogue"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="TargetTitleLabel" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
+layout_mode = 2
+mouse_filter = 2
+text = "Stasiun"
+
+[node name="AllowedCommandsLabel" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="PrefixPromptLabel" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ContextMessage" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="DayResultSidePanel" type="PanelContainer" parent="UIRoot"]
+visible = false
+layout_mode = 0
+offset_left = 384.0
+offset_top = 16.0
+offset_right = 628.0
+offset_bottom = 344.0
+mouse_filter = 0
+
+[node name="ResultColumn" type="VBoxContainer" parent="UIRoot/DayResultSidePanel"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ResultTitleLabel" type="Label" parent="UIRoot/DayResultSidePanel/ResultColumn"]
+layout_mode = 2
+mouse_filter = 2
+text = "Hasil Hari 1"
+
+[node name="SettlementSummaryLabel" type="Label" parent="UIRoot/DayResultSidePanel/ResultColumn"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ContinueButton" type="Button" parent="UIRoot/DayResultSidePanel/ResultColumn"]
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+text = "Lanjut"
+
+[node name="ExtraModeButton" type="Button" parent="UIRoot/DayResultSidePanel/ResultColumn"]
+visible = false
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+text = "Mode Ekstra"

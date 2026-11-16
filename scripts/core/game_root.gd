@@ -233,6 +233,15 @@ func _wire_controllers() -> void:
 			_service_controller as ServiceController,
 			self
 		)
+	var ui := get_node_or_null("UI")
+	if ui != null and ui.has_method(&"bind_context"):
+		ui.bind_context(
+			self,
+			world_map,
+			_kitchen_controller as KitchenController,
+			_service_controller as ServiceController,
+			_run_controller as RunController
+		)
 
 
 func _is_valid_kitchen_controller() -> bool:

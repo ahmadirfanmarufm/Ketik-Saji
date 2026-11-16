@@ -5,11 +5,13 @@
 [ext_resource type="Script" uid="uid://bdgg0naj6ugc0" path="res://scripts/kitchen/kitchen_controller.gd" id="3_kitchen"]
 [ext_resource type="Script" uid="uid://ew07g3xeefsv" path="res://scripts/service/service_controller.gd" id="4_service"]
 [ext_resource type="Script" uid="uid://d1wtcyganh2n4" path="res://scripts/economy/run_controller.gd" id="5_run"]
+[ext_resource type="PackedScene" path="res://scenes/ui/game_ui.tscn" id="6_ui"]
 
 [node name="GameRoot" type="Node2D" unique_id=450135891]
 script = ExtResource("2_root")
 
 [node name="World" parent="." unique_id=1520841377 instance=ExtResource("1_world")]
+position = Vector2(144, 36)
 
 [node name="KitchenController" type="Node" parent="." unique_id=701000101]
 script = ExtResource("3_kitchen")
@@ -19,3 +21,5 @@ script = ExtResource("4_service")
 
 [node name="RunController" type="Node" parent="." unique_id=701000103]
 script = ExtResource("5_run")
+
+[node name="UI" parent="." unique_id=701000104 instance=ExtResource("6_ui")]

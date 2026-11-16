@@ -206,6 +206,21 @@ func get_command_prefix() -> String:
 
 func get_allowed_commands_for_selected_target() -> Array[String]:
 	var result: Array[String] = []
+	match _selected_target_id:
+		&"storage_box", &"fridge":
+			result.assign(["ayam", "beras", "sapi", "sayur", "telur", "tempe"])
+		&"stove":
+			result.assign(["goreng"])
+		&"washer":
+			result.assign(["cuci"])
+		&"rice_cooker":
+			result.assign(["masak", "nasi"])
+		&"work_table_chop":
+			result.assign(["potong"])
+		&"dining_table_01", &"dining_table_02":
+			result.assign(["saji", "bersihkan"])
+		&"online_station":
+			result.assign(["terima"])
 	return result
 
 
