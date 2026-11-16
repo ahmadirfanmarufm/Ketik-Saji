@@ -122,6 +122,11 @@ visible = false
 layout_mode = 2
 mouse_filter = 2
 
+[node name="RemainingPromptLabel" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
 [node name="ContextMessage" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
 visible = false
 layout_mode = 2

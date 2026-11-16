@@ -444,35 +444,53 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 		"stove selected in SERVING with allowed command goreng",
 		kitchen.get_selected_target_id() == &"stove"
 		and kitchen.get_allowed_commands_for_selected_target() == ["goreng"]
+		and ui.prefix_prompt_label.text == "Ketik: goreng"
+		and not ui.remaining_prompt_label.visible
 	)
 
-	# Type 'g', 'o', 'r' -> prefix becomes "gor".
+	# 1. Valid first character is accepted and updates live preview.
 	_send_key(ui, "g".unicode_at(0), KEY_G)
+	_check(
+		"valid first character g accepted with live preview",
+		kitchen.get_command_prefix() == "g"
+		and ui.prefix_prompt_label.text == "Ketik: [g]"
+		and ui.prefix_prompt_label.modulate == GameUI.PREFIX_HIGHLIGHT_COLOR
+		and ui.remaining_prompt_label.visible
+		and ui.remaining_prompt_label.text == "Ketik berikutnya: oreng"
+		and ui.allowed_commands_label.text == "[g]oreng"
+	)
+
+	# 2. Valid multi-character prefix ('g', 'o', 'r') is accepted.
 	_send_key(ui, "o".unicode_at(0), KEY_O)
 	_send_key(ui, "r".unicode_at(0), KEY_R)
 	_check(
 		"Unicode keys g, o, r accepted in SERVING",
 		kitchen.get_command_prefix() == "gor"
-		and ui.prefix_prompt_label.text == "[ GOReng ]"
+		and ui.prefix_prompt_label.text == "Ketik: [gor]"
+		and ui.remaining_prompt_label.visible
+		and ui.remaining_prompt_label.text == "Ketik berikutnya: eng"
+		and ui.allowed_commands_label.text == "[gor]eng"
 	)
 
 	# Key echo ('e' with echo=true) must be ignored.
 	_send_key(ui, "e".unicode_at(0), KEY_E, true)
 	_check("key echo ignored", kitchen.get_command_prefix() == "gor")
 
-	# Invalid key 'z' while prefix is "gor" shows feedback; Escape clears both prefix and feedback.
+	# 4 & 6. Invalid key 'z' while prefix is "gor" shows feedback; Escape clears prefix/feedback.
 	_send_key(ui, "z".unicode_at(0), KEY_Z)
 	_check(
 		"invalid key z with active prefix shows feedback and shake",
 		kitchen.get_command_prefix() == "gor"
 		and ui.context_message_label.visible
+		and ui.context_message_label.text == "Huruf tidak cocok"
 		and ui.is_shaking()
 	)
 	_send_key(ui, 0, KEY_ESCAPE)
 	_check(
 		"Escape clears command prefix and clears invalid-key feedback/shake",
 		kitchen.get_command_prefix() == ""
-		and ui.prefix_prompt_label.text == "[ goreng ]"
+		and ui.prefix_prompt_label.text == "Ketik: goreng"
+		and not ui.remaining_prompt_label.visible
 		and not ui.context_message_label.visible
 		and ui.context_message_label.text == ""
 		and not ui.is_shaking()
@@ -510,12 +528,56 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 	)
 	ui.set_modal_blocking(false)
 
-	# Typing full word "goreng" auto-executes and clears prefix without Enter.
+	# 3. Completing a valid command ("goreng") executes it exactly once and resets prefix/preview.
+	var exec_before := kitchen.get_executed_command_count()
 	for ch in ["g", "o", "r", "e", "n", "g"]:
 		_send_key(ui, ch.unicode_at(0))
 	_check(
-		"full word goreng auto-executes and clears prefix without Enter",
+		"full word goreng auto-executes exactly once and clears prefix/preview without Enter",
 		kitchen.get_command_prefix() == ""
+		and kitchen.get_executed_command_count() == exec_before + 1
+		and kitchen.get_last_executed_command() == "goreng"
+		and ui.prefix_prompt_label.text == "Ketik: goreng"
+		and not ui.remaining_prompt_label.visible
+	)
+
+	# 5, 7, 8, 9. Select rice_cooker at (480, 52) ("masak, nasi"):
+	# Test uppercase input ("M", "A"), live preview ("Ketik: [ma]", "Ketik berikutnya: sak"),
+	# Backspace editing, and target-switch prefix reset.
+	_send_left_click(ui, Vector2(480, 52))
+	_check(
+		"rice_cooker selected with masak, nasi and idle instruction",
+		kitchen.get_selected_target_id() == &"rice_cooker"
+		and ui.allowed_commands_label.text == "masak, nasi"
+		and ui.prefix_prompt_label.text == "Ketik perintah"
+		and not ui.remaining_prompt_label.visible
+	)
+	_send_key(ui, "M".unicode_at(0), KEY_M)
+	_send_key(ui, 0, KEY_A)
+	_check(
+		"uppercase and keycode-only input normalized to ma with Ketik berikutnya: sak",
+		kitchen.get_command_prefix() == "ma"
+		and ui.allowed_commands_label.text == "[ma]sak, nasi"
+		and ui.prefix_prompt_label.text == "Ketik: [ma]"
+		and ui.remaining_prompt_label.visible
+		and ui.remaining_prompt_label.text == "Ketik berikutnya: sak"
+	)
+	_send_key(ui, 0, KEY_BACKSPACE)
+	_check(
+		"Backspace removes one character to m with Ketik berikutnya: asak",
+		kitchen.get_command_prefix() == "m"
+		and ui.prefix_prompt_label.text == "Ketik: [m]"
+		and ui.remaining_prompt_label.text == "Ketik berikutnya: asak"
+	)
+
+	# 7. Switching targets clears incompatible typing state.
+	_send_left_click(ui, Vector2(288, 52))
+	_check(
+		"switching target from rice_cooker to stove clears active prefix and preview",
+		kitchen.get_selected_target_id() == &"stove"
+		and kitchen.get_command_prefix() == ""
+		and ui.prefix_prompt_label.text == "Ketik: goreng"
+		and not ui.remaining_prompt_label.visible
 	)
 
 	game_root.free()
@@ -539,8 +601,28 @@ func _test_dialogue_display_and_clamping() -> void:
 		ui.interaction_dialogue.visible
 		and ui.target_title_label.text == "Kotak Bahan"
 		and ui.allowed_commands_label.text == "ayam, beras, sapi, sayur, telur, tempe"
-		and ui.prefix_prompt_label.text == "[ ... ]"
+		and ui.prefix_prompt_label.text == "Ketik perintah"
+		and not ui.remaining_prompt_label.visible
 	)
+
+	# 10. Multiple matching command prefixes ("sa" -> sapi / sayur) show all alternatives clearly:
+	_send_key(ui, "s".unicode_at(0), KEY_S)
+	_send_key(ui, "a".unicode_at(0), KEY_A)
+	_check(
+		"shared prefix sa shows both sapi and sayur remaining suffixes without guessing",
+		ui.allowed_commands_label.text == "ayam, beras, [sa]pi, [sa]yur, telur, tempe"
+		and ui.prefix_prompt_label.text == "Ketik: [sa]"
+		and ui.remaining_prompt_label.visible
+		and ui.remaining_prompt_label.text == "Ketik berikutnya: pi / yur"
+	)
+	_send_key(ui, "y".unicode_at(0), KEY_Y)
+	_check(
+		"typing y disambiguates to sayur with Ketik berikutnya: ur",
+		ui.allowed_commands_label.text == "ayam, beras, sapi, [say]ur, telur, tempe"
+		and ui.prefix_prompt_label.text == "Ketik: [say]"
+		and ui.remaining_prompt_label.text == "Ketik berikutnya: ur"
+	)
+	_send_key(ui, 0, KEY_ESCAPE)
 
 	var box_rect := ui.interaction_dialogue.get_rect()
 	_check(
@@ -570,7 +652,7 @@ func _test_dialogue_display_and_clamping() -> void:
 		"dialogue follows online_station and stays within right viewport bound",
 		ui.target_title_label.text == "Stasiun Online"
 		and ui.allowed_commands_label.text == "terima"
-		and ui.prefix_prompt_label.text == "[ terima ]"
+		and ui.prefix_prompt_label.text == "Ketik: terima"
 		and online_rect.position.x >= ui.world_visible_rect.position.x
 		and online_rect.end.x <= ui.world_visible_rect.end.x
 		and online_rect.position.x > box_rect.position.x

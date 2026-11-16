@@ -10,6 +10,7 @@ extends Node
 signal player_tile_changed(tile: Vector2i)
 signal selected_interactable_changed(target_id: StringName)
 signal command_prefix_changed(prefix: String)
+signal command_executed(command: StringName, target_id: StringName)
 signal action_feedback(code: StringName)
 signal kitchen_state_changed()
 
@@ -25,6 +26,8 @@ var _game_root: Node = null
 var _player_tile: Vector2i = DEFAULT_START_TILE
 var _selected_target_id: StringName = &""
 var _accepted_prefix: String = ""
+var _last_executed_command: String = ""
+var _executed_command_count: int = 0
 
 var _held_item: Dictionary = {}
 var _work_table_items: Dictionary[StringName, Dictionary] = {}
@@ -173,24 +176,42 @@ func on_interactable_clicked(target_id: StringName) -> bool:
 func accept_typed_character(character: String) -> bool:
 	if not _is_serving_phase():
 		return false
-	if character.length() != 1 or _selected_target_id == &"":
+	var normalized_char := character.strip_edges().to_lower()
+	if normalized_char.length() != 1 or _selected_target_id == &"":
 		return false
 	var allowed := get_allowed_commands_for_selected_target()
 	if allowed.is_empty():
 		action_feedback.emit(&"invalid_key")
 		return false
 
-	var candidate := (_accepted_prefix + character.to_lower())
+	var candidate := _accepted_prefix.to_lower() + normalized_char
+	var matched_any := false
+	var exact_match := ""
 	for cmd in allowed:
-		if cmd.begins_with(candidate):
-			_accepted_prefix = candidate
-			command_prefix_changed.emit(_accepted_prefix)
-			if cmd == _accepted_prefix:
-				clear_command_prefix()
-			return true
+		var norm_cmd := cmd.strip_edges().to_lower()
+		if norm_cmd.begins_with(candidate):
+			matched_any = true
+			if norm_cmd == candidate and exact_match.is_empty():
+				exact_match = norm_cmd
 
-	action_feedback.emit(&"invalid_key")
-	return false
+	if not matched_any:
+		action_feedback.emit(&"invalid_key")
+		return false
+
+	_accepted_prefix = candidate
+	command_prefix_changed.emit(_accepted_prefix)
+	if not exact_match.is_empty():
+		_execute_typed_command(exact_match)
+		clear_command_prefix()
+	return true
+
+
+func backspace_command_prefix() -> bool:
+	if _accepted_prefix.is_empty():
+		return false
+	_accepted_prefix = _accepted_prefix.left(_accepted_prefix.length() - 1)
+	command_prefix_changed.emit(_accepted_prefix)
+	return true
 
 
 func clear_command_prefix() -> void:
@@ -202,6 +223,14 @@ func clear_command_prefix() -> void:
 
 func get_command_prefix() -> String:
 	return _accepted_prefix
+
+
+func get_last_executed_command() -> String:
+	return _last_executed_command
+
+
+func get_executed_command_count() -> int:
+	return _executed_command_count
 
 
 func get_allowed_commands_for_selected_target() -> Array[String]:
@@ -512,8 +541,16 @@ func _sync_player_visual() -> void:
 func _set_selected_target(target_id: StringName) -> void:
 	if _selected_target_id == target_id:
 		return
+	clear_command_prefix()
 	_selected_target_id = target_id
 	selected_interactable_changed.emit(_selected_target_id)
+
+
+func _execute_typed_command(command: String) -> void:
+	_last_executed_command = command
+	_executed_command_count += 1
+	command_executed.emit(StringName(command), _selected_target_id)
+	kitchen_state_changed.emit()
 
 
 func _compute_available_capacity(storage_unit_id: StringName, ingredient_id: StringName) -> int:

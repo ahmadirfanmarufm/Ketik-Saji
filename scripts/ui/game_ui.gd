@@ -12,6 +12,8 @@ const DIALOGUE_BELOW_OFFSET: float = 20.0
 const DIALOGUE_MARGIN: float = 4.0
 const SHAKE_DURATION: float = 0.12
 const SHAKE_OFFSET_PX: float = 4.0
+const PREFIX_HIGHLIGHT_COLOR: Color = Color(1.0, 0.92, 0.35, 1.0)
+const PREFIX_IDLE_COLOR: Color = Color(0.85, 0.90, 1.0, 1.0)
 
 const TARGET_LABELS: Dictionary[StringName, String] = {
 	&"storage_box": "Kotak Bahan",
@@ -94,6 +96,9 @@ var _modal_blocking_active: bool = false
 )
 @onready var prefix_prompt_label: Label = (
 	$UIRoot/InteractionDialogue/DialogueColumn/PrefixPromptLabel
+)
+@onready var remaining_prompt_label: Label = (
+	$UIRoot/InteractionDialogue/DialogueColumn/RemainingPromptLabel
 )
 @onready var context_message_label: Label = (
 	$UIRoot/InteractionDialogue/DialogueColumn/ContextMessage
@@ -198,12 +203,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_world_map.get_canvas_transform().affine_inverse() * canvas_pos
 	)
 	_release_button_focus_if_any()
+	_clear_feedback_state()
 	var hit_target_id := _hit_test_interactable(world_global_pos)
 	if hit_target_id != &"":
 		_kitchen_controller.on_interactable_clicked(hit_target_id)
 	else:
 		var cell := _world_map.global_to_cell(world_global_pos)
 		_kitchen_controller.on_floor_clicked(cell)
+	_refresh_dialogue()
 
 	if is_inside_tree() and get_viewport() != null:
 		get_viewport().set_input_as_handled()
@@ -223,20 +230,53 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 
 	if key_event.keycode == KEY_ESCAPE:
-		_feedback_code = &""
-		_feedback_text = ""
-		_shake_remaining = 0.0
+		_clear_feedback_state()
 		_kitchen_controller.clear_command_prefix()
 		_refresh_dialogue()
 		if is_inside_tree() and get_viewport() != null:
 			get_viewport().set_input_as_handled()
 		return
 
-	if key_event.unicode >= 32:
-		var ch := String.chr(key_event.unicode)
+	if key_event.keycode == KEY_BACKSPACE:
+		_clear_feedback_state()
+		_kitchen_controller.backspace_command_prefix()
+		_refresh_dialogue()
+		if is_inside_tree() and get_viewport() != null:
+			get_viewport().set_input_as_handled()
+		return
+
+	var ch := _extract_typed_character(key_event)
+	if not ch.is_empty():
 		_kitchen_controller.accept_typed_character(ch)
 		if is_inside_tree() and get_viewport() != null:
 			get_viewport().set_input_as_handled()
+
+
+func _extract_typed_character(key_event: InputEventKey) -> String:
+	if key_event == null:
+		return ""
+	if (
+		key_event.keycode == KEY_ENTER
+		or key_event.keycode == KEY_KP_ENTER
+		or key_event.keycode == KEY_TAB
+		or key_event.keycode == KEY_SPACE
+		or key_event.keycode == KEY_DELETE
+	):
+		return ""
+	if key_event.unicode > 32 and key_event.unicode != 127:
+		return String.chr(key_event.unicode).to_lower()
+	var kc: int = key_event.keycode
+	if kc == KEY_NONE:
+		kc = key_event.physical_keycode
+	if kc >= KEY_A and kc <= KEY_Z:
+		return String.chr(kc).to_lower()
+	return ""
+
+
+func _clear_feedback_state() -> void:
+	_feedback_code = &""
+	_feedback_text = ""
+	_shake_remaining = 0.0
 
 
 func _connect_ui_buttons() -> void:
@@ -337,9 +377,7 @@ func _on_extra_mode_pressed() -> void:
 
 
 func _on_phase_changed(_phase: int, _day_index: int) -> void:
-	_feedback_code = &""
-	_feedback_text = ""
-	_shake_remaining = 0.0
+	_clear_feedback_state()
 	_refresh_all()
 
 
@@ -348,16 +386,12 @@ func _on_player_tile_changed(_tile: Vector2i) -> void:
 
 
 func _on_selected_interactable_changed(_target_id: StringName) -> void:
-	_feedback_code = &""
-	_feedback_text = ""
-	_shake_remaining = 0.0
+	_clear_feedback_state()
 	_refresh_dialogue()
 
 
 func _on_command_prefix_changed(_prefix: String) -> void:
-	_feedback_code = &""
-	_feedback_text = ""
-	_shake_remaining = 0.0
+	_clear_feedback_state()
 	_refresh_dialogue()
 
 
@@ -489,7 +523,7 @@ func _refresh_dialogue() -> void:
 	var is_serving := (phase == SharedTypes.Phase.SERVING)
 	if is_serving and not allowed.is_empty():
 		allowed_commands_label.visible = true
-		allowed_commands_label.text = ", ".join(allowed)
+		allowed_commands_label.text = _format_allowed_commands(prefix, allowed)
 	else:
 		allowed_commands_label.visible = false
 		allowed_commands_label.text = ""
@@ -497,9 +531,22 @@ func _refresh_dialogue() -> void:
 	if is_serving and (not allowed.is_empty() or not prefix.is_empty()):
 		prefix_prompt_label.visible = true
 		prefix_prompt_label.text = _format_prefix_prompt(prefix, allowed)
+		prefix_prompt_label.modulate = (
+			PREFIX_HIGHLIGHT_COLOR if not prefix.is_empty() else PREFIX_IDLE_COLOR
+		)
 	else:
 		prefix_prompt_label.visible = false
 		prefix_prompt_label.text = ""
+		prefix_prompt_label.modulate = PREFIX_IDLE_COLOR
+
+	if remaining_prompt_label != null:
+		var remaining_text := _format_remaining_preview(prefix, allowed)
+		if is_serving and not remaining_text.is_empty():
+			remaining_prompt_label.visible = true
+			remaining_prompt_label.text = remaining_text
+		else:
+			remaining_prompt_label.visible = false
+			remaining_prompt_label.text = ""
 
 	if not _feedback_text.is_empty():
 		context_message_label.visible = true
@@ -511,17 +558,47 @@ func _refresh_dialogue() -> void:
 	_update_dialogue_position()
 
 
+func _format_allowed_commands(prefix: String, allowed: Array[String]) -> String:
+	if prefix.is_empty():
+		return ", ".join(allowed)
+
+	var norm_prefix := prefix.to_lower()
+	var formatted: PackedStringArray = []
+	for cmd in allowed:
+		var norm_cmd := cmd.strip_edges().to_lower()
+		if norm_cmd.begins_with(norm_prefix):
+			var typed_part := norm_cmd.left(norm_prefix.length())
+			var rest_part := norm_cmd.substr(norm_prefix.length())
+			formatted.append("[%s]%s" % [typed_part, rest_part])
+		else:
+			formatted.append(norm_cmd)
+	return ", ".join(formatted)
+
+
 func _format_prefix_prompt(prefix: String, allowed: Array[String]) -> String:
 	if prefix.is_empty():
 		if allowed.size() == 1:
-			return "[ %s ]" % allowed[0]
-		return "[ ... ]"
+			return "Ketik: %s" % allowed[0].strip_edges().to_lower()
+		return "Ketik perintah"
+	return "Ketik: [%s]" % prefix.to_lower()
 
+
+func _format_remaining_preview(prefix: String, allowed: Array[String]) -> String:
+	if prefix.is_empty():
+		return ""
+
+	var norm_prefix := prefix.to_lower()
+	var remainders: PackedStringArray = []
 	for cmd in allowed:
-		if cmd.begins_with(prefix):
-			var remainder := cmd.substr(prefix.length())
-			return "[ %s%s ]" % [prefix.to_upper(), remainder]
-	return "[ %s ]" % prefix.to_upper()
+		var norm_cmd := cmd.strip_edges().to_lower()
+		if norm_cmd.begins_with(norm_prefix):
+			var rem := norm_cmd.substr(norm_prefix.length())
+			if not rem.is_empty():
+				remainders.append(rem)
+
+	if remainders.is_empty():
+		return ""
+	return "Ketik berikutnya: %s" % " / ".join(remainders)
 
 
 func _update_dialogue_position() -> void:
