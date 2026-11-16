@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="UtilityDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/economy/utility_def.gd" id="1_r7yqi"]
+
+[resource]
+script = ExtResource("1_r7yqi")
+utility_id = &"washer"
+display_name = "Wastafel"
+fixture_kind = 3
+purchase_price = 50000

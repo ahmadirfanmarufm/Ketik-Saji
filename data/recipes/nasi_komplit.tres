@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="RecipeDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_part_def.gd" id="1_ja0bh"]
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_def.gd" id="2_n1pl8"]
+
+[sub_resource type="Resource" id="Resource_jni2t"]
+script = ExtResource("1_ja0bh")
+ingredient_id = &"beras"
+required_state = 2
+
+[sub_resource type="Resource" id="Resource_cgg7t"]
+script = ExtResource("1_ja0bh")
+ingredient_id = &"ayam"
+
+[sub_resource type="Resource" id="Resource_l3fmf"]
+script = ExtResource("1_ja0bh")
+ingredient_id = &"tempe"
+
+[sub_resource type="Resource" id="Resource_827fy"]
+script = ExtResource("1_ja0bh")
+ingredient_id = &"sayur"
+required_state = 3
+
+[sub_resource type="Resource" id="Resource_3i0ig"]
+script = ExtResource("1_ja0bh")
+ingredient_id = &"telur"
+
+[resource]
+script = ExtResource("2_n1pl8")
+recipe_id = &"nasi_komplit"
+display_name = "Nasi Komplit"
+icon_key = &"nasi_komplit"
+required_parts = Array[ExtResource("1_ja0bh")]([SubResource("Resource_jni2t"), SubResource("Resource_cgg7t"), SubResource("Resource_l3fmf"), SubResource("Resource_827fy"), SubResource("Resource_3i0ig")])

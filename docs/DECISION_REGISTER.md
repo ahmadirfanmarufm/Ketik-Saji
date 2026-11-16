@@ -1,6 +1,6 @@
 # Decision register and status freeze (updated for latest visual layout, 2026-11-15)
 
-**Authority:** coordinator's direct statements > coordinator-confirmed agent interviews > `SHARED_BASELINE.md` v2.0 > these technical implementation choices > old agent proposals. This is a record, not a request for another multi-agent design round.
+**Authority:** coordinator's direct statements > coordinator-confirmed agent interviews > `SHARED_BASELINE.md` v2.1 > these technical implementation choices > old agent proposals. This is a record, not a request for another multi-agent design round.
 
 | ID | Decision | Status | Owner | Cross-doc effect |
 |---|---|---|---|---|
@@ -43,3 +43,11 @@
 8. If fewer than seven approved recipes are currently loaded, unlock only loaded entries; a **content warning** identifies missing Day 4–7 entries. Do not fabricate or silently mark three recipes as a completed seven-day content plan.
 
 Technical defaults can be adjusted by the sole developer when a concrete implementation limitation is demonstrated, keeping interfaces and tests consistent. Gameplay defaults above should be treated as documented provisional behavior and reviewed during playtesting, not mislabeled `CONFIRMED`.
+
+## Implementation directives (2026-11-16 coordinator follow-up)
+
+- **`CC-01` / `CDR-04` / `TA-01` (Option A confirmed):** `KitchenController` remains sole owner of `player_tile`, `selected_target_id`, `accepted_prefix`, `on_floor_clicked`, and `on_interactable_clicked`. Movement logic acts strictly as an internal spatial/visual helper with one world-click routing path.
+- **`CDR-03` / `TA-02`:** Movement helper queries `WorldMap`/`WorldGrid` read-only across full footprints (`shortest Manhattan distance` from `player_tile`, deterministic cardinal tie-break order).
+- **`TQ-01` (Track A3 schema contract):** Confirmed field split across `IngredientDef`, `RecipeDef` (no `unlock_day` or price), `RecipeEconomyEntry` (`recipe_id`, `unlock_day`, `dine_in_price` inside `EconomyConfig`), `UtilityDef` (`footprint: Vector2i = 1×1`), map-authored `PlacementSlot`, and `EconomyConfig`.
+- **`CDR-01` / `CDR-02` / `CC-05`:** Align `restaurant_world.tscn` incrementally to `docs/ARCHITECTURE.md` §1; `Decorations` is permitted as a passive visual-only sibling under `World`; `Player` stays visual-only (`VisualAnchor` usable for held-item icon).
+- **`CDR-07` / `TQ-02`:** Preserve walkability-agnostic `WorldGrid.occupy()`; teleport destinations enforce `is_free()`. Starter resale (`Rp0`) and trash plate preservation remain **PROPOSED** defaults pending Milestone 1/4/playtest review.

@@ -1,18 +1,17 @@
 class_name WorldMap
 extends Node2D
 ## Spatial foundation of RestaurantWorld: map configuration, the grid, the
-## object registry, and a temporary visual blockout.
+## object registry, stateless target-neighbor queries, and a temporary blockout.
 ##
 ## Spatial data only. It does not move the Player, route clicks, or own
 ## fixtures, orders, stock or money. Those belong to their documented owners.
-##
-## Scene-authored objects (children of KitchenStations, DiningTables, OnlineArea) declare a
-## stable ID with node metadata `world_id` and are registered on _ready. Kitchen
-## stations and dining tables claim the single cell under their position (provisional
-## single-cell footprints); OnlineArea markers are registered as anchors only and
-## claim no cells.
 
 const WORLD_ID_META: StringName = &"world_id"
+const PARENT_WORLD_ID_META: StringName = &"parent_world_id"
+const FOOTPRINT_SIZE_META: StringName = &"footprint_size"
+const SLOT_ID_META: StringName = &"slot_id"
+const ALLOWED_FIXTURE_KINDS_META: StringName = &"allowed_fixture_kinds"
+const INVALID_CELL: Vector2i = Vector2i(-1, -1)
 
 const COLOR_WAITING_LANE := Color(0.55, 0.45, 0.75)
 const COLOR_KITCHEN := Color(0.80, 0.70, 0.50)
@@ -43,12 +42,17 @@ var registry: WorldRegistry
 var _cleanup_callables: Dictionary[StringName, Callable] = {}
 
 @onready var floor_layer: TileMapLayer = $FloorTiles
-@onready var decorations: Node2D = $Decorations
-@onready var fixtures: Node2D = $KitchenStations
-@onready var dining_area: Node2D = $DiningTables
-@onready var waiting_lane: Node2D = $WaitingLane
-@onready var online_area: Node2D = $OnlineArea
+@onready var dine_in_waiting_anchors: Node2D = $DineInWaitingAnchors
+@onready var player: Node2D = $Player
+@onready var kitchen_stations: Node2D = $KitchenStations
+@onready var kitchen_work_tables: Node2D = $KitchenWorkTables
+@onready var dining_tables: Node2D = $DiningTables
+@onready var online_station: Area2D = $OnlineStation
+@onready var driver_pickup_spots: Node2D = $DriverPickupSpots
+@onready var driver_overflow_anchors: Node2D = $DriverOverflowAnchors
+@onready var driver_objects: Node2D = $DriverObjects
 @onready var placement_slots: Node2D = $PlacementSlots
+@onready var decorations: Node2D = $Decorations
 
 
 func _enter_tree() -> void:
@@ -63,9 +67,14 @@ func _enter_tree() -> void:
 
 
 func _ready() -> void:
-	_register_children(fixtures, true)
-	_register_children(dining_area, true)
-	_register_children(online_area, false)
+	_register_fixture_children(kitchen_stations)
+	_register_work_tables(kitchen_work_tables)
+	_register_fixture_children(dining_tables)
+	_register_fixture_node(online_station)
+	_register_anchor_children(dine_in_waiting_anchors)
+	_register_anchor_children(driver_pickup_spots)
+	_register_anchor_children(driver_overflow_anchors)
+	_register_anchor_children(placement_slots)
 	queue_redraw()
 
 
@@ -113,17 +122,137 @@ func unregister_object(object_id: StringName) -> bool:
 	return true
 
 
-func _register_children(container: Node2D, claim_cell: bool) -> void:
+## Occupied footprint cells for a physical fixture, or its parent fixture's
+## footprint when `target_id` is a child interaction target. Returns an empty
+## array for unknown IDs, passive markers, empty slots, or invalid references.
+func get_target_footprint(target_id: StringName) -> Array[Vector2i]:
+	var empty: Array[Vector2i] = []
+	if target_id == &"" or grid == null or not grid.is_valid() or registry == null:
+		return empty
+
+	var node := registry.get_object(target_id)
+	if node == null:
+		return empty
+
+	var direct := grid.get_footprint(target_id)
+	if not direct.is_empty():
+		return direct
+
+	if node.has_meta(PARENT_WORLD_ID_META):
+		var parent_id := StringName(node.get_meta(PARENT_WORLD_ID_META, &""))
+		if parent_id == &"" or parent_id == target_id:
+			return empty
+		if registry.get_object(parent_id) == null:
+			return empty
+		return grid.get_footprint(parent_id)
+
+	return empty
+
+
+## Walkable, unoccupied cardinal neighbors of `target_id`'s footprint in fixed
+## deterministic order (footprint cell order, then up, right, down, left).
+func get_free_cardinal_neighbors(target_id: StringName) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	var footprint := get_target_footprint(target_id)
+	if footprint.is_empty():
+		return result
+
+	for neighbor in grid.get_footprint_neighbors(footprint):
+		if grid.is_free(neighbor):
+			result.append(neighbor)
+	return result
+
+
+## Nearest free cardinal neighbor of `target_id` from `from_cell` by Manhattan
+## distance, breaking ties in deterministic cardinal order (up, right, down, left).
+## Returns INVALID_CELL (-1, -1) if `target_id` or `from_cell` is invalid or no
+## free neighbor exists.
+func find_nearest_free_neighbor(target_id: StringName, from_cell: Vector2i) -> Vector2i:
+	if grid == null or not grid.is_in_bounds(from_cell):
+		return INVALID_CELL
+
+	var neighbors := get_free_cardinal_neighbors(target_id)
+	if neighbors.is_empty():
+		return INVALID_CELL
+
+	var best_cell := neighbors[0]
+	var best_distance := _manhattan_distance(from_cell, best_cell)
+	for i in range(1, neighbors.size()):
+		var candidate := neighbors[i]
+		var distance := _manhattan_distance(from_cell, candidate)
+		if distance < best_distance:
+			best_distance = distance
+			best_cell = candidate
+	return best_cell
+
+
+func _manhattan_distance(a: Vector2i, b: Vector2i) -> int:
+	return absi(a.x - b.x) + absi(a.y - b.y)
+
+
+func _register_fixture_children(container: Node2D) -> void:
+	if container == null:
+		return
+	for child in container.get_children():
+		var node := child as Node2D
+		if node != null:
+			_register_fixture_node(node)
+
+
+func _register_fixture_node(node: Node2D) -> void:
+	if node == null:
+		return
+	var object_id := StringName(node.get_meta(WORLD_ID_META, &""))
+	var footprint := _build_node_footprint(node)
+	if footprint.is_empty():
+		return
+	register_object(object_id, node, footprint)
+
+
+func _register_work_tables(container: Node2D) -> void:
+	if container == null:
+		return
+	for child in container.get_children():
+		var table_node := child as Node2D
+		if table_node == null:
+			continue
+		_register_fixture_node(table_node)
+		for subchild in table_node.get_children():
+			var target_node := subchild as Node2D
+			if target_node == null or not target_node.has_meta(WORLD_ID_META):
+				continue
+			var target_id := StringName(target_node.get_meta(WORLD_ID_META, &""))
+			register_object(target_id, target_node, [])
+
+
+func _register_anchor_children(container: Node2D) -> void:
+	if container == null:
+		return
 	for child in container.get_children():
 		var node := child as Node2D
 		if node == null:
 			continue
-
 		var object_id := StringName(node.get_meta(WORLD_ID_META, &""))
-		var footprint: Array[Vector2i] = []
-		if claim_cell:
-			footprint.append(global_to_cell(node.global_position))
-		register_object(object_id, node, footprint)
+		register_object(object_id, node, [])
+
+
+func _build_node_footprint(node: Node2D) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var raw_size: Variant = node.get_meta(FOOTPRINT_SIZE_META, Vector2i.ONE)
+	if not (raw_size is Vector2i):
+		push_error("WorldMap: invalid footprint_size metadata on '%s'." % node.name)
+		return cells
+
+	var footprint_size: Vector2i = raw_size
+	if footprint_size.x <= 0 or footprint_size.y <= 0:
+		push_error("WorldMap: non-positive footprint_size on '%s'." % node.name)
+		return cells
+
+	var origin_cell := global_to_cell(node.global_position)
+	for dy in range(footprint_size.y):
+		for dx in range(footprint_size.x):
+			cells.append(origin_cell + Vector2i(dx, dy))
+	return cells
 
 
 func _connect_cleanup(object_id: StringName, node: Node2D) -> void:
@@ -188,7 +317,7 @@ func _draw() -> void:
 
 	for object_id in registry.get_ids():
 		var node := registry.get_object(object_id)
-		if node == null:
+		if node == null or node.has_meta(PARENT_WORLD_ID_META):
 			continue
 
 		var footprint := grid.get_footprint(object_id)

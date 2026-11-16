@@ -4,7 +4,7 @@
 
 | Milestone | Status | Evidence / files / tests |
 |---|---|---|
-| 0 — Godot skeleton, data, phase and clock | PARTIAL — World Foundation (A2) + Core Data (A3) + GameRoot Foundation validated | WorldGrid/WorldRegistry/WorldMap (A2 PASS, Godot 4.7.2), World blockout scene, Player visual placeholder, `SharedTypes` enums & `.tres` schemas/assets (A3 PASS, Godot 4.7.2), `GameRoot` (`scripts/core/game_root.gd` attached to `game_root.tscn` with phase machine, monotonic `service_elapsed`, and frozen API; `tests/test_game_root.gd` PASS, Godot 4.7.2). NOT done: canonical World subnode migration (`OnlineStation`, `KitchenWorkTables`, `DineInWaitingAnchors`, `DriverPickupSpots`, `DriverOverflowAnchors`, `DriverObjects`, `PlacementSlots`), controller skeletons, `GameUI` left-band blockout. See updates below. |
+| 0 — Godot skeleton, data, phase and clock | PARTIAL — World Foundation (A2) + Core Data (A3) + GameRoot Foundation + World Hierarchy Migration validated | WorldGrid/WorldRegistry/WorldMap (A2 PASS), `SharedTypes` & `.tres` schemas/assets (A3 PASS), `GameRoot` phase/clock (`tests/test_game_root.gd` PASS), canonical `World` hierarchy + `OnlineStation` + split `WorkTable` targets + `PlacementSlots` + stateless spatial queries (`tests/test_world_hierarchy.gd` PASS, Godot 4.7.2). NOT done: controller skeletons (`KitchenController` + Movement helper, `ServiceController`, `RunController`), `GameUI` (`CanvasLayer` + `LeftHUDRegion` blockout & fit test). See updates below. |
 | 1 — World click/typing and first playable dish | NOT STARTED | |
 | 2 — Dine-in serving, washing, multiple customer queue | NOT STARTED | |
 | 3 — Online offer, physical drivers and deadlines | NOT STARTED | |
@@ -204,4 +204,17 @@ Tests ACTUALLY run and results: `godot --headless --path . --import` (0 parse er
 Blocked by art/content (recipe/icon/map IDs)/TUNING: unchanged (Days 4–7 recipes/icons, final art/TileSet, PlacementSlots/OnlineStation coordinates, World framing fit test).
 Divergence from architecture (requires coordinator approval if gameplay): none; implements frozen `docs/ARCHITECTURE.md` §3 & §5 (`start_service_requested`, `request_continue_from_results`, `request_extra_mode`, `request_close_if_drained`, `is_serving`, `get_service_elapsed`, `phase_changed`). Note: `request_close_if_drained()` fails closed unless `ServiceController` is bound and `is_drained()` returns `true`; Day 7 transitions `CLOSING -> FINISHED` so `request_continue_from_results()` stays scoped to Days 1–6 and Extra Mode (Day 8+) per §5 line 129.
 Next concrete task: Continue Milestone 0 — migrate `scenes/world/restaurant_world.tscn` & `scripts/world/world_map.gd` to canonical `docs/ARCHITECTURE.md` §1 containers (`DineInWaitingAnchors`, `KitchenWorkTables` split staging/chop targets, `OnlineStation`, `DriverPickupSpots`, `DriverOverflowAnchors`, `DriverObjects`, `PlacementSlots`, keeping passive `Decorations`) and hitboxes, then build controller skeletons and `GameUI` left-band blockout.
+```
+
+### Milestone 0 — World Hierarchy Migration (2026-11-16)
+
+```
+Date / Git commit: 2026-11-16 / post-31d0bb1
+Milestone completed/current: Milestone 0 PARTIAL — World Hierarchy Migration completed & validated (Milestone 0 still incomplete)
+Files added/modified: modified scenes/world/restaurant_world.tscn, scripts/world/world_map.gd, docs/PROGRESS.md; added tests/test_world_hierarchy.gd (+ .uid)
+Godot version / platform: Godot 4.7.2.stable.official.ed1daf0bf / Windows
+Tests ACTUALLY run and results: `godot --headless --path . --import` (0 parse errors); `godot --headless --path . -s res://tests/test_world_hierarchy.gd` — PASS (`SUMMARY fails=0`, zero leaks); `scratch/test_world_a2.gd` — PASS (`SUMMARY fails=0`); `res://tests/test_track_a3.gd` — PASS (`SUMMARY fails=0`); `res://tests/test_game_root.gd` — PASS (`SUMMARY fails=0`); `godot --headless --path . --quit-after 2` — PASS (exit 0); formatting & UID check — PASS (`Issues: 0`).
+Blocked by art/content (recipe/icon/map IDs)/TUNING: Days 4–7 recipes/icons, final art/TileSet, and `LeftHUDRegion` + `World` framing fit test.
+Divergence from architecture (requires coordinator approval if gameplay): none; migrated `World` to the 12 canonical containers (`FloorTiles`, `DineInWaitingAnchors`, `Player`, `KitchenStations`, `KitchenWorkTables` with `WorkTable` + non-overlapping `work_table_stage`/`work_table_chop` child `Area2D` targets, `DiningTables`, `OnlineStation` `Area2D`, `DriverPickupSpots`, `DriverOverflowAnchors`, `DriverObjects`, `PlacementSlots`, passive `Decorations`) and added stateless `get_target_footprint`, `get_free_cardinal_neighbors`, and `find_nearest_free_neighbor` helpers to `WorldMap`.
+Next concrete task: Continue Milestone 0 — implement controller skeletons (`KitchenController` + internal Movement helper, `ServiceController`, `RunController`) and `GameUI` (`CanvasLayer` + `LeftHUDRegion` blockout) and wire them under `GameRoot`.
 ```

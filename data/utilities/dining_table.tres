@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="UtilityDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/economy/utility_def.gd" id="1_i84gc"]
+
+[resource]
+script = ExtResource("1_i84gc")
+utility_id = &"dining_table"
+display_name = "Meja Makan"
+fixture_kind = 6
+purchase_price = 75000

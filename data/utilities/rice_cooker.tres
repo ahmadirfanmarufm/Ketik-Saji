@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="UtilityDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/economy/utility_def.gd" id="1_7ufvy"]
+
+[resource]
+script = ExtResource("1_7ufvy")
+utility_id = &"rice_cooker"
+display_name = "Penanak Nasi"
+fixture_kind = 5
+purchase_price = 50000
+daily_electricity_cost = 2000

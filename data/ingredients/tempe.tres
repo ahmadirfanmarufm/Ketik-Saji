@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="IngredientDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/kitchen/ingredient_def.gd" id="1_wjvpe"]
+[ext_resource type="Script" path="res://scripts/kitchen/ingredient_transition.gd" id="2_6ikyt"]
+
+[sub_resource type="Resource" id="Resource_d6rr3"]
+script = ExtResource("2_6ikyt")
+command = &"goreng"
+to_state = 4
+
+[resource]
+script = ExtResource("1_wjvpe")
+ingredient_id = &"tempe"
+display_name = "Tempe"
+transitions = Array[ExtResource("2_6ikyt")]([SubResource("Resource_d6rr3")])

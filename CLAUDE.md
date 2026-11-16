@@ -1,37 +1,44 @@
 # Ketik Saji — instructions for Claude Code
 
-Godot 4 **2D**, **GDScript**, Windows/Linux mouse+keyboard, Indonesian player-facing text. Jam theme **“Less is More, More is Worse”**. One code owner: this Claude Code session working with the team's developer. This is a **72-hour jam**; finish a working game before adding polish. Art/UI assets are produced by teammates; use stable-ID placeholders until they arrive.
+Godot 4.7.2 **2D**, **GDScript**, Windows/Linux mouse+keyboard, Indonesian player-facing text. Jam theme **“Less is More, More is Worse”**. **One developer owns the entire codebase** using Claude Code as the implementation tool (previous multi-programmer approval splits are obsolete; any subagents must follow the same contracts). This is a **72-hour jam**; finish a working game before adding polish. Art/UI assets come from teammates; use stable-ID placeholders until they arrive.
 
 ## Authoritative documents and precedence
 
-1. Coordinator's new explicit decision (confirm before altering settled design).
-2. `docs/SHARED_BASELINE.md` — confirmed design rules and constraints.
-3. `docs/ARCHITECTURE.md` — **canonical frozen interface and state-ownership contract**.
-4. `docs/systems/01_INTERACTION_KITCHEN.md`, `02_SERVICE_ORDERS_CUSTOMERS.md`, `03_PLANNING_ECONOMY_PROGRESSION.md`, `04_UI_FEEDBACK_LOCALIZATION.md` — detailed focused implementation.
-5. `docs/IMPLEMENTATION_PLAN.md` — milestones and gates; `docs/ACCEPTANCE_TESTS.md` — expected behavior.
-6. `docs/CONTENT_AND_TUNING.md`, `docs/DECISION_REGISTER.md` — pending recipe/art input, editable tuning and explicit reversible defaults.
-7. `docs/PROGRESS.md` — progress/status; not a substitute for actual code inspection.
+1. Latest explicit coordinator decisions (override only the specific rules they update; unrelated confirmed rules stay in force).
+2. `docs/SHARED_BASELINE.md` — confirmed gameplay rules and constraints.
+3. `docs/ARCHITECTURE.md` — canonical interfaces and single-state-owner contracts.
+4. `docs/systems/01_INTERACTION_KITCHEN.md`, `02_SERVICE_ORDERS_CUSTOMERS.md`, `03_PLANNING_ECONOMY_PROGRESSION.md`, `04_UI_FEEDBACK_LOCALIZATION.md` (plus `docs/WORLD_LAYOUT_AND_VIEWPORT.md` for screen composition).
+5. `docs/IMPLEMENTATION_PLAN.md` and `docs/ACCEPTANCE_TESTS.md` — milestones and test gates.
+6. `docs/CONTENT_AND_TUNING.md` and `docs/DECISION_REGISTER.md` — content intake, tuning knobs, and reversible/proposed defaults.
+7. `docs/PROGRESS.md` — implementation status; never a substitute for inspecting actual files.
 
-**Do not automatically import all documents into this file.** At the beginning of each milestone, read `docs/ARCHITECTURE.md`, the relevant system doc(s), the current milestone section and existing affected code; read other docs when an interface is implicated. Do not use unmodified earlier Agent A–E source handoffs (superseded).
+**Do not automatically import all documents into this file.** At each milestone, read `docs/ARCHITECTURE.md`, relevant system doc(s), the milestone section, and existing affected code. Ignore superseded Agent A–E originals.
 
-## Implementation rules
+## Coordinator-integrated implementation rules
 
-- Implement **one named milestone at a time**, then validate and update progress. Do not silently invent gameplay content (four+ future recipes are planned but not supplied), add new features or redesign the typing mechanic. Raise only true blocking ambiguities; for local technical details use the minimal documented reversible default.
-- **Screen-space:** latest sketch shows left persistent UI band → separate visible world dine-in waiting lane → restaurant to right. Planning panels may temporarily cover world; service HUD stays left. World clicks and typed station focus still work after any camera/offset adjustment. `docs/WORLD_LAYOUT_AND_VIEWPORT.md` is authoritative for layout direction, with exact coordinates still scene-authored.
-- **Single state authority:** root phase/service clock; Kitchen item/plate/storage/input; Service dine-in/online/orders/drivers/tables; Run cash/menu/fixtures/debt; UI display/input focus only.
-- **No autoload service locator, generic ECS, factory framework, extra global timer, save system, workers or utility upgrade tree.** Use Godot Resource `.tres` definitions for ingredients, recipes, fixtures and tunable economy; runtime inventory/plates/orders must not mutate static data.
-- **Input:** click floor teleports only; click object teleports to cardinal neighbor AND activates same click; typing Indonesian exact valid prefixes autoexecutes full word without Enter. One B command parser. No gameplay clicking through shop modals. Shopping **does not pause clocks**.
-- **Online:** station accepts `terima`, accepted **physical driver** at one of **3** spots (overflow FIFO) receives `saji`; outside driver not serveable. New acceptance stops when **unspawned diner count <=2**; concurrent cap = initial day quota, not 3.
-- **End day:** auto-close only when unspawned diner quota, outside diners, inside diners (including eating), AND OPEN online orders are all zero. Cancel/refund pending 100s shipments once, clear food except raw fridge stock, reset plates/tables, charge fixed daily electricity once. Seven-day goal compares cash **after** electricity.
-- All financial/order/plate/delivery actions validate first and are **once-only by ID**. Signal UI after commit, not as the mechanism for money or dish consumption. Test interrupts, failed commands and repeated callbacks.
-- Additional recipes are **data additions** (`RecipeDef.tres` + economy/unlock entry + icon), not new code branches. Do not cap progression at 3 by design or generate unapproved recipes. Call out unavailable content in progress report.
+- **Milestone & scope discipline:** Implement **one named milestone at a time**, validate, and update `docs/PROGRESS.md`. Preserve working A1/A2/A3 implementations and tests unless fixing a concrete contract conflict. Never change confirmed gameplay rules unilaterally, fabricate Day 4–7 recipes, or treat **PROPOSED** defaults (`Rp0` starter resale, trash keeping clean plate, `TUNING` prices/targets) as confirmed design rules. Escalate only genuine cross-system contract conflicts, gameplay changes, or visual/economic choices needing coordinator input.
+- **Single state authority & no extra managers:** No autoload service locators, ECS, factory frameworks, extra global timers, saves, workers, or utility upgrades.
+  - `GameRoot`: owns `phase` and **one** monotonic `service_elapsed` clock (`advance_service_time(now)`), plus one idempotent close trigger polling `ServiceController.is_drained()` after clock updates.
+  - `KitchenController`: sole owner of `player_tile: Vector2i`, `selected_target_id`, `accepted_prefix`, single world-click routing (`on_floor_clicked`, `on_interactable_clicked`), held aggregate, work-table staging, storage slots, finite plates, washer queue, and deliveries. Movement is an **internal helper** only (no second authoritative controller/tile/prefix).
+  - `ServiceController`: owns dine-in quota/queues/tables, timers, online offer/orders, drivers, and 3 pickup spots + overflow FIFO.
+  - `RunController`: owns cash, menu/unlocks, fixture ownership (`starter_grant` / `actual_amount_paid`, bound without duplicating scene starter nodes), purchases/refunds, demand debt, and Day 7 target.
+  - `GameUI`: presentation and modal focus only.
+- **World spatial layer & teleport:** `WorldMap` / `WorldGrid` / `WorldRegistry` supply passive spatial data (transforms, walkability, occupancy, footprints, cardinal neighbors), never gameplay state or input routing. `WorldGrid.occupy()` stays walkability-agnostic so valid non-walkable/perimeter objects can claim cells; teleportation always requires `is_free()` (`walkable and not occupied`). Interactable clicks pick nearest walkable cardinal neighbor across the **entire footprint** using shortest Manhattan distance + fixed cardinal tie-break order, and activate in the **same click**; invalid validation mutates nothing. No pathfinding.
+- **World scene & IDs:** Align incrementally to `docs/ARCHITECTURE.md` §1 (`Decorations` permitted as a passive visual-only container; `Player` stays visual-only with `VisualAnchor` available for held-item UI). Use stable unique `StringName` IDs, tile-unit footprints, map-authored `PlacementSlots` restricting `FixtureKind`, `OnlineStation` (`terima`), split work-table staging vs. chopping (`potong`) targets, and 3 online pickup spots + separate overflow; every interactable needs >=1 `is_free()` cardinal neighbor.
+- **A3 Resource schemas (`.tres` read-only at runtime):**
+  - `IngredientDef` (`ingredient_id`, display name, prep transitions; no pricing).
+  - `RecipeDef` (`recipe_id`, display name, `icon_key`, `required_parts`; **no pricing or `unlock_day`**).
+  - `RecipeEconomyEntry` inside `EconomyConfig` (`recipe_id`, `unlock_day`, `dine_in_price`; references `RecipeDef` by ID).
+  - `UtilityDef` (`utility_id`, `FixtureKind`, `footprint: Vector2i` default `1×1`, purchase price, daily electricity, rack capacity; slot permissions stay on map `PlacementSlots`).
+  - `EconomyConfig` holds `TUNING` values; never hardcode balance numbers in controllers. Future recipes must work purely as `.tres` + icon additions.
+- **Screen composition & input isolation:** Single 2D viewport: persistent left UI → in-world dine-in waiting lane → restaurant right. `640×360` / `1280×720` remains a fit-test candidate; prefer simple `World` offset before adding `Camera2D` and validate via blockout screenshots. GUI (`LeftHUDRegion`, modals) must block world clicks/teleport; focused UI fields (including `Belanja` quantity) must not leak keys to Kitchen. Shopping **never pauses clocks**.
+- **Typing, online & day close:** Single B Indonesian prefix parser (exact valid prefix extends, invalid shakes, full word auto-executes without Enter, click elsewhere clears prefix). Online station accepts `terima`; `saji` only serves **in-spot** drivers; cutoff at unspawned quota `<= 2`; concurrent `OPEN` cap = `day_queue_initial`. Auto-close occurs only when unspawned quota = 0, outside dine-in queue empty, inside diners = 0, AND `OPEN` online orders = 0. All cash, order, plate, delivery, and refund commits validate first and are **once-only by ID**.
 
 ## Work session protocol
 
-1. Inspect `docs/PROGRESS.md`, Git status, actual scene/code and chosen milestone acceptance tests.
-2. State a short file-level plan; implement only the milestone; keep names/contracts consistent with `docs/ARCHITECTURE.md`.
-3. For temporary art, use clearly named placeholders and authored scene marker IDs. **Read `docs/WORLD_LAYOUT_AND_VIEWPORT.md` and view `references/current_screen_layout_NON_BINDING.png` in Milestone 0**. Block out the persistent left UI area, adjacent in-world diner waiting lane and right restaurant first; include independent online pickup/overflow locations. Do not keep outdated 10×9 geometry or interpret the new sketch as exact tile coordinates. 640×360 logical resolution is only a fit-test candidate.
-4. Validate import/parse when Godot executable exists: `godot --headless --path . --import` (or platform's `godot4` executable); run playable scene and specific manual tests where GUI is required. No claim of passing a test that wasn't run.
-5. Show changed files, verified behaviors, errors and remaining content dependencies; update `docs/PROGRESS.md` with done/current/next and decisions. Commit a clean milestone in Git when developer approves. Prefer fresh Claude Code sessions between milestones if context becomes cluttered; use project docs/Git for continuity.
+1. Inspect `docs/PROGRESS.md`, `docs/CODING_STANDARDS.md`, actual scene/script files, and milestone acceptance tests.
+2. State a concise file-level plan; keep contracts matching `docs/ARCHITECTURE.md` and `docs/CODING_STANDARDS.md` (tabs, UTF-8 without BOM, LF, `<100` cols, keep `.uid` files).
+3. Test with Godot CLI (`godot --headless --path . --import` and headless/interactive tests) and record actual outcomes in `docs/PROGRESS.md`. Never claim an unrun test passed.
+4. Keep changes minimal, preserve existing working code/tests, and use fresh sessions between milestones as context grows.
 
-**First task:** Follow `docs/IMPLEMENTATION_PLAN.md` Milestone 0; do not attempt the whole game in one prompt.
+**Current focus:** Tracks A1–A3, GameRoot foundation, and World Hierarchy Migration are implemented and validated. Complete the remaining Milestone 0 deliverables: controller skeletons, GameRoot controller binding, and GameUI left-band fit test before Milestone 1.

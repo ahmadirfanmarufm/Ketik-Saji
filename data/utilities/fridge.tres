@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="UtilityDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/economy/utility_def.gd" id="1_ps54k"]
+
+[resource]
+script = ExtResource("1_ps54k")
+utility_id = &"fridge"
+display_name = "Kulkas"
+fixture_kind = 1
+purchase_price = 80000
+daily_electricity_cost = 4000

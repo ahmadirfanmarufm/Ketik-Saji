@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="UtilityDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/economy/utility_def.gd" id="1_vnuvu"]
+
+[resource]
+script = ExtResource("1_vnuvu")
+utility_id = &"stove"
+display_name = "Kompor"
+fixture_kind = 2
+purchase_price = 60000

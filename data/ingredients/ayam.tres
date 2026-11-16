@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="IngredientDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/kitchen/ingredient_def.gd" id="1_kvk3w"]
+[ext_resource type="Script" path="res://scripts/kitchen/ingredient_transition.gd" id="2_fs31i"]
+
+[sub_resource type="Resource" id="Resource_0qppq"]
+script = ExtResource("2_fs31i")
+command = &"goreng"
+to_state = 4
+
+[resource]
+script = ExtResource("1_kvk3w")
+ingredient_id = &"ayam"
+display_name = "Ayam"
+transitions = Array[ExtResource("2_fs31i")]([SubResource("Resource_0qppq")])

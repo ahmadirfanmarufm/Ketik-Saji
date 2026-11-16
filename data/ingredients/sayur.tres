@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="IngredientDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/kitchen/ingredient_def.gd" id="1_q5fmm"]
+[ext_resource type="Script" path="res://scripts/kitchen/ingredient_transition.gd" id="2_8bonr"]
+
+[sub_resource type="Resource" id="Resource_lk3po"]
+script = ExtResource("2_8bonr")
+command = &"potong"
+to_state = 3
+
+[sub_resource type="Resource" id="Resource_l20ho"]
+script = ExtResource("2_8bonr")
+command = &"goreng"
+to_state = 4
+
+[sub_resource type="Resource" id="Resource_jpvn0"]
+script = ExtResource("2_8bonr")
+from_state = 3
+command = &"goreng"
+to_state = 5
+
+[resource]
+script = ExtResource("1_q5fmm")
+ingredient_id = &"sayur"
+display_name = "Sayur"
+transitions = Array[ExtResource("2_8bonr")]([SubResource("Resource_lk3po"), SubResource("Resource_l20ho"), SubResource("Resource_jpvn0")])

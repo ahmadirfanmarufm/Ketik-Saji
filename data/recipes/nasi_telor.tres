@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="RecipeDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_part_def.gd" id="1_fvd2l"]
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_def.gd" id="2_vh2wx"]
+
+[sub_resource type="Resource" id="Resource_ips27"]
+script = ExtResource("1_fvd2l")
+ingredient_id = &"beras"
+required_state = 2
+
+[sub_resource type="Resource" id="Resource_nlgep"]
+script = ExtResource("1_fvd2l")
+ingredient_id = &"telur"
+
+[resource]
+script = ExtResource("2_vh2wx")
+recipe_id = &"nasi_telor"
+display_name = "Nasi Telor"
+icon_key = &"nasi_telor"
+required_parts = Array[ExtResource("1_fvd2l")]([SubResource("Resource_ips27"), SubResource("Resource_nlgep")])

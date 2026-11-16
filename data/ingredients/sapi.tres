@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="IngredientDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/kitchen/ingredient_def.gd" id="1_7mse4"]
+[ext_resource type="Script" path="res://scripts/kitchen/ingredient_transition.gd" id="2_10305"]
+
+[sub_resource type="Resource" id="Resource_0neau"]
+script = ExtResource("2_10305")
+command = &"goreng"
+to_state = 4
+
+[resource]
+script = ExtResource("1_7mse4")
+ingredient_id = &"sapi"
+display_name = "Sapi"
+transitions = Array[ExtResource("2_10305")]([SubResource("Resource_0neau")])

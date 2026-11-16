@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="UtilityDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/economy/utility_def.gd" id="1_8gtco"]
+
+[resource]
+script = ExtResource("1_8gtco")
+utility_id = &"box"
+display_name = "Kotak Bahan"
+purchase_price = 40000
