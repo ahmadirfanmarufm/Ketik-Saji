@@ -4,7 +4,7 @@
 
 | Milestone | Status | Evidence / files / tests |
 |---|---|---|
-| 0 — Godot skeleton, data, phase and clock | PARTIAL — World Foundation only (Track A2 validated) | WorldGrid/WorldRegistry/WorldMap (init validation + SceneTree cleanup, Godot 4.7.2 headless-validated), World blockout scene, Player visual placeholder, `World` instanced under `GameRoot` (main scene). NOT done: GameRoot script, phase/clock, controllers, UI band, `.tres` data. See updates below. |
+| 0 — Godot skeleton, data, phase and clock | PARTIAL — World Foundation (A2) + Core Data (A3) + GameRoot Foundation validated | WorldGrid/WorldRegistry/WorldMap (A2 PASS, Godot 4.7.2), World blockout scene, Player visual placeholder, `SharedTypes` enums & `.tres` schemas/assets (A3 PASS, Godot 4.7.2), `GameRoot` (`scripts/core/game_root.gd` attached to `game_root.tscn` with phase machine, monotonic `service_elapsed`, and frozen API; `tests/test_game_root.gd` PASS, Godot 4.7.2). NOT done: canonical World subnode migration (`OnlineStation`, `KitchenWorkTables`, `DineInWaitingAnchors`, `DriverPickupSpots`, `DriverOverflowAnchors`, `DriverObjects`, `PlacementSlots`), controller skeletons, `GameUI` left-band blockout. See updates below. |
 | 1 — World click/typing and first playable dish | NOT STARTED | |
 | 2 — Dine-in serving, washing, multiple customer queue | NOT STARTED | |
 | 3 — Online offer, physical drivers and deadlines | NOT STARTED | |
@@ -179,3 +179,29 @@ Next concrete task: Milestone 0 Track A3 / coordinator resolution of open layout
 - **Movement / `KitchenController` / `WorldMap` query contract & ownership boundary:** `docs/ARCHITECTURE.md` and `docs/systems/01_INTERACTION_KITCHEN.md` assign `player_tile`, `selected_target_id`, `accepted_prefix`, and click routing to `KitchenController`, while current task division gives Movement/click routing to the Movement programmer; exact read/write boundary over `WorldMap`/`WorldGrid` remains unconfirmed.
 - **Framing, viewport, and `World` offset (`VIS-01`, `VIS-02`):** `project.godot` uses `640x360` / `1280x720` (`canvas_items`) and `World` stays temporarily at `(0, 0)`; `ui_safe_rect` width and whether framing uses a `World` offset (not assuming `(160, 36)`) or `Camera2D` remain open.
 - **Map IDs, footprints, and walkability policy:** final `slot_id`/`table_id`/`spot_id` values, fixture footprint sizes, `OnlineStation` coordinates, and whether `WorldGrid.occupy()` should enforce `is_walkable()` remain open.
+
+### Track A3 — Shared enums, static `.tres` schemas, and coordinator decision alignment (2026-11-16)
+
+```
+Date / Git commit: 2026-11-16 / no git repository
+Milestone completed/current: Milestone 0 PARTIAL — Track A3 completed & validated (Milestone 0 still incomplete)
+Files added/modified: added scripts/core/shared_types.gd, scripts/kitchen/{ingredient_transition,ingredient_def,recipe_part_def,recipe_def}.gd (+ .uid), scripts/economy/{utility_def,recipe_economy_entry,economy_config}.gd (+ .uid), data/ingredients/*.tres (6 files), data/recipes/*.tres (3 authored recipes only), data/utilities/*.tres (7 fixture kinds), data/economy_config.tres, tests/test_track_a3.gd (+ .uid); updated docs/ARCHITECTURE.md, docs/DECISION_REGISTER.md, docs/PROGRESS.md
+Godot version / platform: Godot 4.7.2.stable.official.ed1daf0bf / Windows
+Tests ACTUALLY run and results: `godot --headless --path . --import` (0 script parse errors, all 8 classes & 17 `.tres` assets imported); `godot --headless --path . -s res://tests/test_track_a3.gd` — PASS (`SUMMARY fails=0`, 60 assertions); `test_world_a2.gd` re-run on workspace — PASS (`SUMMARY fails=0`); formatting check (tabs, LF, no BOM, <100 cols, `.uid` files) — PASS.
+Blocked by art/content (recipe/icon/map IDs)/TUNING: Days 4–7 RecipeDef/icon content intake (3 authored recipes only; `EconomyConfig.validate()` emits expected Days 4–7 pending warning), final art/TileSet, scene-authored `PlacementSlots`/`OnlineStation` coordinates, approved World framing offset/viewport fit test.
+Divergence from architecture (requires coordinator approval if gameplay): none; aligned `docs/ARCHITECTURE.md` §3 (`unlock_day` lives in `RecipeEconomyEntry`) and §2/`DECISION_REGISTER.md` per 2026-11-16 coordinator directive (`KitchenController` sole owner Option A; `Decorations` permitted visual-only; walkability-agnostic `WorldGrid.occupy()` preserved).
+Next concrete task: Continue Milestone 0 — align `scenes/world/restaurant_world.tscn` & `world_map.gd` to canonical `ARCHITECTURE.md` §1 containers (`DineInWaitingAnchors`, `KitchenWorkTables` split targets, `OnlineStation`, `DriverPickupSpots`, `DriverOverflowAnchors`, `DriverObjects`, `PlacementSlots`), then build `GameRoot` (`game_root.gd`), controller skeletons, and `GameUI` left-band blockout for `640×360` fit test.
+```
+
+### Milestone 0 — GameRoot Foundation (2026-11-16)
+
+```
+Date / Git commit: 2026-11-16 / no git repository
+Milestone completed/current: Milestone 0 PARTIAL — GameRoot Foundation completed & validated (Milestone 0 still incomplete)
+Files added/modified: added scripts/core/game_root.gd (+ .uid), tests/test_game_root.gd (+ .uid); modified scenes/main/game_root.tscn (attached GameRoot script while keeping World instance intact), docs/PROGRESS.md
+Godot version / platform: Godot 4.7.2.stable.official.ed1daf0bf / Windows
+Tests ACTUALLY run and results: `godot --headless --path . --import` (0 parse errors); `godot --headless --path . -s res://tests/test_game_root.gd` — PASS (`SUMMARY fails=0`, zero leaks; includes unbound/missing-`is_drained()`/non-drained/repeat close-guard negative checks); `res://tests/test_track_a3.gd` — PASS (`SUMMARY fails=0`); `test_world_a2.gd` — PASS (`SUMMARY fails=0`); `godot --headless --path . --quit-after 2` — PASS (exit 0).
+Blocked by art/content (recipe/icon/map IDs)/TUNING: unchanged (Days 4–7 recipes/icons, final art/TileSet, PlacementSlots/OnlineStation coordinates, World framing fit test).
+Divergence from architecture (requires coordinator approval if gameplay): none; implements frozen `docs/ARCHITECTURE.md` §3 & §5 (`start_service_requested`, `request_continue_from_results`, `request_extra_mode`, `request_close_if_drained`, `is_serving`, `get_service_elapsed`, `phase_changed`). Note: `request_close_if_drained()` fails closed unless `ServiceController` is bound and `is_drained()` returns `true`; Day 7 transitions `CLOSING -> FINISHED` so `request_continue_from_results()` stays scoped to Days 1–6 and Extra Mode (Day 8+) per §5 line 129.
+Next concrete task: Continue Milestone 0 — migrate `scenes/world/restaurant_world.tscn` & `scripts/world/world_map.gd` to canonical `docs/ARCHITECTURE.md` §1 containers (`DineInWaitingAnchors`, `KitchenWorkTables` split staging/chop targets, `OnlineStation`, `DriverPickupSpots`, `DriverOverflowAnchors`, `DriverObjects`, `PlacementSlots`, keeping passive `Decorations`) and hitboxes, then build controller skeletons and `GameUI` left-band blockout.
+```
