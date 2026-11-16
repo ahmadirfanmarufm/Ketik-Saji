@@ -1,0 +1,75 @@
+# Cross-system acceptance and regression checklist
+
+Run milestone-local tests as they land, and all **CRITICAL** items before shipping. Where useful, run under a tiny test scene with injected clock/time jump and fixed seeded RNG. In actual game timings, customer patience **100s**, dine-in spawn **20s** intervals, eat **20s**, accepted online **60s**, emergency delivery **100s**. The implementation must not shorten live deadlines simply to make tests faster. Mark results with evidence in `PROGRESS.md`; this document does not claim the engine is already tested.
+
+## A — Lifecycle, ownership, input (CRITICAL)
+
+- [ ] **A01 Boot/start:** Fresh launch has one persistent GameRoot, one B/C/D/E owner each, exact starter fixture types/counts, phase PLANNING, no service prep input, and starts service only on explicit button. No second money/plate/order owner.
+- [ ] **A02 Floor vs object:** Left click valid floor teleports only. From across map, click object teleports to legal **cardinal** adjacent tile and selects/activates in SAME click; already-adjacent object click activates without move; illegal destination rejects. Diagonal-only adjacency cannot activate.
+- [ ] **A03 Single click route:** Clicking UI modal doesn't click world. One physical mouse click changes at most one target. Invalid typed keys don't trigger game shortcuts or menu buttons.
+- [ ] **A04 Time:** Root service clock advances in SERVING only, including while Belanja/confirmation modal open; not in PLANNING/CLOSING/RESULTS. B/C have no independent duplicate `Timer` clock. Test-time advancing affects all deadlines consistently.
+- [ ] **A05 No premature close:** If unspawned diner quota >0 OR outside diner queue nonempty OR someone indoors/eating OR accepted online OPEN, day **cannot** end. Unaccepted online preview, pending shipments and dirt do NOT hold service open.
+- [ ] **A06 Once-only close:** Repeating drained notification or click after CLOSING never duplicates refund, electricity, debt update, Day7 outcome or day advancement.
+
+## B — Typing, staging, recipe, plate, storage (CRITICAL)
+
+- [ ] **B01 Prefix:** At fridge stocked with `ayam`, full valid text autoexecutes without Enter; nonprefix keystroke ignored and triggers dialogue shake. Clicking elsewhere clears only unfinished prefix, not staged food. Context determines `cuci`/`saji` meaning; same token at unrelated targets is fine.
+- [ ] **B02 Single held aggregate:** With occupied hand, second raw retrieval/reusable plate pickup rejects atomically. One staged work surface holds at most one item, but plated aggregate contains many components in same slot.
+- [ ] **B03 Plating:** Plate first, add prepared parts in any order. Exact `nasi_telor`, `nasi_ayam`, `nasi_komplit` passes if ingredient states correct; missing/extra/raw or unplated never matches. Switching tasks doesn't erase unfinished work.
+- [ ] **B04 Prep station overlap:** Held raw beras `cuci` at existing wastafel → WASHED; same wastafel with empty hand + dirty plate `cuci` → one cleaned plate held. Held raw sayur `potong` at **same physical prep table** chopping target → CHOPPED without staging it; staging hitbox click performs staging, not chopping.
+- [ ] **B05 Rice cooker:** `masak` with WASHED rice deposits immediate one cooked portion to output; `nasi` with empty hand retrieves it; no duplicate rice, no cooker overfill; no cook timer.
+- [ ] **B06 Trash:** Wrong plated food discarded, exact unique reusable plate survives clean (reversible default); no free plate/refund/undo of ingredients.
+- [ ] **B07 Plate ledger:** One plate ID moves RACK→HELD→WORK_TABLE→diner table→WASHER_DIRTY→HELD/RACK without count change. Online serving sends SAME plate directly CLEAN and does not generate dirty plate. Repeated `bersihkan`, `cuci` or serving cannot create another plate.
+- [ ] **B08 Slots:** One fridge accepts **six same-type** raw units across 2×3 slots; 7th rejects. One box accepts fifteen same-type across 3×5; 16th rejects. No "two distinct ingredient types" enforcement. Raw-only stock: cooked chicken cannot store.
+- [ ] **B09 Chosen destination:** With two boxes A/B, select A for 6 raw items; A uses two slots `[5,1]`, B untouched. When A full, purchase rejects even if B has space; no debit, overflow or silent redistribution.
+- [ ] **B10 Reservations:** Two paid accepted 100s purchases cannot overbook same slot due to pending reservation. Each purchase has unique ID; shipment delivers once to **selected** unit at 100s, no early retrieval.
+- [ ] **B11 Overnight:** Raw fridge stock persists; box raw stock and all prepared/held/work-table/cooker output disappear; plates/washer clean reset. Delivered shipment not refunded merely because its box contents expire.
+
+## C — Dine-in service, drivers, deadlines (CRITICAL)
+
+- [ ] **C01 Spawn:** With quota 4, diners created at t=0,20,40,60, each reduces *unspawned* counter exactly 1. A waiter outside is spawned and does not count toward unspawned. At empty shop between arrivals, no auto-close while future quota >0.
+- [ ] **C02 FIFO/patience:** With 1 table, second diner arrives at t=20 outside, deadline t=120. First diner misses at t=100, leaves clean (no plate), second seats with **20s remaining**. No patience reset/second debit to day queue. Dirty tables cannot seat new person until `bersihkan`.
+- [ ] **C03 Correct serve:** Table-target-specific exact plated dish before t=100 → B consumes once, C marks COMPLETED once, D credits once, starts eating 20s; after eating diner leaves DIRTY and plate remains for wash. Wrong table, extra ingredient, too-late serve do NOT take item or pay.
+- [ ] **C04 Failure:** Unserved diner times out at 100s, leaves without dish or dirt. Mark FAILED once; next-day penalty in D only. Online accepted timer separately fails at 60s, equivalent penalty; unaccepted preview never fails.
+- [ ] **C05 Online accept gate:** Offer has icon but no driver/timer. On typed `terima`, creates one unique order+driver deadline 60s. Stop new offers only when `day_queue_remaining <=2` or OPEN cap reached. OPEN simultaneous cap = **initial day dine-in quota**, NOT 3 or total lifetime count.
+- [ ] **C06 Driver spot overflow:** With four simultaneously OPEN orders and cap >=4, C assigns exactly 3 at pickup spots and 1 outside driver. Outside driver cannot be served. Free spot promotes oldest eligible outside order **without resetting 60s timer**. Each driver click maps exact `driver_id` / `order_id`.
+- [ ] **C07 Driver serving:** Acceptance station `saji` NOT valid. Clicking exact at-spot driver + typed `saji` only fulfills its matching order; B returns unique reusable plate immediately clean; diner plates and dirty tables unaffected; D credits lower online price once.
+- [ ] **C08 Online at close:** If final physical customer leaves when one accepted online is still OPEN, no CLOSING; driver remains serviceable/time ticks. It completes or times out, **then** root may close. Pending deliveries are not canceled before this.
+- [ ] **C09 Timers simultaneous:** At `now == order.deadline_at`, timeout wins over `saji`. Repeated timeout/cleanup cannot mark FAILED twice. A long frame crossing two spawn moments creates both due diner IDs, not just one.
+- [ ] **C10 Offer generation:** Current preview remains stable until accepted/day change; UI cannot reroll free online dish by opening/closing panel (implementation default). Cheaper dish bias may be verified with seeded sampling when enabled.
+
+## D — Economics, fixtures, shop, deadline (CRITICAL)
+
+- [ ] **D01 Starting kit:** Boot includes exactly 1 box, 1 stove, 1 wastafel, 1 rack, 1 cooker, 2 dining tables, free prep work table/trash; no hidden 7 equipment-purchase debits. Starter sold by reversible default returns 0 cash, not free resale money.
+- [ ] **D02 Phase purchasing:** Equipment and tables may buy/sell **only PLANNING**, take effect **immediately**, no queued next-day fixture shipment. Attempts during SERVING rejected. Safely removable bought fixture resale returns configurable **less than original amount paid**. Cannot remove storage with raw stock/reservation or rack with plates still referenced unsafely.
+- [ ] **D03 Ingredients:** Selected physical fridge/box determines B capacity and purchased delivery target. In PLANNING delivery instant; during SERVING 100s, even if shopping UI open and clocks continue. Purchase preflight all-or-nothing for affordability and physical capacity.
+- [ ] **D04 Refund:** Paid service purchase pending at actual auto-close → B cancels ID, D refunds original paid amount once. Delivery committed before closing → not refunded even if its stock then perishes. Repeated IDs don't duplicate refund.
+- [ ] **D05 Money credit:** One diner/online order completion adds exactly one D price/discount payment; `ServiceDayReport` never credits that money again. Online payout less than dine-in according to config. Order failure gives **no direct cash debit**.
+- [ ] **D06 Electricity:** One fixed daily charge for each installed fridge and rice cooker at close, including starting cooker; stove/washer/box/rack/tables no power charge by confirmed design. Charge once whether used or not. Cash can go negative from fixed cost; no bailout.
+- [ ] **D07 Demand:** Base expected arrivals increase **4** per day when all else identical; menu breadth adjusts by configured coefficient; penalty debt subtracts from next day's quota only, floored at zero; physical tables limit practical seating, not base arrival quota.
+- [ ] **D08 Failure debt:** One dine-in miss and one accepted online miss roll two independent, seeded **1/2 50/50** penalties, never multiple per ID; after perfect day debt decrements by 1 once. The run can become unwinnable through bad choices.
+- [ ] **D09 Day7:** With post-electricity cash equal to target, WON; one IDR lower, LOST. Only WON unlocks optional Day8; victory latch remains true beyond. No compulsory new cash target invented.
+- [ ] **D10 Future recipes:** Adding one new `RecipeDef.tres`, economy/unlock entry and icon makes it selectable/unlockable/orderable/servable **without code edits to B/C/E behavior**. The game does not auto-invent recipes for Days4–7. Missing content identified in authoring diagnostics.
+
+## E — UI, camera, import/export (CRITICAL + polish)
+
+- [ ] **E01 World UI:** Each OPEN diner has dish icon above them and shrinking **100s** ring; eating ring has **20s** distinct style; no permanent ticket sidebar. Preview icon at online station without ring; accepted driver icon/ring 60s; in-progress delivery icon+ring 100s at chosen container.
+- [ ] **E02 Driver clarity:** Exactly 3 in-spot accepted drivers and overflow queue visible. Their hitboxes click the actual `driver_id`; outside overflow doesn't appear serveable. Held item icon above player.
+- [ ] **E03 Typing prompt:** Highest normal-layer dialogue near selected object displays real B accepted prefix, ghost completion and comma-separated valid commands; invalid char shake; no Enter requirement. A blocking modal intentionally takes focus.
+- [ ] **E04 Shop focus:** Ingredient `Beli` commits once without extra confirmation; fixture buy/sale require confirm; modal blocks world/typing leakage **but clocks don't pause in SERVING**. Same container Belanja works both phases. Fixture sale immediate planning only.
+- [ ] **E05 HUD/results:** Service HUD actual cash+Day7 target/bar, day and **unspawned** quota icon/count; no outside/in-shop/driver count confusion. Results side-panel with D settlement, C counts, refunds, electricity and debt changes, and only appropriate Continue/Extra actions.
+- [ ] **E06 Latest layout fit:** Test the **left dedicated UI band**, **adjacent visible dine-in waiting lane**, and restaurant to the right with 32px tiles and scene-authored geometry (latest sketch roughly 13×9 cells including lane, **not fixed**). Place 3 physical online driver spots and outside driver overflow separately. Verify customer/driver rings, online offer, selected dialogue, delivery rings and HUD at chosen logical viewport. `640×360` is only a test candidate; no essential clipped text, hidden person or unreachable click target.
+- [ ] **E06a UI/world input isolation:** Clicking the entire persistent left HUD zone or an open planning/buy/result panel never teleports the player, selects a kitchen station or types into B; clicking an adjacent legitimate world tile still teleports correctly. With World offset/zoom, object clicks still land at the correct cardinally adjacent tile. Test window resize/integer scale and an edge-of-world dialogue: the prompt remains readable without overlapping persistent HUD unless an intentional modal is open.
+- [ ] **E06b Overlay space:** Planning Menu, storage Belanja and RESULTS side panel can temporarily cover world, but disable behind-panel click/typing while open and preserve visible context when closed; service clock still runs with Belanja open. HUD remains legible at ordinary play scale.
+- [ ] **E07 Indonesian:** All user-facing text/typing commands in Indonesian, stable logical IDs. No UI-only accepted vocabulary; new dish icons appear by ID, not hardcoded 3-way case.
+- [ ] **E08 Editor/launch:** Headless Godot parse/import passes once project exists; actual Windows/Linux desktop build boots to planning, accepts input, can play one dish, advances day and shows result. No unsupported claim of passing GUI tests from headless import alone.
+
+## Test evidence record
+
+```
+Test ID / scene:
+Godot version and OS:
+Observed result (PASS/FAIL/NOT RUN):
+Date / commit:
+Notes / bug URL:
+```

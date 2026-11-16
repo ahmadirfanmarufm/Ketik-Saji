@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://ys8j281lg1mt"]
+
+[ext_resource type="Script" path="res://scripts/player/player_visual.gd" id="1_visual"]
+
+[sub_resource type="Gradient" id="Gradient_placeholder"]
+colors = PackedColorArray(0.95, 0.65, 0.2, 1, 0.95, 0.65, 0.2, 1)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_placeholder"]
+gradient = SubResource("Gradient_placeholder")
+width = 24
+height = 28
+
+[node name="Player" type="Node2D" unique_id=624643187]
+script = ExtResource("1_visual")
+
+[node name="Visual" type="Node2D" parent="." unique_id=2112623526]
+
+[node name="Sprite" type="Sprite2D" parent="Visual" unique_id=1451621846]
+texture = SubResource("GradientTexture2D_placeholder")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Visual" unique_id=1077172036]
+
+[node name="VisualAnchor" type="Marker2D" parent="." unique_id=1939401]

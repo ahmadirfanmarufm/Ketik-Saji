@@ -1,0 +1,76 @@
+[gd_scene format=3 uid="uid://bji5d72e66yjj"]
+
+[ext_resource type="PackedScene" uid="uid://ys8j281lg1mt" path="res://scenes/player/player.tscn" id="1_p7mg2"]
+[ext_resource type="Script" uid="uid://bs8gnj4dfnw7w" path="res://scripts/world/world_map.gd" id="1_worldmap"]
+
+[node name="RestaurantWorld" type="Node2D" unique_id=678061488]
+script = ExtResource("1_worldmap")
+
+[node name="FloorTiles" type="TileMapLayer" parent="." unique_id=1214754640]
+
+[node name="Decorations" type="Node2D" parent="." unique_id=144426961]
+
+[node name="KitchenStations" type="Node2D" parent="." unique_id=1277309707]
+
+[node name="StorageBox" type="Node2D" parent="KitchenStations" unique_id=1327328344]
+position = Vector2(80, 16)
+metadata/world_id = &"storage_box"
+
+[node name="Stove" type="Node2D" parent="KitchenStations" unique_id=980061111]
+position = Vector2(144, 16)
+metadata/world_id = &"stove"
+
+[node name="Washer" type="Node2D" parent="KitchenStations" unique_id=1431762332]
+position = Vector2(208, 16)
+metadata/world_id = &"washer"
+
+[node name="PlateRack" type="Node2D" parent="KitchenStations" unique_id=2094622810]
+position = Vector2(272, 16)
+metadata/world_id = &"plate_rack"
+
+[node name="RiceCooker" type="Node2D" parent="KitchenStations" unique_id=395849821]
+position = Vector2(336, 16)
+metadata/world_id = &"rice_cooker"
+
+[node name="WorkTable" type="Node2D" parent="KitchenStations" unique_id=2084572048]
+position = Vector2(208, 80)
+metadata/world_id = &"work_table"
+
+[node name="Trash" type="Node2D" parent="KitchenStations" unique_id=1830833210]
+position = Vector2(80, 112)
+metadata/world_id = &"trash"
+
+[node name="DiningTables" type="Node2D" parent="." unique_id=1975887348]
+
+[node name="DiningTable01" type="Node2D" parent="DiningTables" unique_id=1842323601]
+position = Vector2(144, 208)
+metadata/world_id = &"dining_table_01"
+
+[node name="DiningTable02" type="Node2D" parent="DiningTables" unique_id=743940907]
+position = Vector2(272, 208)
+metadata/world_id = &"dining_table_02"
+
+[node name="WaitingLane" type="Node2D" parent="." unique_id=34387969]
+
+[node name="OnlineArea" type="Node2D" parent="." unique_id=1312146385]
+
+[node name="PickupSpot01" type="Marker2D" parent="OnlineArea" unique_id=2139004358]
+position = Vector2(368, 80)
+metadata/world_id = &"pickup_spot_01"
+
+[node name="PickupSpot02" type="Marker2D" parent="OnlineArea" unique_id=2112776475]
+position = Vector2(368, 112)
+metadata/world_id = &"pickup_spot_02"
+
+[node name="PickupSpot03" type="Marker2D" parent="OnlineArea" unique_id=1288911603]
+position = Vector2(368, 144)
+metadata/world_id = &"pickup_spot_03"
+
+[node name="DriverOverflow" type="Marker2D" parent="OnlineArea" unique_id=1243384309]
+position = Vector2(400, 240)
+metadata/world_id = &"driver_overflow"
+
+[node name="PlacementSlots" type="Node2D" parent="." unique_id=1880777336]
+
+[node name="Player" parent="." unique_id=624643187 instance=ExtResource("1_p7mg2")]
+position = Vector2(208, 144)
