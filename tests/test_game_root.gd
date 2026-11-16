@@ -37,7 +37,7 @@ class MockRun extends Node:
 		return allow_plan
 
 	func get_service_plan() -> Dictionary:
-		return {}
+		return { "day_index": current_day }
 
 	func settle_day_once(_report: Dictionary) -> Dictionary:
 		return { "day7_outcome": outcome }
@@ -46,8 +46,14 @@ class MockRun extends Node:
 		current_day += 1
 		return current_day
 
+	func get_day_index() -> int:
+		return current_day
+
 	func get_run_view() -> Dictionary:
-		return { "goal_outcome": outcome }
+		return {
+			"day_index": current_day,
+			"goal_outcome": outcome,
+		}
 
 
 var _fails: int = 0
@@ -186,8 +192,10 @@ func _test_phase_transitions_and_guards() -> void:
 
 func _test_service_clock_monotonic_and_resets() -> void:
 	var game_root := GameRoot.new()
+	var mock_kitchen := MockKitchen.new()
 	var mock_service := MockService.new()
-	game_root.bind_controllers(null, mock_service, null)
+	var mock_run := MockRun.new()
+	game_root.bind_controllers(mock_kitchen, mock_service, mock_run)
 	root.add_child(game_root)
 	await process_frame
 
@@ -226,7 +234,9 @@ func _test_service_clock_monotonic_and_resets() -> void:
 	_check("start day 2 resets clock to 0", game_root.start_service_requested()
 		and is_zero_approx(game_root.get_service_elapsed()))
 
+	mock_run.free()
 	mock_service.free()
+	mock_kitchen.free()
 	game_root.free()
 
 
@@ -235,14 +245,62 @@ func _test_controller_boundaries_and_ordering() -> void:
 	var game_root := GameRoot.new()
 	var kitchen := MockKitchen.new()
 	var service := MockService.new()
+	var invalid_kitchen := Node.new()
 	var invalid_service := Node.new()
+	var invalid_run := Node.new()
 	var run := MockRun.new()
 	kitchen.log_ref = shared_log
 	service.log_ref = shared_log
-	run.allow_plan = false
-	game_root.bind_controllers(kitchen, service, run)
+	run.allow_plan = true
 	root.add_child(game_root)
 	await process_frame
+
+	game_root.bind_controllers(null, service, run)
+	_check(
+		"unbound KitchenController blocks start_service",
+		not game_root.start_service_requested()
+		and game_root.get_phase() == SharedTypes.Phase.PLANNING
+	)
+
+	game_root.bind_controllers(invalid_kitchen, service, run)
+	_check(
+		"invalid KitchenController blocks start_service",
+		not game_root.start_service_requested()
+		and game_root.get_phase() == SharedTypes.Phase.PLANNING
+	)
+
+	run.allow_plan = false
+	game_root.bind_controllers(kitchen, service, null)
+	_check(
+		"unbound RunController blocks start_service",
+		not game_root.start_service_requested()
+		and game_root.get_phase() == SharedTypes.Phase.PLANNING
+	)
+
+	game_root.bind_controllers(kitchen, service, invalid_run)
+	_check(
+		"invalid RunController blocks start_service",
+		not game_root.start_service_requested()
+		and game_root.get_phase() == SharedTypes.Phase.PLANNING
+	)
+
+	run.allow_plan = true
+	game_root.bind_controllers(kitchen, null, run)
+	_check(
+		"unbound ServiceController blocks start_service",
+		not game_root.start_service_requested()
+		and game_root.get_phase() == SharedTypes.Phase.PLANNING
+	)
+
+	game_root.bind_controllers(kitchen, invalid_service, run)
+	_check(
+		"invalid ServiceController blocks start_service",
+		not game_root.start_service_requested()
+		and game_root.get_phase() == SharedTypes.Phase.PLANNING
+	)
+
+	run.allow_plan = false
+	game_root.bind_controllers(kitchen, service, run)
 
 	_check(
 		"invalid plan blocks SERVING",
@@ -305,6 +363,8 @@ func _test_controller_boundaries_and_ordering() -> void:
 		game_root.get_phase() == SharedTypes.Phase.RESULTS and _emitted_phases.is_empty()
 	)
 
+	invalid_kitchen.free()
+	invalid_run.free()
 	invalid_service.free()
 	kitchen.free()
 	service.free()

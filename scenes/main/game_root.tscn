@@ -2,8 +2,20 @@
 
 [ext_resource type="PackedScene" uid="uid://bji5d72e66yjj" path="res://scenes/world/restaurant_world.tscn" id="1_world"]
 [ext_resource type="Script" uid="uid://y5virn6mochh" path="res://scripts/core/game_root.gd" id="2_root"]
+[ext_resource type="Script" uid="uid://bdgg0naj6ugc0" path="res://scripts/kitchen/kitchen_controller.gd" id="3_kitchen"]
+[ext_resource type="Script" uid="uid://ew07g3xeefsv" path="res://scripts/service/service_controller.gd" id="4_service"]
+[ext_resource type="Script" uid="uid://d1wtcyganh2n4" path="res://scripts/economy/run_controller.gd" id="5_run"]
 
 [node name="GameRoot" type="Node2D" unique_id=450135891]
 script = ExtResource("2_root")
 
 [node name="World" parent="." unique_id=1520841377 instance=ExtResource("1_world")]
+
+[node name="KitchenController" type="Node" parent="." unique_id=701000101]
+script = ExtResource("3_kitchen")
+
+[node name="ServiceController" type="Node" parent="." unique_id=701000102]
+script = ExtResource("4_service")
+
+[node name="RunController" type="Node" parent="." unique_id=701000103]
+script = ExtResource("5_run")
