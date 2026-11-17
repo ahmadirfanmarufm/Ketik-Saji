@@ -17,6 +17,7 @@ const DEFAULT_ECONOMY_CONFIG_PATH: String = "res://data/economy_config.tres"
 const DEFAULT_PATIENCE_SECONDS: float = 100.0
 const DEFAULT_SPAWN_INTERVAL_SECONDS: float = 20.0
 const DEFAULT_EAT_SECONDS: float = 20.0
+const DEFAULT_ONLINE_DEADLINE_SECONDS: float = 60.0
 
 const PICKUP_SPOT_IDS: Array[StringName] = [
 	&"pickup_spot_01",
@@ -38,6 +39,7 @@ var _last_service_now: float = 0.0
 var _next_spawn_at: float = 0.0
 var _next_customer_seq: int = 0
 var _next_order_seq: int = 0
+var _next_driver_seq: int = 0
 
 var _day_queue_initial: int = 0
 var _day_queue_remaining: int = 0
@@ -169,16 +171,15 @@ func prepare_service_day(day_index: int, plan: Dictionary) -> void:
 	_last_invariant_error = ""
 	_next_customer_seq = 0
 	_next_order_seq = 0
+	_next_driver_seq = 0
 	_next_spawn_at = 0.0
 	if not _custom_seed_set:
 		_rng.seed = hash("ketik_saji_service_day_%d" % _day_index)
 
-	var preview_id: StringName = &""
-	if not _selected_recipe_ids.is_empty():
-		preview_id = _selected_recipe_ids[0]
+	var preview_id := _pick_weighted_recipe_id()
 	_online_offer = {
 		"preview_recipe_id": preview_id,
-		"offer_generation_number": 1 if not _selected_recipe_ids.is_empty() else 0,
+		"offer_generation_number": 1 if preview_id != &"" else 0,
 	}
 
 	_day_prepared = true
@@ -252,6 +253,11 @@ func reset_dirt_and_day_customers() -> void:
 	_drivers.clear()
 	_outside_driver_queue.clear()
 	_reset_pickup_spots()
+	_next_driver_seq = 0
+	_online_offer = {
+		"preview_recipe_id": &"",
+		"offer_generation_number": 0,
+	}
 
 	for table: Dictionary in _tables.values():
 		table["state"] = SharedTypes.TableState.CLEAN_VACANT
@@ -262,6 +268,7 @@ func reset_dirt_and_day_customers() -> void:
 	queues_changed.emit()
 	tables_changed.emit()
 	drivers_changed.emit()
+	online_offer_changed.emit()
 
 
 func try_serve_table(table_id: StringName, item_id: StringName) -> bool:
@@ -322,24 +329,7 @@ func try_serve_table(table_id: StringName, item_id: StringName) -> bool:
 	customer["eat_until"] = _last_service_now + _get_eat_seconds()
 	table["state"] = SharedTypes.TableState.OCCUPIED_EATING
 
-	if _run_controller != null and is_instance_valid(_run_controller):
-		var credited: bool = _run_controller.credit_order_once(
-			order_id,
-			recipe_id,
-			SharedTypes.OrderKind.DINE_IN
-		)
-		if not credited:
-			_last_invariant_error = (
-				"ServiceController: credit_order_once failed for order '%s' (%s)."
-				% [order_id, recipe_id]
-			)
-			push_error(_last_invariant_error)
-	elif _game_root != null and is_instance_valid(_game_root):
-		_last_invariant_error = (
-			"ServiceController: missing RunController for order '%s' (%s)."
-			% [order_id, recipe_id]
-		)
-		push_error(_last_invariant_error)
+	_credit_order_with_invariant_guard(order_id, recipe_id, SharedTypes.OrderKind.DINE_IN)
 
 	orders_changed.emit()
 	queues_changed.emit()
@@ -347,8 +337,78 @@ func try_serve_table(table_id: StringName, item_id: StringName) -> bool:
 	return true
 
 
-func try_serve_driver(_driver_id: StringName, _item_id: StringName) -> bool:
-	return false
+func try_serve_driver(driver_id: StringName, item_id: StringName) -> bool:
+	if (
+		not _service_active
+		or driver_id == &""
+		or item_id == &""
+		or not _drivers.has(driver_id)
+	):
+		return false
+
+	var driver: Dictionary = _drivers[driver_id]
+	var spot_id := StringName(driver.get("spot_id_or_empty", &""))
+	if (
+		int(driver.get("state", -1)) != SharedTypes.DriverState.AT_PICKUP_SPOT
+		or spot_id == &""
+		or _pickup_spot_to_driver.get(spot_id, &"") != driver_id
+	):
+		return false
+
+	var order_id := StringName(driver.get("order_id", &""))
+	if not _orders.has(order_id):
+		return false
+	var order: Dictionary = _orders[order_id]
+	if (
+		int(order.get("kind", -1)) != SharedTypes.OrderKind.ONLINE
+		or int(order.get("status", -1)) != SharedTypes.OrderStatus.OPEN
+	):
+		return false
+
+	var clock_now := _get_live_clock_now()
+	var deadline_at: float = float(order.get("deadline_at", 0.0))
+	if clock_now >= deadline_at:
+		_last_service_now = clock_now
+		var expired := _tick_service_spawns_and_timers(_last_service_now)
+		_emit_tick_signals(expired)
+		return false
+	if clock_now > _last_service_now:
+		_last_service_now = clock_now
+		var synced := _tick_service_spawns_and_timers(_last_service_now)
+		_emit_tick_signals(synced)
+		if not _drivers.has(driver_id):
+			return false
+
+	if _kitchen_controller == null or not is_instance_valid(_kitchen_controller):
+		return false
+
+	var recipe_id: StringName = order.get("recipe_id", &"")
+	if not _kitchen_controller.try_consume_serving_item(
+		item_id,
+		recipe_id,
+		SharedTypes.OrderKind.ONLINE,
+		&""
+	):
+		return false
+
+	order["status"] = SharedTypes.OrderStatus.COMPLETED
+	order["pickup_spot_id_or_empty"] = &""
+	_online_orders_open.erase(order_id)
+	_completed_order_ids.append(order_id)
+	_completed_online_count += 1
+
+	if _pickup_spot_to_driver.get(spot_id, &"") == driver_id:
+		_pickup_spot_to_driver[spot_id] = &""
+	_drivers.erase(driver_id)
+	_promote_outside_drivers(_last_service_now)
+
+	_credit_order_with_invariant_guard(order_id, recipe_id, SharedTypes.OrderKind.ONLINE)
+
+	orders_changed.emit()
+	queues_changed.emit()
+	drivers_changed.emit()
+	online_offer_changed.emit()
+	return true
 
 
 func try_clean_table(table_id: StringName) -> bool:
@@ -378,9 +438,74 @@ func try_clean_table(table_id: StringName) -> bool:
 
 
 func try_accept_online_offer() -> bool:
+	if _service_active:
+		_sync_service_now_from_clock()
 	if not get_online_acceptance_enabled():
 		return false
-	return false
+
+	var recipe_id := StringName(_online_offer.get("preview_recipe_id", &""))
+	if recipe_id == &"" or not _has_valid_recipe_price(recipe_id):
+		return false
+
+	_next_order_seq += 1
+	_next_driver_seq += 1
+	var order_id := StringName("ord_d%d_%03d" % [_day_index, _next_order_seq])
+	var driver_id := StringName("drv_d%d_%03d" % [_day_index, _next_driver_seq])
+	var deadline_at := _last_service_now + _get_online_deadline_seconds()
+
+	_orders[order_id] = {
+		"order_id": order_id,
+		"kind": SharedTypes.OrderKind.ONLINE,
+		"status": SharedTypes.OrderStatus.OPEN,
+		"recipe_id": recipe_id,
+		"created_at": _last_service_now,
+		"deadline_at": deadline_at,
+		"customer_id_or_empty": &"",
+		"driver_id_or_empty": driver_id,
+		"table_id_or_empty": &"",
+		"pickup_spot_id_or_empty": &"",
+	}
+	_online_orders_open.append(order_id)
+
+	var spot_id := _find_lowest_free_pickup_spot_id()
+	if spot_id != &"":
+		_pickup_spot_to_driver[spot_id] = driver_id
+		_orders[order_id]["pickup_spot_id_or_empty"] = spot_id
+		_drivers[driver_id] = {
+			"driver_id": driver_id,
+			"order_id": order_id,
+			"state": SharedTypes.DriverState.AT_PICKUP_SPOT,
+			"spot_id_or_empty": spot_id,
+		}
+	else:
+		_drivers[driver_id] = {
+			"driver_id": driver_id,
+			"order_id": order_id,
+			"state": SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE,
+			"spot_id_or_empty": &"",
+		}
+		_outside_driver_queue.append(driver_id)
+
+	_online_offer["preview_recipe_id"] = _pick_weighted_recipe_id()
+	_online_offer["offer_generation_number"] = int(
+		_online_offer.get("offer_generation_number", 0)
+	) + 1
+
+	orders_changed.emit()
+	queues_changed.emit()
+	drivers_changed.emit()
+	online_offer_changed.emit()
+	return true
+
+
+func has_driver(driver_id: StringName) -> bool:
+	return driver_id != &"" and _drivers.has(driver_id)
+
+
+func get_driver_view(driver_id: StringName) -> Dictionary:
+	if not _drivers.has(driver_id):
+		return {}
+	return _build_driver_view(driver_id, _outside_driver_queue.find(driver_id))
 
 
 func get_order_view(order_id: StringName) -> Dictionary:
@@ -456,14 +581,29 @@ func get_table_view(table_id: StringName) -> Dictionary:
 
 func get_driver_views() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	for driver: Dictionary in _drivers.values():
-		result.append(driver.duplicate(true))
+	var seen: Dictionary[StringName, bool] = {}
+
+	for spot_id in PICKUP_SPOT_IDS:
+		var driver_id := StringName(_pickup_spot_to_driver.get(spot_id, &""))
+		if driver_id == &"" or not _drivers.has(driver_id) or seen.has(driver_id):
+			continue
+		seen[driver_id] = true
+		result.append(_build_driver_view(driver_id, -1))
+
+	for i in range(_outside_driver_queue.size()):
+		var driver_id: StringName = _outside_driver_queue[i]
+		if driver_id == &"" or not _drivers.has(driver_id) or seen.has(driver_id):
+			continue
+		seen[driver_id] = true
+		result.append(_build_driver_view(driver_id, i))
+
 	return result
 
 
 func get_online_offer_view() -> Dictionary:
 	return {
 		"preview_recipe_id": _online_offer.get("preview_recipe_id", &""),
+		"offer_generation_number": int(_online_offer.get("offer_generation_number", 0)),
 		"acceptance_enabled": get_online_acceptance_enabled(),
 		"disabled_reason": _get_online_disabled_reason(),
 		"online_open_count": _online_orders_open.size(),
@@ -472,22 +612,21 @@ func get_online_offer_view() -> Dictionary:
 
 
 func get_online_acceptance_enabled() -> bool:
-	if not _service_active:
-		return false
-	if _selected_recipe_ids.is_empty():
-		return false
-	if _day_queue_remaining <= 2:
-		return false
-	if _online_orders_open.size() >= _day_queue_initial:
-		return false
-	return true
+	return _get_online_disabled_reason() == &""
 
 
 func _get_online_disabled_reason() -> StringName:
-	if not _service_active:
+	if not _service_active or not _day_prepared:
 		return &"not_serving"
-	if _selected_recipe_ids.is_empty():
+	var preview_id := StringName(_online_offer.get("preview_recipe_id", &""))
+	if (
+		_selected_recipe_ids.is_empty()
+		or preview_id == &""
+		or not _selected_recipe_ids.has(preview_id)
+	):
 		return &"empty_menu"
+	if not _has_valid_recipe_price(preview_id):
+		return &"invalid_price"
 	if _day_queue_remaining <= 2:
 		return &"cutoff_reached"
 	if _online_orders_open.size() >= _day_queue_initial:
@@ -527,6 +666,41 @@ func _get_eat_seconds() -> float:
 	return DEFAULT_EAT_SECONDS
 
 
+func _get_online_deadline_seconds() -> float:
+	if _economy_config != null and _economy_config.online_deadline_seconds > 0.0:
+		return _economy_config.online_deadline_seconds
+	return DEFAULT_ONLINE_DEADLINE_SECONDS
+
+
+func _has_valid_recipe_price(recipe_id: StringName) -> bool:
+	return recipe_id != &"" and int(_dine_in_prices.get(recipe_id, 0)) > 0
+
+
+func _credit_order_with_invariant_guard(
+	order_id: StringName,
+	recipe_id: StringName,
+	order_kind: int
+) -> void:
+	if _run_controller != null and is_instance_valid(_run_controller):
+		var credited: bool = _run_controller.credit_order_once(
+			order_id,
+			recipe_id,
+			order_kind
+		)
+		if not credited:
+			_last_invariant_error = (
+				"ServiceController: credit_order_once failed for order '%s' (%s)."
+				% [order_id, recipe_id]
+			)
+			push_error(_last_invariant_error)
+	elif _game_root != null and is_instance_valid(_game_root):
+		_last_invariant_error = (
+			"ServiceController: missing RunController for order '%s' (%s)."
+			% [order_id, recipe_id]
+		)
+		push_error(_last_invariant_error)
+
+
 func _get_live_clock_now() -> float:
 	var live_now := _last_service_now
 	if (
@@ -553,6 +727,8 @@ func _emit_tick_signals(changed: Dictionary) -> void:
 		queues_changed.emit()
 	if changed.get("tables", false):
 		tables_changed.emit()
+	if changed.get("drivers", false):
+		drivers_changed.emit()
 	if changed.get("online", false):
 		online_offer_changed.emit()
 
@@ -562,6 +738,7 @@ func _tick_service_spawns_and_timers(now: float) -> Dictionary:
 		"orders": false,
 		"queues": false,
 		"tables": false,
+		"drivers": false,
 		"online": false,
 	}
 
@@ -578,15 +755,27 @@ func _tick_service_spawns_and_timers(now: float) -> Dictionary:
 		changed["queues"] = true
 		changed["tables"] = true
 
-	if _process_order_expiries(now):
+	var exp := _process_order_expiries(now)
+	if exp.get("dinein", false):
 		changed["orders"] = true
 		changed["queues"] = true
 		changed["tables"] = true
+	if exp.get("online", false):
+		changed["orders"] = true
+		changed["queues"] = true
+		changed["drivers"] = true
+		changed["online"] = true
 
 	if _admit_outside_waiters(now):
 		changed["orders"] = true
 		changed["queues"] = true
 		changed["tables"] = true
+
+	if _promote_outside_drivers(now):
+		changed["orders"] = true
+		changed["queues"] = true
+		changed["drivers"] = true
+		changed["online"] = true
 
 	return changed
 
@@ -673,19 +862,129 @@ func _process_eating_completions(now: float) -> bool:
 	return any_changed
 
 
-func _process_order_expiries(now: float) -> bool:
-	var any_changed := false
+func _process_order_expiries(now: float) -> Dictionary:
+	var result: Dictionary = {
+		"dinein": false,
+		"online": false,
+	}
 	for order_id in _get_sorted_order_ids():
 		var order: Dictionary = _orders[order_id]
-		if order.get("kind", -1) != SharedTypes.OrderKind.DINE_IN:
-			continue
 		if order.get("status", -1) != SharedTypes.OrderStatus.OPEN:
 			continue
 		if float(order.get("deadline_at", 0.0)) > now:
 			continue
-		_expire_dine_in_order(order_id)
+		var kind := int(order.get("kind", -1))
+		if kind == SharedTypes.OrderKind.DINE_IN:
+			_expire_dine_in_order(order_id)
+			result["dinein"] = true
+		elif kind == SharedTypes.OrderKind.ONLINE:
+			_expire_online_order(order_id)
+			result["online"] = true
+	return result
+
+
+func _expire_online_order(order_id: StringName) -> void:
+	if not _orders.has(order_id):
+		return
+	var order: Dictionary = _orders[order_id]
+	if (
+		int(order.get("kind", -1)) != SharedTypes.OrderKind.ONLINE
+		or int(order.get("status", -1)) != SharedTypes.OrderStatus.OPEN
+	):
+		return
+
+	order["status"] = SharedTypes.OrderStatus.FAILED
+	_online_orders_open.erase(order_id)
+	_failed_order_ids.append(order_id)
+	_failed_online_count += 1
+
+	var driver_id := StringName(order.get("driver_id_or_empty", &""))
+	var spot_id := StringName(order.get("pickup_spot_id_or_empty", &""))
+	order["pickup_spot_id_or_empty"] = &""
+	if spot_id != &"" and _pickup_spot_to_driver.get(spot_id, &"") == driver_id:
+		_pickup_spot_to_driver[spot_id] = &""
+	if driver_id != &"":
+		_outside_driver_queue.erase(driver_id)
+		_drivers.erase(driver_id)
+
+
+func _promote_outside_drivers(now: float) -> bool:
+	var any_changed := false
+	while not _outside_driver_queue.is_empty():
+		var spot_id := _find_lowest_free_pickup_spot_id()
+		if spot_id == &"":
+			break
+
+		var driver_id: StringName = _outside_driver_queue.pop_front()
+		if not _drivers.has(driver_id):
+			continue
+		var driver: Dictionary = _drivers[driver_id]
+		var order_id := StringName(driver.get("order_id", &""))
+		if not _orders.has(order_id):
+			_drivers.erase(driver_id)
+			continue
+		var order: Dictionary = _orders[order_id]
+		if (
+			int(order.get("kind", -1)) != SharedTypes.OrderKind.ONLINE
+			or int(order.get("status", -1)) != SharedTypes.OrderStatus.OPEN
+		):
+			_drivers.erase(driver_id)
+			continue
+		if float(order.get("deadline_at", 0.0)) <= now:
+			_expire_online_order(order_id)
+			any_changed = true
+			continue
+
+		driver["state"] = SharedTypes.DriverState.AT_PICKUP_SPOT
+		driver["spot_id_or_empty"] = spot_id
+		_pickup_spot_to_driver[spot_id] = driver_id
+		order["pickup_spot_id_or_empty"] = spot_id
 		any_changed = true
+
 	return any_changed
+
+
+func _find_lowest_free_pickup_spot_id() -> StringName:
+	for spot_id in PICKUP_SPOT_IDS:
+		if StringName(_pickup_spot_to_driver.get(spot_id, &"")) == &"":
+			return spot_id
+	return &""
+
+
+func _build_driver_view(driver_id: StringName, queue_index: int) -> Dictionary:
+	var driver: Dictionary = _drivers.get(driver_id, {})
+	var order_id := StringName(driver.get("order_id", &""))
+	var order: Dictionary = _orders.get(order_id, {})
+	var state := int(driver.get("state", SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE))
+	var spot_id := StringName(driver.get("spot_id_or_empty", &""))
+	var total_seconds := _get_online_deadline_seconds()
+	var deadline_at: float = float(order.get("deadline_at", 0.0))
+	var seconds_remaining := 0.0
+	var is_open: bool = int(order.get("status", -1)) == SharedTypes.OrderStatus.OPEN
+	if is_open:
+		seconds_remaining = clampf(deadline_at - _last_service_now, 0.0, total_seconds)
+	var is_serveable: bool = (
+		_service_active
+		and state == SharedTypes.DriverState.AT_PICKUP_SPOT
+		and spot_id != &""
+		and _pickup_spot_to_driver.get(spot_id, &"") == driver_id
+		and is_open
+		and _last_service_now < deadline_at
+	)
+	var out_queue_idx := -1
+	if state == SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE:
+		out_queue_idx = queue_index
+	return {
+		"driver_id": driver_id,
+		"order_id": order_id,
+		"recipe_id": StringName(order.get("recipe_id", &"")),
+		"state": state,
+		"spot_id_or_empty": spot_id,
+		"seconds_remaining": seconds_remaining,
+		"total_seconds": total_seconds,
+		"serveable": is_serveable,
+		"queue_index": out_queue_idx,
+	}
 
 
 func _expire_dine_in_order(order_id: StringName) -> void:

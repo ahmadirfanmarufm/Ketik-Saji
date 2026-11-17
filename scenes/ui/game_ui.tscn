@@ -112,6 +112,11 @@ layout_mode = 2
 mouse_filter = 2
 text = "Stasiun"
 
+[node name="TargetStatusLabel" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
 [node name="AllowedCommandsLabel" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
 visible = false
 layout_mode = 2

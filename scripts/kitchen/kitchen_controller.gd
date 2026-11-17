@@ -41,6 +41,7 @@ var _service_controller: Node = null
 
 var _player_tile: Vector2i = DEFAULT_START_TILE
 var _selected_target_id: StringName = &""
+var _selected_target_is_driver: bool = false
 var _accepted_prefix: String = ""
 var _last_executed_command: String = ""
 var _executed_command_count: int = 0
@@ -78,9 +79,28 @@ func bind_world(world_map: WorldMap, game_root: Node = null) -> void:
 	_sync_player_visual()
 
 
-## Binds ServiceController for dining-table command dispatch.
+## Binds ServiceController for dining-table and online-delivery command dispatch.
 func bind_service(service_controller: Node) -> void:
+	if (
+		_service_controller != null
+		and is_instance_valid(_service_controller)
+		and _service_controller.has_signal(&"drivers_changed")
+		and _service_controller.is_connected(&"drivers_changed", _on_service_drivers_changed)
+	):
+		_service_controller.disconnect(&"drivers_changed", _on_service_drivers_changed)
 	_service_controller = service_controller
+	if (
+		_service_controller != null
+		and is_instance_valid(_service_controller)
+		and _service_controller.has_signal(&"drivers_changed")
+		and not _service_controller.is_connected(
+			&"drivers_changed",
+			_on_service_drivers_changed
+		)
+	):
+		_service_controller.connect(&"drivers_changed", _on_service_drivers_changed)
+	if _selected_target_is_driver:
+		_on_service_drivers_changed()
 
 
 ## Registers a physical storage unit (BOX = 3x5 slots, FRIDGE = 2x3 slots) once by ID.
@@ -206,6 +226,23 @@ func on_interactable_clicked(target_id: StringName) -> bool:
 	return true
 
 
+## Selects a queued overflow driver without moving the player, exposing no typed
+## commands and emitting feedback that the driver is not yet at a pickup spot.
+func on_overflow_driver_clicked(driver_id: StringName) -> bool:
+	if not _is_world_input_allowed():
+		return false
+	if not _has_driver_target(driver_id):
+		action_feedback.emit(&"unknown_target")
+		return false
+	if _is_driver_target(driver_id):
+		return on_interactable_clicked(driver_id)
+
+	clear_command_prefix()
+	_set_selected_target(driver_id)
+	action_feedback.emit(&"driver_not_at_pickup")
+	return true
+
+
 func accept_typed_character(character: String) -> bool:
 	if not _is_serving_phase():
 		return false
@@ -273,6 +310,9 @@ func get_allowed_commands_for_selected_target() -> Array[String]:
 		return result
 	if _is_dining_table_target(_selected_target_id):
 		result.assign(["saji", "bersihkan"])
+		return result
+	if _is_driver_target(_selected_target_id):
+		result.assign(["saji"])
 		return result
 
 	match _selected_target_id:
@@ -647,7 +687,15 @@ func _set_selected_target(target_id: StringName) -> void:
 		return
 	clear_command_prefix()
 	_selected_target_id = target_id
+	_selected_target_is_driver = _has_driver_target(target_id)
 	selected_interactable_changed.emit(_selected_target_id)
+
+
+func _on_service_drivers_changed() -> void:
+	if _selected_target_id == &"" or not _selected_target_is_driver:
+		return
+	if not _has_driver_target(_selected_target_id):
+		_set_selected_target(&"")
 
 
 func _execute_typed_command(command: String) -> void:
@@ -689,13 +737,21 @@ func _perform_typed_command(command: StringName) -> void:
 			if command == &"potong":
 				_try_process_held_ingredient(&"potong", &"item_chopped")
 		&"online_station":
-			action_feedback.emit(&"invalid_action")
+			if command == &"terima":
+				_try_accept_online_offer()
+			else:
+				action_feedback.emit(&"invalid_action")
 		_:
 			if _is_dining_table_target(_selected_target_id):
 				if command == &"saji":
 					_try_serve_dining_table(_selected_target_id)
 				elif command == &"bersihkan":
 					_try_clean_dining_table(_selected_target_id)
+				else:
+					action_feedback.emit(&"invalid_action")
+			elif _is_driver_target(_selected_target_id):
+				if command == &"saji":
+					_try_serve_driver(_selected_target_id)
 				else:
 					action_feedback.emit(&"invalid_action")
 
@@ -709,6 +765,60 @@ func _is_dining_table_target(target_id: StringName) -> bool:
 	):
 		return true
 	return target_id == &"dining_table_01" or target_id == &"dining_table_02"
+
+
+func _has_driver_target(target_id: StringName) -> bool:
+	if (
+		target_id == &""
+		or _service_controller == null
+		or not is_instance_valid(_service_controller)
+	):
+		return false
+	return (
+		_service_controller.has_method(&"has_driver")
+		and _service_controller.has_driver(target_id)
+	)
+
+
+func _is_driver_target(target_id: StringName) -> bool:
+	if not _has_driver_target(target_id):
+		return false
+	if not _service_controller.has_method(&"get_driver_view"):
+		return false
+	var view: Dictionary = _service_controller.get_driver_view(target_id)
+	return (
+		int(view.get("state", -1)) == SharedTypes.DriverState.AT_PICKUP_SPOT
+		and StringName(view.get("spot_id_or_empty", &"")) != &""
+	)
+
+
+func _try_accept_online_offer() -> bool:
+	if not _is_serving_phase() or _selected_target_id != &"online_station":
+		action_feedback.emit(&"invalid_action")
+		return false
+	if (
+		_service_controller == null
+		or not is_instance_valid(_service_controller)
+		or not _service_controller.has_method(&"get_online_offer_view")
+		or not _service_controller.has_method(&"try_accept_online_offer")
+	):
+		action_feedback.emit(&"invalid_action")
+		return false
+
+	var offer_view: Dictionary = _service_controller.get_online_offer_view()
+	if (
+		not bool(offer_view.get("acceptance_enabled", false))
+		or StringName(offer_view.get("preview_recipe_id", &"")) == &""
+	):
+		action_feedback.emit(&"invalid_action")
+		return false
+
+	if _service_controller.try_accept_online_offer():
+		action_feedback.emit(&"online_accepted")
+		return true
+
+	action_feedback.emit(&"invalid_action")
+	return false
 
 
 func _try_serve_dining_table(table_id: StringName) -> bool:
@@ -734,17 +844,58 @@ func _try_serve_dining_table(table_id: StringName) -> bool:
 		return false
 
 	var after_table: Dictionary = _service_controller.get_table_view(table_id)
-	var after_order: Dictionary = _service_controller.get_order_view(before_order_id)
+	var table_replaced: bool = after_table.get("order_id_or_empty", &"") != before_order_id
+	_emit_failed_serve_feedback(before_order_id, expected_recipe_id, table_replaced)
+	return false
+
+
+func _try_serve_driver(driver_id: StringName) -> bool:
 	if (
-		int(after_order.get("status", -1)) != SharedTypes.OrderStatus.OPEN
-		or after_table.get("order_id_or_empty", &"") != before_order_id
+		not _is_serving_phase()
+		or _service_controller == null
+		or not is_instance_valid(_service_controller)
+		or not _is_driver_target(driver_id)
 	):
+		action_feedback.emit(&"invalid_action")
+		return false
+
+	var before_driver: Dictionary = _service_controller.get_driver_view(driver_id)
+	var before_order_id := StringName(before_driver.get("order_id", &""))
+	var expected_recipe_id := StringName(before_driver.get("recipe_id", &""))
+	var spot_id := StringName(before_driver.get("spot_id_or_empty", &""))
+	if (
+		int(before_driver.get("state", -1)) != SharedTypes.DriverState.AT_PICKUP_SPOT
+		or spot_id == &""
+		or before_order_id == &""
+	):
+		action_feedback.emit(&"invalid_action")
+		return false
+	if not bool(before_driver.get("serveable", false)):
 		action_feedback.emit(&"order_expired")
 		return false
 
+	var held_item_id: StringName = _held_item.get("item_id", &"")
+	if _service_controller.try_serve_driver(driver_id, held_item_id):
+		action_feedback.emit(&"order_served")
+		return true
+
+	_emit_failed_serve_feedback(before_order_id, expected_recipe_id, false)
+	return false
+
+
+func _emit_failed_serve_feedback(
+	before_order_id: StringName,
+	expected_recipe_id: StringName,
+	target_replaced: bool
+) -> void:
+	var after_order: Dictionary = _service_controller.get_order_view(before_order_id)
+	if int(after_order.get("status", -1)) != SharedTypes.OrderStatus.OPEN or target_replaced:
+		action_feedback.emit(&"order_expired")
+		return
+
 	if _held_item.is_empty():
 		action_feedback.emit(&"invalid_action")
-		return false
+		return
 
 	var held_plate_id: StringName = _held_item.get("plate_id", &"")
 	var held_recipe_id: StringName = _held_item.get("matched_recipe_id", &"")
@@ -752,7 +903,6 @@ func _try_serve_dining_table(table_id: StringName) -> bool:
 		action_feedback.emit(&"wrong_order")
 	else:
 		action_feedback.emit(&"invalid_action")
-	return false
 
 
 func _try_clean_dining_table(table_id: StringName) -> bool:

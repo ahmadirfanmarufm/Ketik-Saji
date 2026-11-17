@@ -84,6 +84,7 @@ var _driver_visual_nodes: Dictionary[StringName, Node2D] = {}
 var _driver_visual_states: Dictionary[StringName, int] = {}
 var _driver_visual_spots: Dictionary[StringName, StringName] = {}
 var _customer_visual_nodes: Dictionary[StringName, Node2D] = {}
+var _last_online_preview_key: String = ""
 
 @onready var floor_layer: TileMapLayer = $FloorTiles
 @onready var dine_in_waiting_anchors: Node2D = $DineInWaitingAnchors
@@ -403,9 +404,116 @@ func sync_kitchen_visuals(
 			)
 
 
+## Synchronizes passive OnlineStation preview dish and availability tint from
+## ServiceController's read-only offer view.
+func sync_online_station_visual(
+	preview_recipe_id: StringName,
+	acceptance_enabled: bool,
+	recipe_label: String = "",
+	part_textures: Array[Texture2D] = []
+) -> void:
+	if registry == null:
+		return
+
+	var station_node := registry.get_object(&"online_station")
+	if station_node == null:
+		return
+
+	var station_sprite := station_node.get_node_or_null("Sprite2D") as Sprite2D
+	var preview_vis := station_node.get_node_or_null("OnlinePreviewVisual") as Node2D
+	if preview_recipe_id == &"":
+		_last_online_preview_key = ""
+		if preview_vis != null:
+			preview_vis.visible = false
+		if station_sprite != null:
+			station_sprite.modulate = Color.WHITE
+		return
+
+	if preview_vis == null:
+		preview_vis = _create_online_preview_visual()
+		station_node.add_child(preview_vis)
+
+	preview_vis.visible = true
+	var display_name := recipe_label if not recipe_label.is_empty() else String(preview_recipe_id)
+	var cache_key := "%s|%s|%d" % [String(preview_recipe_id), display_name, part_textures.size()]
+	if _last_online_preview_key != cache_key:
+		_last_online_preview_key = cache_key
+		var dish_node := preview_vis.get_node_or_null("PreviewDish") as Node2D
+		sync_food_item_visual(dish_node, true, true, part_textures)
+		var label_node := preview_vis.get_node_or_null("PreviewLabel") as Label
+		if label_node != null:
+			label_node.text = display_name
+
+	preview_vis.modulate = Color.WHITE if acceptance_enabled else Color(0.55, 0.55, 0.55, 0.65)
+	if station_sprite != null:
+		station_sprite.modulate = (
+			Color.WHITE if acceptance_enabled else Color(0.75, 0.75, 0.75, 1.0)
+		)
+
+
+func get_online_preview_visual() -> Node2D:
+	if registry == null:
+		return null
+	var station_node := registry.get_object(&"online_station")
+	if station_node == null:
+		return null
+	return station_node.get_node_or_null("OnlinePreviewVisual") as Node2D
+
+
+## Shared exact CollisionShape2D hit-test against an Area2D in world coordinates.
+static func point_hits_area_shapes(area: Area2D, world_global_pos: Vector2) -> bool:
+	if area == null or not is_instance_valid(area):
+		return false
+	for child in area.get_children():
+		if not (child is CollisionShape2D):
+			continue
+		var shape_node := child as CollisionShape2D
+		if not is_instance_valid(shape_node) or shape_node.disabled or shape_node.shape == null:
+			continue
+		var xform := shape_node.get_global_transform()
+		if is_zero_approx(xform.determinant()):
+			continue
+		var local_pt := xform.affine_inverse() * world_global_pos
+		if shape_node.shape is RectangleShape2D:
+			var rect_shape := shape_node.shape as RectangleShape2D
+			if rect_shape.get_rect().has_point(local_pt):
+				return true
+		elif shape_node.shape is CircleShape2D:
+			var circle_shape := shape_node.shape as CircleShape2D
+			if local_pt.length_squared() <= circle_shape.radius * circle_shape.radius:
+				return true
+	return false
+
+
+func hit_test_overflow_driver(world_global_pos: Vector2) -> StringName:
+	if driver_objects == null:
+		return &""
+	var children := driver_objects.get_children()
+	for i in range(children.size() - 1, -1, -1):
+		var area := children[i] as Area2D
+		if area == null or not is_instance_valid(area) or not area.is_visible_in_tree():
+			continue
+		var driver_id := StringName(area.get_meta(WORLD_ID_META, &""))
+		if driver_id == &"":
+			continue
+		var drv_state := int(_driver_visual_states.get(driver_id, -1))
+		if drv_state != SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE:
+			continue
+		if point_hits_area_shapes(area, world_global_pos):
+			return driver_id
+	return &""
+
+
+func get_driver_visual_node(driver_id: StringName) -> Node2D:
+	return _driver_visual_nodes.get(driver_id, null)
+
+
 ## Synchronizes runtime delivery driver visuals under `DriverObjects` from
 ## `ServiceController.get_driver_views()` without duplicating controller state.
-func sync_driver_visuals(driver_views: Array[Dictionary]) -> void:
+func sync_driver_visuals(
+	driver_views: Array[Dictionary],
+	recipe_names: Dictionary = {}
+) -> void:
 	if driver_objects == null or registry == null or grid == null:
 		return
 
@@ -428,92 +536,192 @@ func sync_driver_visuals(driver_views: Array[Dictionary]) -> void:
 		var state := int(view.get("state", SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE))
 		var spot_id := StringName(view.get("spot_id_or_empty", view.get("spot_id", &"")))
 		if state == SharedTypes.DriverState.AT_PICKUP_SPOT and spot_id != &"":
-			_sync_in_spot_driver_visual(driver_id, spot_id)
+			_sync_in_spot_driver_visual(driver_id, spot_id, view, recipe_names)
 		else:
-			_sync_overflow_driver_visual(driver_id, overflow_index)
+			var q_idx := int(view.get("queue_index", -1))
+			var pos_idx := q_idx if q_idx >= 0 else overflow_index
+			_sync_overflow_driver_visual(driver_id, pos_idx, view, recipe_names)
 			overflow_index += 1
 
 
-func _sync_in_spot_driver_visual(driver_id: StringName, spot_id: StringName) -> void:
+func _create_online_preview_visual() -> Node2D:
+	var preview := Node2D.new()
+	preview.name = "OnlinePreviewVisual"
+	preview.z_index = 2
+	preview.position = Vector2(0, -14)
+	preview.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+
+	var dish := Node2D.new()
+	dish.name = "PreviewDish"
+	dish.scale = Vector2(0.75, 0.75)
+	dish.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	preview.add_child(dish)
+
+	var label := Label.new()
+	label.name = "PreviewLabel"
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.position = Vector2(-28, -20)
+	label.custom_minimum_size = Vector2(56, 12)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 7)
+	preview.add_child(label)
+	return preview
+
+
+func _ensure_driver_visual_node(driver_id: StringName) -> Area2D:
+	var existing := _driver_visual_nodes.get(driver_id, null) as Area2D
+	if existing != null and is_instance_valid(existing):
+		return existing
+
+	var area := Area2D.new()
+	area.name = String(driver_id)
+	area.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	area.z_index = 1
+	area.set_meta(WORLD_ID_META, driver_id)
+
+	var shape_node := CollisionShape2D.new()
+	shape_node.name = "CollisionShape2D"
+	var rect_shape := RectangleShape2D.new()
+	rect_shape.size = DRIVER_HITBOX_SIZE
+	shape_node.shape = rect_shape
+	area.add_child(shape_node)
+
+	var sprite := Sprite2D.new()
+	sprite.name = "Sprite2D"
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.texture = driver_texture
+	area.add_child(sprite)
+
+	var bar_bg := ColorRect.new()
+	bar_bg.name = "TimerBg"
+	bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar_bg.color = Color(0.1, 0.1, 0.12, 0.85)
+	bar_bg.position = Vector2(-14, -19)
+	bar_bg.size = Vector2(28, 3)
+	area.add_child(bar_bg)
+
+	var bar_fill := ColorRect.new()
+	bar_fill.name = "TimerFill"
+	bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar_fill.color = Color(0.35, 0.88, 0.42, 1.0)
+	bar_fill.position = Vector2(0, 0)
+	bar_fill.size = Vector2(28, 3)
+	bar_bg.add_child(bar_fill)
+
+	var label := Label.new()
+	label.name = "StatusLabel"
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.position = Vector2(-28, -31)
+	label.custom_minimum_size = Vector2(56, 12)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 7)
+	area.add_child(label)
+
+	driver_objects.add_child(area)
+	_driver_visual_nodes[driver_id] = area
+	return area
+
+
+func _update_driver_visual_badge(
+	area: Area2D,
+	view: Dictionary,
+	recipe_names: Dictionary,
+	in_spot: bool
+) -> void:
+	var sprite := area.get_node_or_null("Sprite2D") as Sprite2D
+	if sprite != null:
+		sprite.modulate = Color.WHITE if in_spot else Color(0.68, 0.72, 0.78, 0.85)
+
+	var recipe_id := StringName(view.get("recipe_id", &""))
+	var dish_text: String = String(recipe_names.get(recipe_id, String(recipe_id)))
+	var sec_rem: float = maxf(0.0, float(view.get("seconds_remaining", 0.0)))
+	var total_secs: float = maxf(0.1, float(view.get("total_seconds", 60.0)))
+	var ratio := clampf(sec_rem / total_secs, 0.0, 1.0)
+
+	var label := area.get_node_or_null("StatusLabel") as Label
+	if label != null:
+		if dish_text.is_empty():
+			label.visible = false
+			label.text = ""
+		else:
+			label.visible = true
+			var secs_int := maxi(0, ceili(sec_rem))
+			label.text = (
+				"%s %ds" % [dish_text, secs_int]
+				if in_spot
+				else "Antre %s %ds" % [dish_text, secs_int]
+			)
+			label.modulate = Color.WHITE if in_spot else Color(0.85, 0.90, 0.96, 0.95)
+
+	var bar_bg := area.get_node_or_null("TimerBg") as ColorRect
+	var bar_fill := area.get_node_or_null("TimerBg/TimerFill") as ColorRect
+	var has_timer := view.has("seconds_remaining")
+	if bar_bg != null:
+		bar_bg.visible = has_timer
+	if bar_fill != null:
+		bar_fill.size = Vector2(28.0 * ratio, 3.0)
+		if not in_spot:
+			bar_fill.color = Color(0.58, 0.70, 0.86, 1.0)
+		elif ratio <= 0.25:
+			bar_fill.color = Color(0.95, 0.28, 0.25, 1.0)
+		elif ratio <= 0.55:
+			bar_fill.color = Color(0.95, 0.76, 0.25, 1.0)
+		else:
+			bar_fill.color = Color(0.35, 0.88, 0.42, 1.0)
+
+
+func _sync_in_spot_driver_visual(
+	driver_id: StringName,
+	spot_id: StringName,
+	view: Dictionary,
+	recipe_names: Dictionary
+) -> void:
 	var spot_node := registry.get_object(spot_id)
 	if spot_node == null:
 		_remove_driver_visual(driver_id)
 		return
 
-	if _driver_visual_nodes.has(driver_id):
-		var prev_state := int(_driver_visual_states.get(driver_id, -1))
-		var prev_spot := StringName(_driver_visual_spots.get(driver_id, &""))
-		if prev_state != SharedTypes.DriverState.AT_PICKUP_SPOT or prev_spot != spot_id:
-			_remove_driver_visual(driver_id)
+	var area := _ensure_driver_visual_node(driver_id)
+	area.position = spot_node.position
 
-	if not _driver_visual_nodes.has(driver_id):
-		var area := Area2D.new()
-		area.name = String(driver_id)
-		area.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		area.z_index = 1
-		area.position = spot_node.position
-		area.set_meta(WORLD_ID_META, driver_id)
-
-		var shape_node := CollisionShape2D.new()
-		shape_node.name = "CollisionShape2D"
-		var rect_shape := RectangleShape2D.new()
-		rect_shape.size = DRIVER_HITBOX_SIZE
-		shape_node.shape = rect_shape
-		area.add_child(shape_node)
-
-		var sprite := Sprite2D.new()
-		sprite.name = "Sprite2D"
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		sprite.texture = driver_texture
-		area.add_child(sprite)
-
-		driver_objects.add_child(area)
+	var prev_state := int(_driver_visual_states.get(driver_id, -1))
+	var prev_spot := StringName(_driver_visual_spots.get(driver_id, &""))
+	var needs_register := (
+		prev_state != SharedTypes.DriverState.AT_PICKUP_SPOT
+		or prev_spot != spot_id
+		or not registry.has_object(driver_id)
+	)
+	if needs_register:
+		if registry.has_object(driver_id):
+			unregister_object(driver_id)
 		var spot_cell := global_to_cell(spot_node.global_position)
 		if not register_object(driver_id, area, [spot_cell]):
-			driver_objects.remove_child(area)
-			area.free()
+			_remove_driver_visual(driver_id)
 			return
 
-		_driver_visual_nodes[driver_id] = area
-		_driver_visual_states[driver_id] = SharedTypes.DriverState.AT_PICKUP_SPOT
-		_driver_visual_spots[driver_id] = spot_id
-	else:
-		var node := _driver_visual_nodes[driver_id]
-		if is_instance_valid(node):
-			node.position = spot_node.position
+	_driver_visual_states[driver_id] = SharedTypes.DriverState.AT_PICKUP_SPOT
+	_driver_visual_spots[driver_id] = spot_id
+	_update_driver_visual_badge(area, view, recipe_names, true)
 
 
-func _sync_overflow_driver_visual(driver_id: StringName, queue_index: int) -> void:
+func _sync_overflow_driver_visual(
+	driver_id: StringName,
+	queue_index: int,
+	view: Dictionary,
+	recipe_names: Dictionary
+) -> void:
 	var overflow_anchor := registry.get_object(&"driver_overflow")
 	var base_pos := overflow_anchor.position if overflow_anchor != null else Vector2(400, 240)
 	var target_pos := base_pos + DRIVER_OVERFLOW_STEP * float(queue_index)
 
-	if _driver_visual_nodes.has(driver_id):
-		var prev_state := int(_driver_visual_states.get(driver_id, -1))
-		if prev_state != SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE:
-			_remove_driver_visual(driver_id)
+	if registry.has_object(driver_id):
+		unregister_object(driver_id)
 
-	if not _driver_visual_nodes.has(driver_id):
-		var marker := Node2D.new()
-		marker.name = String(driver_id)
-		marker.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		marker.z_index = 1
-		marker.position = target_pos
-
-		var sprite := Sprite2D.new()
-		sprite.name = "Sprite2D"
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		sprite.texture = driver_texture
-		marker.add_child(sprite)
-
-		driver_objects.add_child(marker)
-		_driver_visual_nodes[driver_id] = marker
-		_driver_visual_states[driver_id] = SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE
-		_driver_visual_spots[driver_id] = &""
-	else:
-		var node := _driver_visual_nodes[driver_id]
-		if is_instance_valid(node):
-			node.position = target_pos
+	var area := _ensure_driver_visual_node(driver_id)
+	area.position = target_pos
+	_driver_visual_states[driver_id] = SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE
+	_driver_visual_spots[driver_id] = &""
+	_update_driver_visual_badge(area, view, recipe_names, false)
 
 
 func _remove_driver_visual(driver_id: StringName) -> void:

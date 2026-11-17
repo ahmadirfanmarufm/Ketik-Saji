@@ -7,7 +7,7 @@
 | 0 — Godot skeleton, data, phase and clock | COMPLETE — World Foundation (A2) + Core Data (A3) + GameRoot Foundation + World Hierarchy Migration + Controller Skeletons (`KitchenController`, `ServiceController`, `RunController`) + `GameUI` Foundation (`LeftHUDRegion` `112×360` + `World` at `(144, 36)`) validated | WorldGrid/WorldRegistry/WorldMap (A2 PASS), `SharedTypes` & `.tres` schemas/assets (A3 PASS), `GameRoot` phase/clock (`tests/test_game_root.gd` PASS), canonical `World` hierarchy (`tests/test_world_hierarchy.gd` PASS), `KitchenController` + `ServiceController` + `RunController` (`tests/test_controllers_m0.gd` PASS), `GameUI` (`scenes/ui/game_ui.tscn`, `scripts/ui/game_ui.gd`, `tests/test_game_ui_m1.gd` PASS, Godot 4.7.2). |
 | 1 — World click/typing and first playable dish | COMPLETE — Full M1 kitchen gameplay loop (`storage` retrieval, `washer` `cuci`, `rice_cooker` `masak`/`nasi`, `stove` `goreng`, `work_table_chop` `potong`, `plate_rack`, `work_table_stage` staging/merging, `trash`, `nasi_telor` assembly, and visual sync) validated (`tests/test_game_ui_m1.gd` PASS) | Implemented `KitchenController` item retrieval, `IngredientTransition`-driven processing, single held aggregate, finite plate pickup/return, `WorkTable` staging & recipe-driven multiset merging (`nasi_telor` in any plating order), `Trash` food discard preserving plate ID, read-only view getters, and `PlayerVisual`/`WorldMap`/`GameUI` visual synchronization (`105/105` checks PASS, zero leaks). |
 | 2 — Dine-in serving, washing, multiple customer queue | COMPLETE — Full M2 dine-in customer gameplay loop (`t=0` & `20.0s` spawns, weighted recipe selection, outside FIFO queue, lowest-ID table seating, `100.0s` patience deadline & expiry, `saji` serving + `credit_order_once`, `20.0s` eating -> `DIRTY`, `bersihkan` cleanup + washer dirty plate transfer + FIFO admission, and customer/table visual sync) validated (`tests/test_service_m2.gd` PASS) | Implemented `ServiceController` dine-in spawning/timers/serving/cleaning, `KitchenController` `try_consume_serving_item()` & `saji`/`bersihkan` dispatch, `GameRoot` M2 wiring, `WorldMap.sync_dine_in_visuals()` (`npc 1.png`–`npc 7.png`), and `GameUI` order/dirty status feedback (`41/41` checks PASS, zero leaks). |
-| 3 — Online offer, physical drivers and deadlines | NOT STARTED | |
+| 3 — Online offer, physical drivers and deadlines | COMPLETE — M3.1 `ServiceController` Lifecycle + M3.2 `KitchenController` Commands + M3.3 `WorldMap`/`GameUI` Presentation & Overflow Interaction + Acceptance Hardening COMPLETE (`OnlineStation` preview dish/availability tint, in-spot & overflow driver countdown overlays, clickable overflow queue feedback `"Pengantar belum mendapatkan tempat pickup."` without `saji`, idempotent signal wiring, no-pause modal overlay clock/deadline tests, online-expiry auto-close drain test, and typed `saji` edge cases; `tests/test_service_m3.gd` `98/98` checks PASS, exit `0`) | `scripts/service/service_controller.gd`, `scripts/kitchen/kitchen_controller.gd`, `scripts/world/world_map.gd`, `scripts/ui/game_ui.gd`, `scenes/ui/game_ui.tscn`, `tests/test_service_m3.gd` (+ `.uid`, `98/98` checks PASS, zero leaks). |
 | 4 — Selected storage purchases, fixtures and economy | NOT STARTED | |
 | 5 — Seven-day progression, win/extra, menu data intake | NOT STARTED | |
 | 6 — Art/UI integration, balancing, QA/export | PARTIAL — Phase 1 Art Integration (environment tileset, fixture sprites, player sprite, customer/driver/employee texture bindings, ingredient `.tres` visual mappings) validated | `Warung-Tileset.png` integrated into `FloorTiles` (`13×9` grid) and 10 fixture `Sprite2D` nodes; `player.png` integrated into `scenes/player/player.tscn`; `npc gojek.png`, `pegawai.png`, and `npc 1.png`–`npc 7.png` bound on `WorldMap` with `sync_driver_visuals()`; unambiguous ingredient textures mapped on `ayam.tres`, `telur.tres`, `tempe.tres`, `beras.tres`, `sayur.tres` (`tests/test_world_hierarchy.gd` 123/123 PASS, `tests/test_track_a3.gd` 68/68 PASS). |
@@ -297,4 +297,74 @@ Tests ACTUALLY run and results: `godot --headless --path . -s res://tests/test_s
 Blocked by art/content (recipe/icon/map IDs)/TUNING: `sapi.tres` meat texture ambiguity and Days 4–7 content remain unchanged; GoFood drivers (M3) and Belanja/shop upgrades (M4) remain out of scope for M2.
 Divergence from architecture (requires coordinator approval if gameplay): none; additive `ServiceController.bind_systems`, `set_rng_seed`, `get_customer_views`, and `KitchenController.bind_service` respect all single-owner and passive-view contracts.
 Next concrete task: Milestone 3 — Online offer preview (`terima`), online order deadlines, physical driver spawning at `pickup_spot_01..03`, overflow FIFO, and driver serving.
+```
+
+### Milestone 3.1 — Online Delivery Lifecycle (`ServiceController`) (2026-11-17)
+
+```
+Date / Git commit: 2026-11-17 / post-M2
+Milestone completed/current: M3.1 COMPLETE — ServiceController Online Delivery Lifecycle validated (M3.2 Kitchen/WorldMap/GameUI integration pending)
+Files added/modified: added tests/test_service_m3.gd (+ .uid); modified scripts/service/service_controller.gd, docs/PROGRESS.md
+Godot version / platform: Godot 4.7.2.stable.official.ed1daf0bf / Windows
+Implemented gameplay & API:
+- Weighted inverse-price online offer preview initialization (`prepare_service_day`) and rotation on acceptance (`try_accept_online_offer`), kept intact past `_day_queue_remaining <= 2` cutoff and `day_queue_initial` concurrent OPEN cap without decrementing dine-in quota.
+- Pickup spot allocation (`pickup_spot_01` -> `02` -> `03`) and `_outside_driver_queue` FIFO promotion without resetting original 60.0s deadlines, skipping/removing any already-expired overflow entries.
+- `try_serve_driver(driver_id, item_id)` with exact `now >= deadline_at` tie-break, `KitchenController.try_consume_serving_item(..., OrderKind.ONLINE, &"")` (clean plate return to `&"RACK"`), once-only 70% payout via `RunController.credit_order_once` with `push_error` invariant guard, and idempotent 60.0s online expiry integrated into `_tick_service_spawns_and_timers` and `is_drained()`.
+- Read-only `has_driver()`, `get_driver_view()`, deterministic sorted `get_driver_views()` (`queue_index`, `serveable`, `seconds_remaining`), and `reset_dirt_and_day_customers()` online cleanup.
+Tests ACTUALLY run and results: `godot --headless --path . -s res://tests/test_service_m3.gd` — PASS (51/51 checks after M3.1.1 hardening covering immediate quota-3 cutoff, lowest free spot 01 vs 03, multi-overflow `queue_index` re-indexing, cross-recipe delivery on Day 2, public-clock 60.0s boundary, live dine-in lifecycle drain, full Day 1->2 transition, and invariant error guard, `SUMMARY fails=0`, zero leaks); `godot --headless --path . -s res://tests/test_service_m2.gd` — PASS (41/41 checks, `SUMMARY fails=0`, zero leaks); `godot --headless --path . -s res://tests/test_game_ui_m1.gd` — PASS (105/105 checks, `SUMMARY fails=0`, zero leaks); `godot --headless --path . -s res://tests/test_controllers_m0.gd` — PASS (106/106 checks, `SUMMARY fails=0`, zero leaks); `godot --headless --path . -s res://tests/test_game_root.gd` — PASS (88/88 checks, `SUMMARY fails=0`, zero leaks); `godot --headless --path . -s res://tests/test_world_hierarchy.gd` — PASS (123/123 checks, `SUMMARY fails=0`, zero leaks); `godot --headless --path . -s res://tests/test_track_a3.gd` — PASS (68/68 checks, `SUMMARY fails=0`, zero leaks); `scratch/test_world_a2.gd` — PASS (101/101 checks, `SUMMARY fails=0`, zero leaks); `godot --headless --path . --quit-after 2` — PASS (exit 0); Godot `ResourceUID` validation (`uid://3u0u5mnto3wv`), coding standards, `.uid`, and `git diff --check` — PASS (`Issues: 0`).
+Blocked by art/content (recipe/icon/map IDs)/TUNING: none for M3.1 (`npc gojek.png` already bound on `WorldMap` from Phase 1).
+Divergence from architecture (requires coordinator approval if gameplay): none; additive `has_driver()` and `get_driver_view()` read helpers cleanly support M3.2 dispatch while preserving single-state ownership.
+Next concrete task: M3.2 — Wire `terima`/`saji` driver dispatch in `KitchenController`, driver/offer overlays in `WorldMap`, and feedback/presentation in `GameUI`.
+```
+
+### Milestone 3.2 — KitchenController Online Delivery Integration (2026-11-17)
+
+```
+Date / Git commit: 2026-11-17 / post-M3.1
+Milestone completed/current: M3.2 COMPLETE — KitchenController `terima`/`saji` Online Dispatch & Stale Driver Selection Lifecycle validated (M3.3 WorldMap/GameUI integration pending)
+Files added/modified: modified scripts/kitchen/kitchen_controller.gd, tests/test_service_m3.gd, docs/PROGRESS.md
+Godot version / platform: Godot 4.7.2.stable.official.ed1daf0bf / Windows
+Implemented gameplay & API:
+- `KitchenController.bind_service()`: idempotently connects/disconnects `ServiceController.drivers_changed` to clear stale `_selected_target_id` and `_accepted_prefix` only when the selected driver disappears (preserving unrelated selections and active drivers whose view refreshes).
+- `online_station` `terima`: validates `SERVING` phase, `online_station` target, valid `ServiceController`, and live `acceptance_enabled` / preview recipe before invoking `try_accept_online_offer()` once (`&"online_accepted"` vs `&"invalid_action"`).
+- Selected driver `saji`: exposes `["saji"]` in `get_allowed_commands_for_selected_target()` for registered drivers, pre-validates spot + `serveable` state, delegates to `ServiceController.try_serve_driver(driver_id, held_item_id)`, and shares `_emit_failed_serve_feedback()` with dining-table `saji` (`&"order_expired"` vs `&"wrong_order"` vs `&"invalid_action"`).
+Tests ACTUALLY run and results: `godot --headless --path . -s res://tests/test_service_m3.gd` — PASS (65/65 checks including M3.1 + M3.2 online `terima`/`saji`/driver-selection tests, `SUMMARY fails=0`, zero leaks); `godot --headless --path . -s res://tests/test_service_m2.gd` — PASS (41/41 checks); `godot --headless --path . -s res://tests/test_game_ui_m1.gd` — PASS (105/105 checks); `godot --headless --path . -s res://tests/test_controllers_m0.gd` — PASS (106/106 checks); `godot --headless --path . -s res://tests/test_game_root.gd` — PASS (88/88 checks); `godot --headless --path . -s res://tests/test_world_hierarchy.gd` — PASS (123/123 checks); `godot --headless --path . -s res://tests/test_track_a3.gd` — PASS (68/68 checks); `scratch/test_world_a2.gd` — PASS (101/101 checks); `godot --headless --path . --quit-after 2` — PASS (exit 0); `.uid`, coding standards, ObjectDB/resource leaks, and `git diff --check` — PASS (`Issues: 0`).
+Blocked by art/content (recipe/icon/map IDs)/TUNING: none.
+Divergence from architecture (requires coordinator approval if gameplay): none.
+Next concrete task: M3.3 — WorldMap passive online offer & 60s driver overlays and GameUI online presentation & localized feedback (`online_accepted`, cutoff/overflow feedback).
+```
+
+### Milestone 3.3 — WorldMap & GameUI Online Delivery Presentation (2026-11-17)
+
+```
+Date / Git commit: 2026-11-17 / post-M3.2
+Milestone completed/current: M3.3 COMPLETE — WorldMap OnlineStation/Driver Presentation, Clickable Overflow Feedback, and GameUI Localized Dialogue validated
+Files added/modified: modified scripts/world/world_map.gd, scripts/kitchen/kitchen_controller.gd, scripts/ui/game_ui.gd, scenes/ui/game_ui.tscn, tests/test_service_m3.gd, docs/PROGRESS.md
+Godot version / platform: Godot 4.7.2.stable.official.ed1daf0bf / Windows
+Implemented presentation & interaction:
+- `WorldMap.sync_online_station_visual()`: renders `OnlinePreviewVisual` plated recipe preview + recipe label on `OnlineStation` from read-only `get_online_offer_view()`, keeping preview visible and dimmed (`modulate`) after cutoff or concurrent cap.
+- `WorldMap.sync_driver_visuals()`: reuses single `Area2D` nodes per `driver_id` across frames and overflow -> pickup spot promotions (zero duplicate nodes), renders recipe + `seconds_remaining` badge + shrinking timer bar, distinguishes in-spot (`Color.WHITE`) vs overflow (`"Antre ..."` dimmed tint), and exposes `hit_test_overflow_driver()` without registering overflow drivers in `WorldRegistry`.
+- `KitchenController`: restricted `_is_driver_target()` to `AT_PICKUP_SPOT` drivers while tracking `_has_driver_target()` for stale cleanup on `drivers_changed`, and added `on_overflow_driver_clicked()` (selects overflow target without moving player, exposes `[]`, emits `&"driver_not_at_pickup"`).
+- `GameUI` & `scenes/ui/game_ui.tscn`: wired idempotent `ServiceController.online_offer_changed` and per-frame `_refresh_driver_visuals()`/`_refresh_dialogue()`, added `TargetStatusLabel` for `OnlineStation` preview/disabled reason and in-spot/overflow driver status, anchored dialogue to `get_driver_visual_node()`, and localized `&"online_accepted"` / `&"driver_not_at_pickup"`.
+Tests ACTUALLY run and results: `godot --headless --path . -s res://tests/test_service_m3.gd` — PASS (85/85 checks including M3.1 + M3.2 + M3.3 `OnlineStation` preview/cutoff/rotation, in-spot/overflow driver countdowns, overflow click feedback, in-place promotion, expiry cleanup, and `GameUI` dialogue/feedback, `SUMMARY fails=0`, zero leaks); `tests/test_service_m2.gd` (41/41), `tests/test_game_ui_m1.gd` (105/105), `tests/test_controllers_m0.gd` (106/106), `tests/test_game_root.gd` (88/88), `tests/test_world_hierarchy.gd` (123/123), `tests/test_track_a3.gd` (68/68), `scratch/test_world_a2.gd` (101/101), `--quit-after 2` (exit 0), `.uid`, coding standards, and `git diff --check` — PASS.
+Blocked by art/content (recipe/icon/map IDs)/TUNING: none.
+Divergence from architecture (requires coordinator approval if gameplay): none.
+Next concrete task: Milestone 4 — Selected storage purchases (`Belanja`), placement-slot fixture purchases/resale, and economy UI.
+```
+
+### Milestone 3 Acceptance Test Hardening (2026-11-17)
+
+```
+Date / Git commit: 2026-11-17 / post-M3.3
+Milestone completed/current: M3 Acceptance Test Hardening COMPLETE — No-pause modal clock, final online expiry auto-close, and typed `saji` edge cases validated
+Files added/modified: modified tests/test_service_m3.gd, docs/PROGRESS.md (no production scripts or scenes modified)
+Godot version / platform: Godot 4.7.2.stable.official.ed1daf0bf / Windows
+Added acceptance tests:
+- `_test_no_pause_modal_overlay_service_clock()`: activates a visible modal overlay (`ui.set_modal_blocking(true)`) during `SERVING`, verifies world clicks & keyboard input remain blocked, and confirms `service_elapsed`, online order deadline (`60s` expiry), driver countdown visual (`Nasi Telor 35s`), and dine-in deadline (`100s` expiry) continue ticking normally.
+- `_test_auto_close_after_final_online_order_expires()`: clears all 4 diners while leaving 1 OPEN online order (`online_deadline_seconds = 95.0` on duplicated `EconomyConfig` so the pre-cutoff order outlives 80s dine-in completion), confirms `is_drained() == false` at `113.9s`, and verifies exact `114.0s` expiry triggers a single `CLOSING -> RESULTS` auto-close (`failed_online_count = 1`, `completed_online_count = 0`).
+- `_test_typed_online_command_edge_cases()`: verifies UI-typed `saji` on `online_station` is rejected (`invalid_key`) with zero state/cash/stock mutation and empty-hand typed `saji` on an in-spot driver rejects (`invalid_action`) while keeping the order `OPEN` and driver in spot.
+Tests ACTUALLY run and results (exact Godot exit code 0 per suite): `tests/test_service_m3.gd` (98/98, exit 0), `tests/test_service_m2.gd` (41/41, exit 0), `tests/test_game_ui_m1.gd` (105/105, exit 0), `tests/test_controllers_m0.gd` (106/106, exit 0), `tests/test_game_root.gd` (88/88, exit 0), `tests/test_world_hierarchy.gd` (123/123, exit 0), `tests/test_track_a3.gd` (68/68, exit 0), `scratch/test_world_a2.gd` (101/101, exit 0); `--quit-after 2` (exit 0), `.uid`, coding standards, zero leaks, and `git diff --check` (exit 0) — PASS.
+Blocked by art/content (recipe/icon/map IDs)/TUNING: standalone dish icon art and Milestone 4 shopping UI remain deferred to M4/M6.
+Divergence from architecture (requires coordinator approval if gameplay): none.
+Next concrete task: Milestone 4 — Selected storage purchases (`Belanja`), placement-slot fixture purchases/resale, and economy UI.
 ```

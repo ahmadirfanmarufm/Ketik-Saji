@@ -70,6 +70,8 @@ const FEEDBACK_LABELS: Dictionary[StringName, String] = {
 	&"order_served": "Pesanan disajikan!",
 	&"order_expired": "Waktu pesanan habis",
 	&"table_cleaned": "Meja dibersihkan",
+	&"online_accepted": "Pesanan online diterima!",
+	&"driver_not_at_pickup": "Pengantar belum mendapatkan tempat pickup.",
 }
 
 @export var ui_safe_rect: Rect2 = Rect2(0.0, 0.0, 112.0, 360.0)
@@ -112,6 +114,9 @@ var _modal_blocking_active: bool = false
 @onready var target_title_label: Label = (
 	$UIRoot/InteractionDialogue/DialogueColumn/TargetTitleLabel
 )
+@onready var target_status_label: Label = (
+	$UIRoot/InteractionDialogue/DialogueColumn/TargetStatusLabel
+)
 @onready var allowed_commands_label: Label = (
 	$UIRoot/InteractionDialogue/DialogueColumn/AllowedCommandsLabel
 )
@@ -152,7 +157,10 @@ func _process(delta: float) -> void:
 				var elapsed := float(_game_root.get_service_elapsed())
 				service_elapsed_label.text = "Waktu: %.1f dtk" % elapsed
 			_refresh_dine_in_visuals()
+			_refresh_driver_visuals()
 			if _feedback_text.is_empty() and _is_selected_target_dining_table():
+				_refresh_dialogue()
+			elif _is_selected_target_driver():
 				_refresh_dialogue()
 
 	if _shake_remaining > 0.0:
@@ -196,6 +204,18 @@ func is_modal_blocking() -> bool:
 func get_target_display_title(target_id: StringName) -> String:
 	if target_id == &"":
 		return ""
+	if (
+		_service_controller != null
+		and is_instance_valid(_service_controller)
+		and _service_controller.has_driver(target_id)
+	):
+		var view := _service_controller.get_driver_view(target_id)
+		if int(view.get("state", -1)) == SharedTypes.DriverState.AT_PICKUP_SPOT:
+			var spot_id := String(view.get("spot_id_or_empty", &""))
+			if spot_id.begins_with("pickup_spot_"):
+				return "Pengantar Spot %d" % int(spot_id.trim_prefix("pickup_spot_"))
+			return "Pengantar Pickup"
+		return "Pengantar Antrean"
 	return TARGET_LABELS.get(target_id, String(target_id))
 
 
@@ -233,8 +253,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if hit_target_id != &"":
 		_kitchen_controller.on_interactable_clicked(hit_target_id)
 	else:
-		var cell := _world_map.global_to_cell(world_global_pos)
-		_kitchen_controller.on_floor_clicked(cell)
+		var overflow_driver_id := _world_map.hit_test_overflow_driver(world_global_pos)
+		if overflow_driver_id != &"":
+			_kitchen_controller.on_overflow_driver_clicked(overflow_driver_id)
+		else:
+			var cell := _world_map.global_to_cell(world_global_pos)
+			_kitchen_controller.on_floor_clicked(cell)
 	_refresh_dialogue()
 
 	if is_inside_tree() and get_viewport() != null:
@@ -347,6 +371,14 @@ func _connect_context_signals() -> void:
 			_service_controller.tables_changed.connect(_on_tables_changed)
 		if not _service_controller.drivers_changed.is_connected(_on_drivers_changed):
 			_service_controller.drivers_changed.connect(_on_drivers_changed)
+		if (
+			_service_controller.has_signal(&"online_offer_changed")
+			and not _service_controller.is_connected(
+				&"online_offer_changed",
+				_on_online_offer_changed
+			)
+		):
+			_service_controller.connect(&"online_offer_changed", _on_online_offer_changed)
 
 	if _run_controller != null and is_instance_valid(_run_controller):
 		if not _run_controller.run_state_changed.is_connected(_on_run_state_changed):
@@ -384,6 +416,14 @@ func _disconnect_context_signals() -> void:
 			_service_controller.tables_changed.disconnect(_on_tables_changed)
 		if _service_controller.drivers_changed.is_connected(_on_drivers_changed):
 			_service_controller.drivers_changed.disconnect(_on_drivers_changed)
+		if (
+			_service_controller.has_signal(&"online_offer_changed")
+			and _service_controller.is_connected(
+				&"online_offer_changed",
+				_on_online_offer_changed
+			)
+		):
+			_service_controller.disconnect(&"online_offer_changed", _on_online_offer_changed)
 
 	if _run_controller != null and is_instance_valid(_run_controller):
 		if _run_controller.run_state_changed.is_connected(_on_run_state_changed):
@@ -460,6 +500,26 @@ func _on_tables_changed() -> void:
 
 func _on_drivers_changed() -> void:
 	_refresh_driver_visuals()
+	if (
+		_feedback_code == &"driver_not_at_pickup"
+		and _kitchen_controller != null
+		and is_instance_valid(_kitchen_controller)
+		and _service_controller != null
+		and is_instance_valid(_service_controller)
+	):
+		var selected_id := _kitchen_controller.get_selected_target_id()
+		if selected_id != &"" and _service_controller.has_driver(selected_id):
+			var view := _service_controller.get_driver_view(selected_id)
+			if int(view.get("state", -1)) == SharedTypes.DriverState.AT_PICKUP_SPOT:
+				_clear_feedback_state()
+	if _is_selected_target_driver():
+		_refresh_dialogue()
+
+
+func _on_online_offer_changed() -> void:
+	_refresh_online_station_visual()
+	if _is_selected_target_online_station():
+		_refresh_dialogue()
 
 
 func _on_run_state_changed() -> void:
@@ -482,6 +542,7 @@ func _refresh_all() -> void:
 	_refresh_hud()
 	_refresh_kitchen_visuals()
 	_refresh_dine_in_visuals()
+	_refresh_online_station_visual()
 	_refresh_driver_visuals()
 	_refresh_dialogue()
 	_refresh_results_panel()
@@ -550,7 +611,52 @@ func _refresh_driver_visuals() -> void:
 		return
 	if _service_controller == null or not is_instance_valid(_service_controller):
 		return
-	_world_map.sync_driver_visuals(_service_controller.get_driver_views())
+	var driver_views := _service_controller.get_driver_views()
+	var recipe_names: Dictionary = {}
+	for view: Dictionary in driver_views:
+		var recipe_id := StringName(view.get("recipe_id", &""))
+		if recipe_id == &"" or recipe_names.has(recipe_id):
+			continue
+		recipe_names[recipe_id] = _get_recipe_display_name(recipe_id)
+	_world_map.sync_driver_visuals(driver_views, recipe_names)
+
+
+func _refresh_online_station_visual() -> void:
+	if _world_map == null or not is_instance_valid(_world_map):
+		return
+	if _service_controller == null or not is_instance_valid(_service_controller):
+		return
+	var offer_view: Dictionary = _service_controller.get_online_offer_view()
+	var preview_id := StringName(offer_view.get("preview_recipe_id", &""))
+	var enabled := bool(offer_view.get("acceptance_enabled", false))
+	var recipe_label := _get_recipe_display_name(preview_id) if preview_id != &"" else ""
+	var part_textures := _resolve_recipe_part_textures(preview_id)
+	_world_map.sync_online_station_visual(preview_id, enabled, recipe_label, part_textures)
+
+
+func _get_recipe_display_name(recipe_id: StringName) -> String:
+	if recipe_id == &"":
+		return ""
+	if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
+		var def := _kitchen_controller.get_recipe_def(recipe_id)
+		if def != null and not def.display_name.is_empty():
+			return def.display_name
+	return String(recipe_id)
+
+
+func _resolve_recipe_part_textures(recipe_id: StringName) -> Array[Texture2D]:
+	var result: Array[Texture2D] = []
+	if recipe_id == &"" or _kitchen_controller == null or not is_instance_valid(_kitchen_controller):
+		return result
+	var def := _kitchen_controller.get_recipe_def(recipe_id)
+	if def == null:
+		return result
+	for part: RecipePartDef in def.required_parts:
+		if part == null:
+			continue
+		var ing_def := _kitchen_controller.get_ingredient_def(part.ingredient_id)
+		result.append(ing_def.get_texture_for_state(part.required_state) if ing_def != null else null)
+	return result
 
 
 func _refresh_dine_in_visuals() -> void:
@@ -587,6 +693,75 @@ func _is_selected_target_dining_table() -> bool:
 		return false
 	var target_id := _kitchen_controller.get_selected_target_id()
 	return target_id != &"" and _service_controller.has_table(target_id)
+
+
+func _is_selected_target_driver() -> bool:
+	if (
+		_kitchen_controller == null
+		or not is_instance_valid(_kitchen_controller)
+		or _service_controller == null
+		or not is_instance_valid(_service_controller)
+	):
+		return false
+	var target_id := _kitchen_controller.get_selected_target_id()
+	return target_id != &"" and _service_controller.has_driver(target_id)
+
+
+func _is_selected_target_online_station() -> bool:
+	if _kitchen_controller == null or not is_instance_valid(_kitchen_controller):
+		return false
+	return _kitchen_controller.get_selected_target_id() == &"online_station"
+
+
+func _format_online_station_status() -> String:
+	if _service_controller == null or not is_instance_valid(_service_controller):
+		return ""
+	var offer_view: Dictionary = _service_controller.get_online_offer_view()
+	var preview_id := StringName(offer_view.get("preview_recipe_id", &""))
+	var dish_label := _get_recipe_display_name(preview_id)
+	if bool(offer_view.get("acceptance_enabled", false)):
+		return "Tawaran: %s (Siap diterima)" % dish_label
+
+	var reason := StringName(offer_view.get("disabled_reason", &""))
+	match reason:
+		&"cutoff_reached":
+			return "Tawaran: %s (Tutup: kuota <= 2)" % dish_label
+		&"concurrent_cap_reached":
+			var cap := int(offer_view.get("concurrent_limit", 0))
+			return "Tawaran: %s (Penuh: maks %d)" % [dish_label, cap]
+		&"not_serving":
+			return "Tawaran: %s (Belum layanan)" % dish_label if preview_id != &"" else ""
+		&"empty_menu":
+			return "Tawaran tutup (Menu kosong)"
+		&"invalid_price":
+			return "Tawaran: %s (Harga tidak valid)" % dish_label
+	return "Tawaran: %s (Tidak tersedia)" % dish_label if preview_id != &"" else ""
+
+
+func _format_driver_status(driver_id: StringName) -> String:
+	if _service_controller == null or not is_instance_valid(_service_controller):
+		return ""
+	if driver_id == &"" or not _service_controller.has_driver(driver_id):
+		return ""
+	var view: Dictionary = _service_controller.get_driver_view(driver_id)
+	var recipe_id := StringName(view.get("recipe_id", &""))
+	var dish_label := _get_recipe_display_name(recipe_id)
+	var secs := maxi(0, ceili(float(view.get("seconds_remaining", 0.0))))
+	if int(view.get("state", -1)) == SharedTypes.DriverState.AT_PICKUP_SPOT:
+		return "Pesanan: %s (%d dtk) — Di tempat pickup" % [dish_label, secs]
+	return "Pesanan: %s (%d dtk) — Di antrean luar" % [dish_label, secs]
+
+
+func _format_selected_target_live_status(target_id: StringName) -> String:
+	if target_id == &"online_station":
+		return _format_online_station_status()
+	if (
+		_service_controller != null
+		and is_instance_valid(_service_controller)
+		and _service_controller.has_driver(target_id)
+	):
+		return _format_driver_status(target_id)
+	return ""
 
 
 func _format_dining_table_status(table_id: StringName) -> String:
@@ -716,6 +891,15 @@ func _refresh_dialogue() -> void:
 		target_title_label.text = ""
 
 	var is_serving := (phase == SharedTypes.Phase.SERVING)
+	if target_status_label != null:
+		var live_status := (
+			_format_selected_target_live_status(selected_id)
+			if is_serving and selected_id != &""
+			else ""
+		)
+		target_status_label.visible = not live_status.is_empty()
+		target_status_label.text = live_status
+
 	if is_serving and not allowed.is_empty():
 		allowed_commands_label.visible = true
 		allowed_commands_label.text = _format_allowed_commands(prefix, allowed)
@@ -811,6 +995,12 @@ func _update_dialogue_position() -> void:
 		var selected_id := _kitchen_controller.get_selected_target_id()
 		if selected_id != &"" and _world_map.registry != null:
 			anchor_node = _world_map.registry.get_object(selected_id)
+		if (
+			anchor_node == null
+			and selected_id != &""
+			and _world_map.has_method(&"get_driver_visual_node")
+		):
+			anchor_node = _world_map.get_driver_visual_node(selected_id)
 
 	if anchor_node == null:
 		anchor_node = _world_map.player
@@ -948,7 +1138,7 @@ func _hit_test_interactable(world_global_pos: Vector2) -> StringName:
 		var area := node as Area2D
 		if not area.is_visible_in_tree() or not area.input_pickable:
 			continue
-		if _point_hits_area_shapes(area, world_global_pos) and not candidates.has(object_id):
+		if WorldMap.point_hits_area_shapes(area, world_global_pos) and not candidates.has(object_id):
 			candidates.append(object_id)
 
 	if candidates.is_empty():
@@ -966,28 +1156,6 @@ func _compare_hit_candidates(a: StringName, b: StringName) -> bool:
 	if a_is_child != b_is_child:
 		return a_is_child
 	return String(a) < String(b)
-
-
-func _point_hits_area_shapes(area: Area2D, world_global_pos: Vector2) -> bool:
-	for child in area.get_children():
-		if not (child is CollisionShape2D):
-			continue
-		var shape_node := child as CollisionShape2D
-		if not is_instance_valid(shape_node) or shape_node.disabled or shape_node.shape == null:
-			continue
-		var xform := shape_node.get_global_transform()
-		if is_zero_approx(xform.determinant()):
-			continue
-		var local_pt := xform.affine_inverse() * world_global_pos
-		if shape_node.shape is RectangleShape2D:
-			var rect_shape := shape_node.shape as RectangleShape2D
-			if rect_shape.get_rect().has_point(local_pt):
-				return true
-		elif shape_node.shape is CircleShape2D:
-			var circle_shape := shape_node.shape as CircleShape2D
-			if local_pt.length_squared() <= circle_shape.radius * circle_shape.radius:
-				return true
-	return false
 
 
 func _is_point_blocked_by_ui(canvas_pos: Vector2) -> bool:
