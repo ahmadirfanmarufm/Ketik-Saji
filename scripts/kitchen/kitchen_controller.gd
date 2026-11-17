@@ -67,8 +67,22 @@ func _ready() -> void:
 
 ## Binds the passive WorldMap and optional GameRoot reference.
 func bind_world(world_map: WorldMap, game_root: Node = null) -> void:
+	if (
+		_game_root != null
+		and is_instance_valid(_game_root)
+		and _game_root.has_signal(&"phase_changed")
+		and _game_root.is_connected(&"phase_changed", _on_game_root_phase_changed)
+	):
+		_game_root.disconnect(&"phase_changed", _on_game_root_phase_changed)
 	_world_map = world_map
 	_game_root = game_root
+	if (
+		_game_root != null
+		and is_instance_valid(_game_root)
+		and _game_root.has_signal(&"phase_changed")
+		and not _game_root.is_connected(&"phase_changed", _on_game_root_phase_changed)
+	):
+		_game_root.connect(&"phase_changed", _on_game_root_phase_changed)
 	if _world_map == null or _world_map.grid == null:
 		return
 
@@ -244,10 +258,16 @@ func on_overflow_driver_clicked(driver_id: StringName) -> bool:
 
 
 func accept_typed_character(character: String) -> bool:
-	if not _is_serving_phase():
+	var in_planning := _is_planning_phase()
+	var in_serving := _is_serving_phase()
+	if not in_serving and not in_planning:
 		return false
 	var normalized_char := character.strip_edges().to_lower()
-	if normalized_char.length() != 1 or _selected_target_id == &"":
+	if normalized_char.length() != 1:
+		return false
+	if in_serving and _selected_target_id == &"":
+		return false
+	if in_planning and _selected_target_id != &"":
 		return false
 	var allowed := get_allowed_commands_for_selected_target()
 	if allowed.is_empty():
@@ -305,6 +325,12 @@ func get_executed_command_count() -> int:
 
 func get_allowed_commands_for_selected_target() -> Array[String]:
 	var result: Array[String] = []
+	if _is_planning_phase():
+		if _selected_target_id == &"":
+			result.assign(["buka"])
+		return result
+	if _game_root != null and is_instance_valid(_game_root) and not _is_serving_phase():
+		return result
 	if _storage_units.has(_selected_target_id):
 		result.assign(["ayam", "beras", "sapi", "sayur", "telur", "tempe"])
 		return result
@@ -651,6 +677,16 @@ func _is_world_input_allowed() -> bool:
 	)
 
 
+func _is_planning_phase() -> bool:
+	if (
+		_game_root == null
+		or not is_instance_valid(_game_root)
+		or not _game_root.has_method(&"get_phase")
+	):
+		return false
+	return _game_root.get_phase() == SharedTypes.Phase.PLANNING
+
+
 func _is_serving_phase() -> bool:
 	if (
 		_game_root == null
@@ -659,6 +695,10 @@ func _is_serving_phase() -> bool:
 	):
 		return false
 	return _game_root.get_phase() == SharedTypes.Phase.SERVING
+
+
+func _on_game_root_phase_changed(_phase: int, _day_index: int) -> void:
+	clear_command_prefix()
 
 
 func _has_reservation_id(purchase_id: StringName) -> bool:
@@ -716,6 +756,11 @@ func _perform_click_action(target_id: StringName) -> void:
 
 
 func _perform_typed_command(command: StringName) -> void:
+	if command == &"buka" and _is_planning_phase() and _selected_target_id == &"":
+		_try_start_service_by_buka()
+		return
+	if not _is_serving_phase():
+		return
 	_ensure_catalogs_loaded()
 	if _storage_units.has(_selected_target_id):
 		_try_take_raw_ingredient(_selected_target_id, command)
@@ -754,6 +799,21 @@ func _perform_typed_command(command: StringName) -> void:
 					_try_serve_driver(_selected_target_id)
 				else:
 					action_feedback.emit(&"invalid_action")
+
+
+func _try_start_service_by_buka() -> void:
+	if not _is_planning_phase() or _selected_target_id != &"":
+		action_feedback.emit(&"invalid_action")
+		return
+	if (
+		_game_root == null
+		or not is_instance_valid(_game_root)
+		or not _game_root.has_method(&"start_service_requested")
+	):
+		action_feedback.emit(&"start_service_failed")
+		return
+	if not _game_root.start_service_requested():
+		action_feedback.emit(&"start_service_failed")
 
 
 func _is_dining_table_target(target_id: StringName) -> bool:

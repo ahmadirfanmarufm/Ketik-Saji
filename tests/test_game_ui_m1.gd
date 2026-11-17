@@ -107,8 +107,11 @@ func _test_ui_structure_and_wiring() -> void:
 		and ui.day_result_side_panel.mouse_filter == Control.MOUSE_FILTER_STOP
 	)
 	_check(
-		"StartService, Continue, and ExtraMode buttons support keyboard focus (FOCUS_ALL)",
-		ui.start_service_button.focus_mode == Control.FOCUS_ALL
+		"Planning, Continue, and ExtraMode buttons support keyboard focus (FOCUS_ALL)",
+		ui.get("start_service_button") == null
+		and ui.edit_menu_button.focus_mode == Control.FOCUS_ALL
+		and ui.menu_stub_button.focus_mode == Control.FOCUS_ALL
+		and ui.exit_stub_button.focus_mode == Control.FOCUS_ALL
 		and ui.continue_button.focus_mode == Control.FOCUS_ALL
 		and ui.extra_mode_button.focus_mode == Control.FOCUS_ALL
 	)
@@ -125,20 +128,28 @@ func _test_ui_structure_and_wiring() -> void:
 	_check("GameRoot phase_changed connected to UI exactly once", ui_phase_conn_count == 1)
 
 	# Initial HUD state in PLANNING Day 1:
-	_check("initial DayLabel is Hari 1", ui.day_label.text == "Hari 1")
-	_check("initial PhaseLabel is Perencanaan", ui.phase_label.text == "Perencanaan")
+	_check("initial DayLabel is Hari 1/7", ui.day_label.text == "Hari 1/7")
+	_check(
+		"initial PhaseLabel is persiapan sebelum buka",
+		ui.phase_label.text == "persiapan sebelum buka"
+	)
 	_check("initial CashLabel is Kas: Rp100000", ui.cash_label.text == "Kas: Rp100000")
 	_check(
-		"initial GoalLabel is Target Hari 7: Rp700000",
-		ui.goal_label.text == "Target Hari 7: Rp700000"
+		"initial GoalLabel shows Target Hari 7 percentage",
+		ui.goal_label.text == "Target Hari 7: 14%"
 	)
 	_check(
 		"initial GoalProgressBar ratio is 100000 / 700000",
 		is_equal_approx(ui.goal_progress_bar.value, 100000.0 / 700000.0)
 	)
 	_check(
-		"initial PlanningBox visible with Target Tamu: 4",
-		ui.planning_box.visible and ui.forecast_quota_label.text == "Target Tamu: 4"
+		"initial PlanningBox visible with forecast, Edit Menu, buka hint, and stub buttons",
+		ui.planning_box.visible
+		and ui.forecast_quota_label.text == "Target Tamu: 4"
+		and ui.edit_menu_button.visible
+		and ui.start_hint_label.text == "Ketik: buka"
+		and ui.menu_stub_button.visible
+		and ui.exit_stub_button.visible
 	)
 	_check("initial ServiceBox hidden", not ui.service_box.visible)
 	_check("initial DayResultSidePanel hidden", not ui.day_result_side_panel.visible)
@@ -154,32 +165,26 @@ func _test_phase_and_hud_transitions() -> void:
 	root.add_child(game_root)
 	await process_frame
 
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
 	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
 
-	# Verify StartServiceButton can grab keyboard focus in PLANNING and activate via Enter key:
-	ui.start_service_button.grab_focus()
+	# Focused Planning BaseButton blocks gameplay typing; releasing focus allows typed `buka`:
+	ui.edit_menu_button.grab_focus()
 	_check(
-		"StartServiceButton grabs keyboard focus in PLANNING",
-		ui.start_service_button.has_focus() and not ui.start_service_button.disabled
+		"EditMenuButton grabs keyboard focus in PLANNING and blocks typing while focused",
+		ui.edit_menu_button.has_focus() and not ui.edit_menu_button.disabled
 	)
-
-	var enter_press := InputEventKey.new()
-	enter_press.pressed = true
-	enter_press.keycode = KEY_ENTER
-	enter_press.physical_keycode = KEY_ENTER
-	ui.get_viewport().push_input(enter_press, true)
-	var enter_release := InputEventKey.new()
-	enter_release.pressed = false
-	enter_release.keycode = KEY_ENTER
-	enter_release.physical_keycode = KEY_ENTER
-	ui.get_viewport().push_input(enter_release, true)
+	_send_key(ui, "b".unicode_at(0), KEY_B)
+	_check("focused BaseButton blocks buka prefix in PLANNING", kitchen.get_command_prefix() == "")
+	ui.edit_menu_button.release_focus()
+	_type_word(ui, "buka")
 	_check(
-		"Enter key on focused StartServiceButton enters SERVING and releases focus",
+		"Typed buka enters SERVING and updates HUD without Enter key",
 		game_root.is_serving()
-		and not ui.start_service_button.has_focus()
-		and ui.start_service_button.disabled
+		and not ui.edit_menu_button.has_focus()
+		and ui.edit_menu_button.disabled
 		and not ui.planning_box.visible
 		and ui.service_box.visible
 		and not ui.day_result_side_panel.visible
@@ -250,20 +255,20 @@ func _test_phase_and_hud_transitions() -> void:
 		"ContinueButton advances to Day 2 PLANNING and hides results panel",
 		game_root.get_phase() == SharedTypes.Phase.PLANNING
 		and game_root.get_day_index() == 2
-		and ui.day_label.text == "Hari 2"
+		and ui.day_label.text == "Hari 2/7"
 		and ui.planning_box.visible
 		and not ui.day_result_side_panel.visible
 	)
 
 	# Advance Days 2-6 to Day 7, win Day 7, and verify FINISHED + ExtraModeButton.
 	for _day in range(2, 7):
-		ui.start_service_button.pressed.emit()
+		_type_word(ui, "buka")
 		_force_empty_service(service)
 		game_root.request_close_if_drained()
 		ui.continue_button.pressed.emit()
 
-	_check("reached Day 7 PLANNING via UI buttons", game_root.get_day_index() == 7)
-	ui.start_service_button.pressed.emit()
+	_check("reached Day 7 PLANNING via Continue/buka", game_root.get_day_index() == 7)
+	_type_word(ui, "buka")
 	for i in range(35):
 		run.credit_order_once(
 			StringName("ord_ui_d7_%02d" % i),
@@ -385,7 +390,7 @@ func _test_mouse_input_and_world_offset() -> void:
 	)
 
 	# 7. Result panel blocks world clicks when visible in RESULTS.
-	ui.start_service_button.pressed.emit()
+	_type_word(ui, "buka")
 	_force_empty_service(service)
 	game_root.request_close_if_drained()
 	_check("DayResultSidePanel visible in RESULTS", ui.day_result_side_panel.visible)
@@ -420,7 +425,7 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 	)
 
 	# Start SERVING and select stove ("goreng").
-	ui.start_service_button.pressed.emit()
+	game_root.start_service_requested()
 	_send_left_click(ui, Vector2(288, 52))
 	_check(
 		"stove selected in SERVING with allowed command goreng",
@@ -574,7 +579,7 @@ func _test_dialogue_display_and_clamping() -> void:
 	await physics_frame
 
 	var ui := game_root.get_node("UI") as GameUI
-	ui.start_service_button.pressed.emit()
+	game_root.start_service_requested()
 
 	# Click top-left station storage_box at (224, 52):
 	_send_left_click(ui, Vector2(224, 52))
@@ -683,7 +688,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	_check("buy 1 sayur", run.request_ingredient_purchase(&"sayur", 1, &"storage_box"))
 
 	# Start SERVING.
-	ui.start_service_button.pressed.emit()
+	game_root.start_service_requested()
 	_check("entered SERVING for M1 kitchen loop", game_root.is_serving())
 
 	# Empty storage retrieval fails cleanly.
@@ -917,7 +922,7 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	_check("stock storage_box", run.request_ingredient_purchase(&"beras", 2, &"storage_box"))
 	_check("stock telur", run.request_ingredient_purchase(&"telur", 2, &"storage_box"))
 	_check("stock sayur", run.request_ingredient_purchase(&"sayur", 1, &"storage_box"))
-	ui.start_service_button.pressed.emit()
+	game_root.start_service_requested()
 
 	# 1. Chopping sayur at work_table_chop + frying at stove -> CHOPPED_AND_COOKED.
 	_send_left_click(ui, Vector2(224, 52))

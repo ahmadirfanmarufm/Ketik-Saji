@@ -30,13 +30,14 @@ mouse_filter = 2
 [node name="DayLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
 layout_mode = 2
 mouse_filter = 2
-text = "Hari 1"
+text = "Hari 1/7"
 clip_text = true
 
 [node name="PhaseLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
 layout_mode = 2
 mouse_filter = 2
-text = "Perencanaan"
+text = "persiapan sebelum buka"
+autowrap_mode = 3
 clip_text = true
 
 [node name="CashLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
@@ -48,7 +49,7 @@ clip_text = true
 [node name="GoalLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
 layout_mode = 2
 mouse_filter = 2
-text = "Target Hari 7: Rp700000"
+text = "Target Hari 7: 14%"
 autowrap_mode = 3
 clip_text = true
 
@@ -69,11 +70,37 @@ mouse_filter = 2
 text = "Target Tamu: 4"
 clip_text = true
 
-[node name="StartServiceButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
+[node name="EditMenuButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
 layout_mode = 2
 focus_mode = 2
 mouse_filter = 0
-text = "Mulai Layanan"
+text = "Edit Menu"
+clip_text = true
+
+[node name="StartHintLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
+layout_mode = 2
+mouse_filter = 2
+text = "Ketik: buka"
+clip_text = true
+
+[node name="StubActionsRow" type="HBoxContainer" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="MenuStubButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/StubActionsRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+mouse_filter = 0
+text = "Menu"
+clip_text = true
+
+[node name="ExitStubButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/StubActionsRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+mouse_filter = 0
+text = "Exit"
 clip_text = true
 
 [node name="ServiceBox" type="VBoxContainer" parent="UIRoot/LeftHUDRegion/HUDColumn"]
@@ -171,3 +198,83 @@ layout_mode = 2
 focus_mode = 2
 mouse_filter = 0
 text = "Mode Ekstra"
+
+[node name="EditMenuOverlay" type="Control" parent="UIRoot"]
+visible = false
+z_index = 20
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="WorldDimmer" type="ColorRect" parent="UIRoot/EditMenuOverlay"]
+layout_mode = 0
+offset_left = 112.0
+offset_right = 640.0
+offset_bottom = 360.0
+mouse_filter = 0
+color = Color(0.05, 0.07, 0.11, 0.62)
+
+[node name="EditMenuPopup" type="PanelContainer" parent="UIRoot/EditMenuOverlay"]
+custom_minimum_size = Vector2(336, 280)
+layout_mode = 0
+offset_left = 208.0
+offset_top = 40.0
+offset_right = 544.0
+offset_bottom = 320.0
+mouse_filter = 0
+
+[node name="PopupColumn" type="VBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="PopupTitleLabel" type="Label" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
+layout_mode = 2
+mouse_filter = 2
+text = "Edit Menu"
+horizontal_alignment = 1
+
+[node name="PopupHintLabel" type="Label" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+mouse_filter = 2
+text = "Pilih menu untuk disajikan hari ini"
+autowrap_mode = 3
+
+[node name="RecipeScroll" type="ScrollContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 0
+
+[node name="RecipeList" type="VBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/RecipeScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="EditMenuErrorLabel" type="Label" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
+visible = false
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+mouse_filter = 2
+autowrap_mode = 3
+
+[node name="PopupButtonsRow" type="HBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="EditMenuCancelButton" type="Button" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/PopupButtonsRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+mouse_filter = 0
+text = "Batal"
+
+[node name="EditMenuConfirmButton" type="Button" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/PopupButtonsRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+mouse_filter = 0
+text = "Konfirmasi"

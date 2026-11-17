@@ -368,3 +368,20 @@ Blocked by art/content (recipe/icon/map IDs)/TUNING: standalone dish icon art an
 Divergence from architecture (requires coordinator approval if gameplay): none.
 Next concrete task: Milestone 4 — Selected storage purchases (`Belanja`), placement-slot fixture purchases/resale, and economy UI.
 ```
+
+### Milestone 4-A — Planning HUD, Edit Menu Popup, and Typed `buka` (2026-11-17)
+
+```
+Date / Git commit: 2026-11-17 / local working tree on top of `main` @ `fecb2cc`
+Milestone completed/current: M4-A COMPLETE — Planning HUD Strip, Edit Menu Modal Popup, and Typed `buka` Start Flow validated
+Files added/modified: added tests/test_planning_m4a.gd (+ .uid); modified scripts/kitchen/kitchen_controller.gd, scripts/ui/game_ui.gd, scenes/ui/game_ui.tscn, tests/test_game_ui_m1.gd, tests/test_service_m2.gd, docs/PROGRESS.md, docs/PROJECT_STATUS.md
+Godot version / platform: Godot 4.7.2.stable.official.ed1daf0bf / Windows
+Implemented gameplay & UI:
+- Planning HUD (`scenes/ui/game_ui.tscn`, `scripts/ui/game_ui.gd`): displays `persiapan sebelum buka`, `Hari X/7`, live cash, Day 7 target percentage (`Target Hari 7: %d%%`) + bar from `RunController.get_run_view()`, `EditMenuButton`, `Target Tamu` forecast, `Ketik: buka` hint, and non-navigating `Menu`/`Exit` stub buttons preserving `MOUSE_FILTER_STOP` and `FOCUS_ALL`; retired `StartServiceButton` (`Mulai Layanan`) while preserving existing `ServiceBox` and `DayResultSidePanel` untouched.
+- Edit Menu Popup (`scenes/ui/game_ui.tscn`, `scripts/ui/game_ui.gd`): rectangular modal overlay centered in `world_visible_rect` over a map dimmer using Control fallback styles and existing ingredient/part textures; renders `unlocked_recipe_ids` from `RunController.get_run_view()`, highlights active selection, stores only temporary UI toggles until confirmation, calls `RunController.select_daily_menu()` with double-submit guard, rejects empty/duplicate/locked selections with localized error text without altering active menu, blocks world clicks and gameplay typing via `is_modal_blocking()`, and releases focus on close so `buka` typing resumes seamlessly.
+- Typed `buka` (`scripts/kitchen/kitchen_controller.gd`, `scripts/ui/game_ui.gd`): extended prefix parser (`accept_typed_character`, `backspace_command_prefix`, `clear_command_prefix`, `get_allowed_commands_for_selected_target`) to accept `buka` strictly during `PLANNING` when `_selected_target_id == &""`, executing `GameRoot.start_service_requested()` once without Enter and emitting `&"start_service_failed"` on rejected `finalize_plan()`; preserved rejection of station typing in `PLANNING` and existing `SERVING` commands, and cleared command prefix cleanly on `GameRoot.phase_changed`.
+Tests ACTUALLY run and results (exact Godot exit code 0 per suite): `tests/test_planning_m4a.gd` (26/26, exit 0), `tests/test_service_m3.gd` (98/98, exit 0), `tests/test_service_m2.gd` (41/41, exit 0), `tests/test_game_ui_m1.gd` (106/106, exit 0), `tests/test_controllers_m0.gd` (106/106, exit 0), `tests/test_game_root.gd` (88/88, exit 0), `tests/test_world_hierarchy.gd` (123/123, exit 0), `tests/test_track_a3.gd` (68/68, exit 0); `--quit-after 2` (exit 0), `.uid`, coding standards, zero leaks, and `git diff --check` (exit 0) — PASS. Historical `scratch/test_world_a2.gd` is not present in this workspace and was not run.
+Blocked by art/content (recipe/icon/map IDs)/TUNING: UI PNG pack (`10` illustrations + `3` reusable UI assets), custom font file, Days 4–7 recipes, and Audio specs/files remain unavailable on disk (Control fallback visuals used).
+Divergence from architecture (requires coordinator approval if gameplay): retired legacy `StartServiceButton` in favor of typed `buka` per UI MVP handoff; updated direct `StartServiceButton` UI/M2 test calls accordingly.
+Next concrete task: M4-B — Fix ingredient delivery/refund ledger bugs and implement selected storage ingredient shopping popup (`Belanja Bahan`).
+```

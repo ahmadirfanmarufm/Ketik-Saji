@@ -585,7 +585,7 @@ func _test_eating_drain_blocking_day_transition_and_visual_non_duplication() -> 
 
 	# Advance to Day 2 via Continue and Start Service -> clean fresh visuals, no Day 1 leftovers:
 	ui.continue_button.pressed.emit()
-	ui.start_service_button.pressed.emit()
+	game_root.start_service_requested()
 	_check(
 		"Day 2 starts cleanly with fresh Customer 1 visual and no stale Day 1 nodes",
 		game_root.get_phase() == SharedTypes.Phase.SERVING

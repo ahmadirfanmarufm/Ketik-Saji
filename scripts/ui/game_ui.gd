@@ -74,6 +74,11 @@ const FEEDBACK_LABELS: Dictionary[StringName, String] = {
 	&"driver_not_at_pickup": "Pengantar belum mendapatkan tempat pickup.",
 }
 
+const EDIT_MENU_SELECTED_BG: Color = Color(0.18, 0.42, 0.28, 1.0)
+const EDIT_MENU_SELECTED_BORDER: Color = Color(0.55, 0.92, 0.62, 1.0)
+const EDIT_MENU_UNSELECTED_BG: Color = Color(0.16, 0.18, 0.23, 1.0)
+const EDIT_MENU_UNSELECTED_BORDER: Color = Color(0.36, 0.40, 0.48, 1.0)
+
 @export var ui_safe_rect: Rect2 = Rect2(0.0, 0.0, 112.0, 360.0)
 @export var world_visible_rect: Rect2 = Rect2(112.0, 0.0, 528.0, 360.0)
 
@@ -87,6 +92,9 @@ var _feedback_code: StringName = &""
 var _feedback_text: String = ""
 var _shake_remaining: float = 0.0
 var _modal_blocking_active: bool = false
+var _pending_menu_selection: Array[StringName] = []
+var _edit_menu_buttons: Dictionary[StringName, Button] = {}
+var _edit_menu_submitting: bool = false
 
 @onready var ui_root: Control = $UIRoot
 @onready var left_hud_region: PanelContainer = $UIRoot/LeftHUDRegion
@@ -99,8 +107,17 @@ var _modal_blocking_active: bool = false
 @onready var forecast_quota_label: Label = (
 	$UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/ForecastQuotaLabel
 )
-@onready var start_service_button: Button = (
-	$UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/StartServiceButton
+@onready var edit_menu_button: Button = (
+	$UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/EditMenuButton
+)
+@onready var start_hint_label: Label = (
+	$UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/StartHintLabel
+)
+@onready var menu_stub_button: Button = (
+	$UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/StubActionsRow/MenuStubButton
+)
+@onready var exit_stub_button: Button = (
+	$UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/StubActionsRow/ExitStubButton
 )
 @onready var service_box: VBoxContainer = $UIRoot/LeftHUDRegion/HUDColumn/ServiceBox
 @onready var service_elapsed_label: Label = (
@@ -140,8 +157,24 @@ var _modal_blocking_active: bool = false
 @onready var continue_button: Button = $UIRoot/DayResultSidePanel/ResultColumn/ContinueButton
 @onready var extra_mode_button: Button = $UIRoot/DayResultSidePanel/ResultColumn/ExtraModeButton
 
+@onready var edit_menu_overlay: Control = $UIRoot/EditMenuOverlay
+@onready var edit_menu_popup: PanelContainer = $UIRoot/EditMenuOverlay/EditMenuPopup
+@onready var edit_menu_recipe_list: VBoxContainer = (
+	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/RecipeScroll/RecipeList
+)
+@onready var edit_menu_error_label: Label = (
+	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuErrorLabel
+)
+@onready var edit_menu_cancel_button: Button = (
+	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/PopupButtonsRow/EditMenuCancelButton
+)
+@onready var edit_menu_confirm_button: Button = (
+	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/PopupButtonsRow/EditMenuConfirmButton
+)
+
 
 func _ready() -> void:
+	_apply_fallback_styles()
 	_connect_ui_buttons()
 	_refresh_all()
 
@@ -196,9 +229,117 @@ func set_modal_blocking(active: bool) -> void:
 func is_modal_blocking() -> bool:
 	if _modal_blocking_active:
 		return true
+	if is_edit_menu_open():
+		return true
 	if day_result_side_panel != null and day_result_side_panel.visible:
 		return true
 	return false
+
+
+func is_edit_menu_open() -> bool:
+	return edit_menu_overlay != null and edit_menu_overlay.visible
+
+
+func open_edit_menu() -> bool:
+	if not _is_planning_phase() or edit_menu_overlay == null:
+		return false
+	if _run_controller == null or not is_instance_valid(_run_controller):
+		return false
+
+	_clear_feedback_state()
+	if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
+		_kitchen_controller.clear_command_prefix()
+
+	_edit_menu_submitting = false
+	if edit_menu_confirm_button != null:
+		edit_menu_confirm_button.disabled = false
+	if edit_menu_error_label != null:
+		edit_menu_error_label.visible = false
+		edit_menu_error_label.text = ""
+
+	var run_view := _run_controller.get_run_view()
+	_pending_menu_selection.clear()
+	for raw_id: Variant in run_view.get("selected_recipe_ids", []):
+		var id := StringName(raw_id)
+		if id != &"" and not _pending_menu_selection.has(id):
+			_pending_menu_selection.append(id)
+
+	_rebuild_edit_menu_list(run_view)
+	edit_menu_overlay.visible = true
+	if edit_menu_popup != null:
+		edit_menu_popup.size = Vector2(336.0, 280.0)
+	_refresh_dialogue()
+	return true
+
+
+func close_edit_menu() -> void:
+	if edit_menu_overlay != null:
+		edit_menu_overlay.visible = false
+	_pending_menu_selection.clear()
+	_edit_menu_submitting = false
+	if edit_menu_confirm_button != null:
+		edit_menu_confirm_button.disabled = false
+	if edit_menu_error_label != null:
+		edit_menu_error_label.visible = false
+		edit_menu_error_label.text = ""
+	_release_button_focus_if_any()
+	_refresh_dialogue()
+
+
+func toggle_edit_menu_recipe(recipe_id: StringName) -> bool:
+	if not is_edit_menu_open() or recipe_id == &"":
+		return false
+	var idx := _pending_menu_selection.find(recipe_id)
+	if idx >= 0:
+		_pending_menu_selection.remove_at(idx)
+	else:
+		_pending_menu_selection.append(recipe_id)
+
+	if _edit_menu_buttons.has(recipe_id):
+		var btn := _edit_menu_buttons[recipe_id]
+		if btn != null and is_instance_valid(btn):
+			var selected := _pending_menu_selection.has(recipe_id)
+			if btn.button_pressed != selected:
+				btn.set_pressed_no_signal(selected)
+			_update_recipe_button_visual(btn, recipe_id, selected)
+
+	if edit_menu_error_label != null:
+		edit_menu_error_label.visible = false
+		edit_menu_error_label.text = ""
+	return true
+
+
+func get_pending_menu_selection() -> Array[StringName]:
+	return _pending_menu_selection.duplicate()
+
+
+func get_edit_menu_recipe_button(recipe_id: StringName) -> Button:
+	return _edit_menu_buttons.get(recipe_id, null) as Button
+
+
+func submit_edit_menu(recipe_ids: Array[StringName]) -> bool:
+	if not is_edit_menu_open() or _edit_menu_submitting:
+		return false
+	if _run_controller == null or not is_instance_valid(_run_controller):
+		_show_edit_menu_error("Pengendali menu tidak tersedia.")
+		return false
+
+	_edit_menu_submitting = true
+	if edit_menu_confirm_button != null:
+		edit_menu_confirm_button.disabled = true
+
+	var accepted := _run_controller.select_daily_menu(recipe_ids)
+	_edit_menu_submitting = false
+	if edit_menu_confirm_button != null:
+		edit_menu_confirm_button.disabled = false
+
+	if not accepted:
+		_show_edit_menu_error(_describe_menu_rejection(recipe_ids))
+		return false
+
+	close_edit_menu()
+	_refresh_hud()
+	return true
 
 
 func get_target_display_title(target_id: StringName) -> String:
@@ -271,7 +412,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if key_event.ctrl_pressed or key_event.alt_pressed or key_event.meta_pressed:
 		return
-	if not _is_serving_phase():
+	if not _is_serving_phase() and not _is_planning_phase():
 		return
 	if _is_keyboard_blocked_by_focus_or_modal():
 		return
@@ -329,9 +470,21 @@ func _clear_feedback_state() -> void:
 
 
 func _connect_ui_buttons() -> void:
-	if start_service_button != null:
-		if not start_service_button.pressed.is_connected(_on_start_service_pressed):
-			start_service_button.pressed.connect(_on_start_service_pressed)
+	if edit_menu_button != null:
+		if not edit_menu_button.pressed.is_connected(_on_edit_menu_pressed):
+			edit_menu_button.pressed.connect(_on_edit_menu_pressed)
+	if menu_stub_button != null:
+		if not menu_stub_button.pressed.is_connected(_on_stub_button_pressed):
+			menu_stub_button.pressed.connect(_on_stub_button_pressed)
+	if exit_stub_button != null:
+		if not exit_stub_button.pressed.is_connected(_on_stub_button_pressed):
+			exit_stub_button.pressed.connect(_on_stub_button_pressed)
+	if edit_menu_cancel_button != null:
+		if not edit_menu_cancel_button.pressed.is_connected(_on_edit_menu_cancel_pressed):
+			edit_menu_cancel_button.pressed.connect(_on_edit_menu_cancel_pressed)
+	if edit_menu_confirm_button != null:
+		if not edit_menu_confirm_button.pressed.is_connected(_on_edit_menu_confirm_pressed):
+			edit_menu_confirm_button.pressed.connect(_on_edit_menu_confirm_pressed)
 	if continue_button != null:
 		if not continue_button.pressed.is_connected(_on_continue_pressed):
 			continue_button.pressed.connect(_on_continue_pressed)
@@ -430,13 +583,21 @@ func _disconnect_context_signals() -> void:
 			_run_controller.run_state_changed.disconnect(_on_run_state_changed)
 
 
-func _on_start_service_pressed() -> void:
-	if _game_root == null or not is_instance_valid(_game_root):
-		return
-	if not _game_root.has_method(&"start_service_requested"):
-		return
-	if not _game_root.start_service_requested():
-		_show_feedback(&"start_service_failed")
+func _on_edit_menu_pressed() -> void:
+	open_edit_menu()
+
+
+func _on_edit_menu_cancel_pressed() -> void:
+	close_edit_menu()
+
+
+func _on_edit_menu_confirm_pressed() -> void:
+	submit_edit_menu(_pending_menu_selection)
+
+
+func _on_stub_button_pressed() -> void:
+	# Stub Menu/Exit buttons stay non-navigating in M4-A while keeping UI input blocking.
+	pass
 
 
 func _on_continue_pressed() -> void:
@@ -453,8 +614,10 @@ func _on_extra_mode_pressed() -> void:
 		_game_root.request_extra_mode()
 
 
-func _on_phase_changed(_phase: int, _day_index: int) -> void:
+func _on_phase_changed(phase: int, _day_index: int) -> void:
 	_clear_feedback_state()
+	if phase != SharedTypes.Phase.PLANNING and is_edit_menu_open():
+		close_edit_menu()
 	_refresh_all()
 
 
@@ -829,25 +992,44 @@ func _refresh_hud() -> void:
 		left_hud_region.position = ui_safe_rect.position
 		left_hud_region.size = ui_safe_rect.size
 
-	day_label.text = "Hari %d" % day_index
-	phase_label.text = PHASE_LABELS.get(phase, "Perencanaan")
+	day_label.text = "Hari %d/7" % day_index if day_index <= 7 else "Hari %d" % day_index
+	var is_planning := (phase == SharedTypes.Phase.PLANNING)
+	phase_label.text = (
+		"persiapan sebelum buka"
+		if is_planning
+		else PHASE_LABELS.get(phase, "Perencanaan")
+	)
 	cash_label.text = "Kas: Rp%d" % cash
-	goal_label.text = "Target Hari 7: Rp%d" % target
+
+	var target_ratio := (
+		clampf(float(cash) / float(target), 0.0, 1.0)
+		if target > 0
+		else 0.0
+	)
+	var target_pct := int(round(target_ratio * 100.0))
+	goal_label.text = "Target Hari 7: %d%%" % target_pct
 
 	goal_progress_bar.min_value = 0.0
 	goal_progress_bar.max_value = 1.0
 	goal_progress_bar.step = 0.0
-	if target > 0:
-		goal_progress_bar.value = clampf(float(cash) / float(target), 0.0, 1.0)
-	else:
-		goal_progress_bar.value = 0.0
+	goal_progress_bar.value = target_ratio
 
-	var is_planning := (phase == SharedTypes.Phase.PLANNING)
 	planning_box.visible = is_planning
-	start_service_button.disabled = not is_planning
-	if not is_planning and start_service_button.has_focus():
-		start_service_button.release_focus()
+	if edit_menu_button != null:
+		edit_menu_button.disabled = not is_planning
+		if not is_planning and edit_menu_button.has_focus():
+			edit_menu_button.release_focus()
+	if menu_stub_button != null:
+		menu_stub_button.disabled = not is_planning
+		if not is_planning and menu_stub_button.has_focus():
+			menu_stub_button.release_focus()
+	if exit_stub_button != null:
+		exit_stub_button.disabled = not is_planning
+		if not is_planning and exit_stub_button.has_focus():
+			exit_stub_button.release_focus()
 	forecast_quota_label.text = "Target Tamu: %d" % planned_quota
+	if start_hint_label != null:
+		start_hint_label.text = "Ketik: buka"
 
 	service_box.visible = (
 		phase == SharedTypes.Phase.SERVING
@@ -878,7 +1060,12 @@ func _refresh_dialogue() -> void:
 		allowed = _kitchen_controller.get_allowed_commands_for_selected_target()
 		prefix = _kitchen_controller.get_command_prefix()
 
-	if selected_id == &"" and _feedback_text.is_empty():
+	var show_planning_typing := (
+		phase == SharedTypes.Phase.PLANNING
+		and selected_id == &""
+		and not prefix.is_empty()
+	)
+	if selected_id == &"" and _feedback_text.is_empty() and not show_planning_typing:
 		interaction_dialogue.visible = false
 		return
 
@@ -891,6 +1078,7 @@ func _refresh_dialogue() -> void:
 		target_title_label.text = ""
 
 	var is_serving := (phase == SharedTypes.Phase.SERVING)
+	var show_commands := is_serving or show_planning_typing
 	if target_status_label != null:
 		var live_status := (
 			_format_selected_target_live_status(selected_id)
@@ -900,14 +1088,14 @@ func _refresh_dialogue() -> void:
 		target_status_label.visible = not live_status.is_empty()
 		target_status_label.text = live_status
 
-	if is_serving and not allowed.is_empty():
+	if show_commands and not allowed.is_empty():
 		allowed_commands_label.visible = true
 		allowed_commands_label.text = _format_allowed_commands(prefix, allowed)
 	else:
 		allowed_commands_label.visible = false
 		allowed_commands_label.text = ""
 
-	if is_serving and (not allowed.is_empty() or not prefix.is_empty()):
+	if show_commands and (not allowed.is_empty() or not prefix.is_empty()):
 		prefix_prompt_label.visible = true
 		prefix_prompt_label.text = _format_prefix_prompt(prefix, allowed)
 		prefix_prompt_label.modulate = (
@@ -920,7 +1108,7 @@ func _refresh_dialogue() -> void:
 
 	if remaining_prompt_label != null:
 		var remaining_text := _format_remaining_preview(prefix, allowed)
-		if is_serving and not remaining_text.is_empty():
+		if show_commands and not remaining_text.is_empty():
 			remaining_prompt_label.visible = true
 			remaining_prompt_label.text = remaining_text
 		else:
@@ -1159,6 +1347,8 @@ func _compare_hit_candidates(a: StringName, b: StringName) -> bool:
 
 
 func _is_point_blocked_by_ui(canvas_pos: Vector2) -> bool:
+	if is_modal_blocking():
+		return true
 	if ui_safe_rect.has_point(canvas_pos):
 		return true
 	if left_hud_region != null and left_hud_region.visible:
@@ -1167,8 +1357,6 @@ func _is_point_blocked_by_ui(canvas_pos: Vector2) -> bool:
 	if day_result_side_panel != null and day_result_side_panel.visible:
 		if day_result_side_panel.get_global_rect().has_point(canvas_pos):
 			return true
-	if _modal_blocking_active:
-		return true
 	return false
 
 
@@ -1223,5 +1411,185 @@ func _is_world_click_phase() -> bool:
 	)
 
 
+func _is_planning_phase() -> bool:
+	return _get_current_phase() == SharedTypes.Phase.PLANNING
+
+
 func _is_serving_phase() -> bool:
 	return _get_current_phase() == SharedTypes.Phase.SERVING
+
+
+func _apply_fallback_styles() -> void:
+	if left_hud_region != null:
+		var hud_style := _make_panel_style(
+			Color(0.11, 0.13, 0.18, 0.95),
+			Color(0.32, 0.37, 0.48, 1.0),
+			6
+		)
+		left_hud_region.add_theme_stylebox_override("panel", hud_style)
+	if edit_menu_popup != null:
+		var popup_style := _make_panel_style(
+			Color(0.12, 0.14, 0.20, 0.98),
+			Color(0.45, 0.52, 0.66, 1.0),
+			10
+		)
+		edit_menu_popup.add_theme_stylebox_override("panel", popup_style)
+
+
+func _make_panel_style(bg: Color, border: Color, margin_px: int) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = bg
+	box.border_color = border
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(4)
+	box.set_content_margin_all(margin_px)
+	return box
+
+
+func _rebuild_edit_menu_list(run_view: Dictionary) -> void:
+	_edit_menu_buttons.clear()
+	if edit_menu_recipe_list == null:
+		return
+	for child in edit_menu_recipe_list.get_children():
+		edit_menu_recipe_list.remove_child(child)
+		child.free()
+
+	var unlocked_raw: Variant = run_view.get("unlocked_recipe_ids", [])
+	if not (unlocked_raw is Array):
+		return
+	for raw_id: Variant in unlocked_raw:
+		var recipe_id := StringName(raw_id)
+		if recipe_id == &"":
+			continue
+
+		var row := HBoxContainer.new()
+		row.name = "RecipeRow_%s" % recipe_id
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		edit_menu_recipe_list.add_child(row)
+
+		var icons_box := HBoxContainer.new()
+		icons_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(icons_box)
+		var textures := _resolve_recipe_part_textures(recipe_id)
+		if textures.is_empty():
+			var fallback_rect := ColorRect.new()
+			fallback_rect.custom_minimum_size = Vector2(16, 16)
+			fallback_rect.color = Color(0.65, 0.58, 0.42, 1.0)
+			fallback_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			icons_box.add_child(fallback_rect)
+		else:
+			for tex in textures:
+				if tex != null:
+					var tex_rect := TextureRect.new()
+					tex_rect.texture = tex
+					tex_rect.custom_minimum_size = Vector2(16, 16)
+					tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+					tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+					tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					icons_box.add_child(tex_rect)
+				else:
+					var part_fallback := ColorRect.new()
+					part_fallback.custom_minimum_size = Vector2(16, 16)
+					part_fallback.color = Color(0.55, 0.62, 0.72, 1.0)
+					part_fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					icons_box.add_child(part_fallback)
+
+		var btn := Button.new()
+		btn.name = "RecipeButton_%s" % recipe_id
+		btn.toggle_mode = true
+		btn.focus_mode = Control.FOCUS_ALL
+		btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.clip_text = true
+		var selected := _pending_menu_selection.has(recipe_id)
+		btn.set_pressed_no_signal(selected)
+		_update_recipe_button_visual(btn, recipe_id, selected)
+		btn.toggled.connect(
+			func(pressed: bool) -> void:
+				_on_recipe_button_toggled(recipe_id, pressed)
+		)
+		row.add_child(btn)
+		_edit_menu_buttons[recipe_id] = btn
+
+
+func _on_recipe_button_toggled(recipe_id: StringName, pressed: bool) -> void:
+	if not is_edit_menu_open() or recipe_id == &"":
+		return
+	var idx := _pending_menu_selection.find(recipe_id)
+	if pressed and idx < 0:
+		_pending_menu_selection.append(recipe_id)
+	elif not pressed and idx >= 0:
+		_pending_menu_selection.remove_at(idx)
+
+	if _edit_menu_buttons.has(recipe_id):
+		var btn := _edit_menu_buttons[recipe_id]
+		if btn != null and is_instance_valid(btn):
+			_update_recipe_button_visual(btn, recipe_id, pressed)
+
+	if edit_menu_error_label != null:
+		edit_menu_error_label.visible = false
+		edit_menu_error_label.text = ""
+
+
+func _update_recipe_button_visual(
+	btn: Button,
+	recipe_id: StringName,
+	selected: bool
+) -> void:
+	var display := _get_recipe_display_name(recipe_id)
+	var price := _get_recipe_dine_in_price(recipe_id)
+	var marker := "[Aktif]" if selected else "[ ]"
+	if price > 0:
+		btn.text = "%s %s — Rp%d" % [marker, display, price]
+	else:
+		btn.text = "%s %s" % [marker, display]
+
+	var style := _make_panel_style(
+		EDIT_MENU_SELECTED_BG if selected else EDIT_MENU_UNSELECTED_BG,
+		EDIT_MENU_SELECTED_BORDER if selected else EDIT_MENU_UNSELECTED_BORDER,
+		4
+	)
+	btn.add_theme_stylebox_override("normal", style)
+	btn.add_theme_stylebox_override("hover", style)
+	btn.add_theme_stylebox_override("pressed", style)
+
+
+func _get_recipe_dine_in_price(recipe_id: StringName) -> int:
+	if _run_controller == null or not is_instance_valid(_run_controller):
+		return 0
+	if _run_controller.economy_config == null:
+		return 0
+	var entry := _run_controller.economy_config.get_recipe_entry(recipe_id)
+	if entry == null:
+		return 0
+	return entry.dine_in_price
+
+
+func _show_edit_menu_error(msg: String) -> void:
+	if edit_menu_error_label != null:
+		edit_menu_error_label.text = msg
+		edit_menu_error_label.modulate = Color(1.0, 0.48, 0.48, 1.0)
+		edit_menu_error_label.visible = true
+
+
+func _describe_menu_rejection(recipe_ids: Array[StringName]) -> String:
+	if not _is_planning_phase():
+		return "Edit Menu hanya tersedia saat persiapan sebelum buka."
+	if recipe_ids.is_empty():
+		return "Pilih minimal 1 menu sebelum menyimpan."
+	var unlocked: Array[StringName] = []
+	if _run_controller != null and is_instance_valid(_run_controller):
+		var raw_unlocked: Variant = _run_controller.get_run_view().get("unlocked_recipe_ids", [])
+		if raw_unlocked is Array:
+			for item: Variant in raw_unlocked:
+				unlocked.append(StringName(item))
+	var seen: Dictionary[StringName, bool] = {}
+	for id in recipe_ids:
+		if id == &"" or seen.has(id):
+			return "Pilihan menu mengandung duplikat atau ID kosong."
+		seen[id] = true
+		if not unlocked.has(id):
+			return "Menu '%s' belum terbuka." % _get_recipe_display_name(id)
+	return "Pilihan menu tidak valid."
