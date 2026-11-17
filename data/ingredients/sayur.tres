@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/kitchen/ingredient_def.gd" id="1_q5fmm"]
 [ext_resource type="Script" path="res://scripts/kitchen/ingredient_transition.gd" id="2_8bonr"]
+[ext_resource type="Texture2D" uid="uid://bxkh8o52plc7u" path="res://assets/art/ingredients/veggies.png" id="3_veggies"]
 
 [sub_resource type="Resource" id="Resource_lk3po"]
 script = ExtResource("2_8bonr")
@@ -23,4 +24,6 @@ to_state = 5
 script = ExtResource("1_q5fmm")
 ingredient_id = &"sayur"
 display_name = "Sayur"
+icon = ExtResource("3_veggies")
+raw_texture = ExtResource("3_veggies")
 transitions = Array[ExtResource("2_8bonr")]([SubResource("Resource_lk3po"), SubResource("Resource_l20ho"), SubResource("Resource_jpvn0")])

@@ -2,6 +2,35 @@
 
 [ext_resource type="PackedScene" uid="uid://ys8j281lg1mt" path="res://scenes/player/player.tscn" id="1_p7mg2"]
 [ext_resource type="Script" uid="uid://bs8gnj4dfnw7w" path="res://scripts/world/world_map.gd" id="1_worldmap"]
+[ext_resource type="Texture2D" uid="uid://cebm8jteebukm" path="res://assets/art/tiles/Warung-Tileset.png" id="2_tileset"]
+[ext_resource type="Texture2D" uid="uid://ere3eknxbyt7" path="res://assets/art/characters/npc gojek.png" id="3_gojek"]
+[ext_resource type="Texture2D" uid="uid://btbdutwct48ot" path="res://assets/art/characters/pegawai.png" id="4_pegawai"]
+[ext_resource type="Texture2D" uid="uid://livwx286bj32" path="res://assets/art/characters/npc 1.png" id="5_npc1"]
+[ext_resource type="Texture2D" uid="uid://c2ywt3y5ofncj" path="res://assets/art/characters/npc 2.png" id="6_npc2"]
+[ext_resource type="Texture2D" uid="uid://c0b2twgaoafpd" path="res://assets/art/characters/npc 3.png" id="7_npc3"]
+[ext_resource type="Texture2D" uid="uid://0yyhf8tylb5v" path="res://assets/art/characters/npc 4.png" id="8_npc4"]
+[ext_resource type="Texture2D" uid="uid://q7ox023rvesa" path="res://assets/art/characters/npc 5.png" id="9_npc5"]
+[ext_resource type="Texture2D" uid="uid://d4wefrwc4md2" path="res://assets/art/characters/npc 6.png" id="10_npc6"]
+[ext_resource type="Texture2D" uid="uid://cknw5tegiabwu" path="res://assets/art/characters/npc 7.png" id="11_npc7"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_warung"]
+texture = ExtResource("2_tileset")
+texture_region_size = Vector2i(32, 32)
+0:0/0 = 0
+1:0/0 = 0
+2:0/0 = 0
+0:1/0 = 0
+1:1/0 = 0
+2:1/0 = 0
+0:2/0 = 0
+1:2/0 = 0
+2:2/0 = 0
+5:4/0 = 0
+8:4/0 = 0
+
+[sub_resource type="TileSet" id="TileSet_warung"]
+tile_size = Vector2i(32, 32)
+sources/0 = SubResource("TileSetAtlasSource_warung")
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_station"]
 size = Vector2(28, 28)
@@ -10,9 +39,16 @@ size = Vector2(28, 28)
 size = Vector2(12, 26)
 
 [node name="RestaurantWorld" type="Node2D" unique_id=678061488]
+texture_filter = 1
 script = ExtResource("1_worldmap")
+driver_texture = ExtResource("3_gojek")
+employee_texture = ExtResource("4_pegawai")
+customer_textures = Array[Texture2D]([ExtResource("5_npc1"), ExtResource("6_npc2"), ExtResource("7_npc3"), ExtResource("8_npc4"), ExtResource("9_npc5"), ExtResource("10_npc6"), ExtResource("11_npc7")])
 
 [node name="FloorTiles" type="TileMapLayer" parent="." unique_id=1214754640]
+texture_filter = 1
+tile_map_data = PackedByteArray(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 8, 0, 0, 0, 2, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 10, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 10, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 10, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 10, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 10, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 10, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 10, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 10, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 10, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 11, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 12, 0, 1, 0, 0, 0, 2, 0, 1, 0, 0, 0, 11, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 12, 0, 2, 0, 0, 0, 2, 0, 1, 0, 0, 0, 11, 0, 3, 0, 0, 0, 0, 0, 1, 0, 0, 0, 12, 0, 3, 0, 0, 0, 2, 0, 1, 0, 0, 0, 11, 0, 4, 0, 0, 0, 0, 0, 1, 0, 0, 0, 12, 0, 4, 0, 0, 0, 2, 0, 1, 0, 0, 0, 11, 0, 5, 0, 0, 0, 0, 0, 1, 0, 0, 0, 12, 0, 5, 0, 0, 0, 2, 0, 1, 0, 0, 0, 11, 0, 6, 0, 0, 0, 0, 0, 1, 0, 0, 0, 12, 0, 6, 0, 0, 0, 2, 0, 1, 0, 0, 0, 11, 0, 7, 0, 0, 0, 0, 0, 1, 0, 0, 0, 12, 0, 7, 0, 0, 0, 2, 0, 1, 0, 0, 0, 11, 0, 8, 0, 0, 0, 0, 0, 2, 0, 0, 0, 12, 0, 8, 0, 0, 0, 2, 0, 2, 0, 0, 0)
+tile_set = SubResource("TileSet_warung")
 
 [node name="DineInWaitingAnchors" type="Node2D" parent="." unique_id=34387969]
 
@@ -43,6 +79,12 @@ position = Vector2(80, 16)
 metadata/world_id = &"storage_box"
 metadata/footprint_size = Vector2i(1, 1)
 
+[node name="Sprite2D" type="Sprite2D" parent="KitchenStations/StorageBox" unique_id=501000111]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(352, 96, 32, 32)
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenStations/StorageBox" unique_id=501000101]
 shape = SubResource("RectangleShape2D_station")
 
@@ -50,6 +92,12 @@ shape = SubResource("RectangleShape2D_station")
 position = Vector2(144, 16)
 metadata/world_id = &"stove"
 metadata/footprint_size = Vector2i(1, 1)
+
+[node name="Sprite2D" type="Sprite2D" parent="KitchenStations/Stove" unique_id=501000112]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(416, 96, 32, 32)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenStations/Stove" unique_id=501000102]
 shape = SubResource("RectangleShape2D_station")
@@ -59,6 +107,12 @@ position = Vector2(208, 16)
 metadata/world_id = &"washer"
 metadata/footprint_size = Vector2i(1, 1)
 
+[node name="Sprite2D" type="Sprite2D" parent="KitchenStations/Washer" unique_id=501000113]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(544, 32, 32, 32)
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenStations/Washer" unique_id=501000103]
 shape = SubResource("RectangleShape2D_station")
 
@@ -66,6 +120,13 @@ shape = SubResource("RectangleShape2D_station")
 position = Vector2(272, 16)
 metadata/world_id = &"plate_rack"
 metadata/footprint_size = Vector2i(1, 1)
+
+[node name="Sprite2D" type="Sprite2D" parent="KitchenStations/PlateRack" unique_id=501000114]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+offset = Vector2(0, -16)
+region_enabled = true
+region_rect = Rect2(544, 128, 32, 64)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenStations/PlateRack" unique_id=501000104]
 shape = SubResource("RectangleShape2D_station")
@@ -75,6 +136,13 @@ position = Vector2(336, 16)
 metadata/world_id = &"rice_cooker"
 metadata/footprint_size = Vector2i(1, 1)
 
+[node name="Sprite2D" type="Sprite2D" parent="KitchenStations/RiceCooker" unique_id=501000115]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+offset = Vector2(0, -16)
+region_enabled = true
+region_rect = Rect2(672, 0, 32, 64)
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenStations/RiceCooker" unique_id=501000105]
 shape = SubResource("RectangleShape2D_station")
 
@@ -82,6 +150,12 @@ shape = SubResource("RectangleShape2D_station")
 position = Vector2(80, 112)
 metadata/world_id = &"trash"
 metadata/footprint_size = Vector2i(1, 1)
+
+[node name="Sprite2D" type="Sprite2D" parent="KitchenStations/Trash" unique_id=501000116]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(608, 96, 32, 32)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenStations/Trash" unique_id=501000106]
 shape = SubResource("RectangleShape2D_station")
@@ -92,6 +166,12 @@ shape = SubResource("RectangleShape2D_station")
 position = Vector2(208, 80)
 metadata/world_id = &"work_table"
 metadata/footprint_size = Vector2i(1, 1)
+
+[node name="Sprite2D" type="Sprite2D" parent="KitchenWorkTables/WorkTable" unique_id=501000205]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(544, 96, 32, 32)
 
 [node name="StagingTarget" type="Area2D" parent="KitchenWorkTables/WorkTable" unique_id=501000201]
 position = Vector2(-7, 0)
@@ -116,6 +196,12 @@ position = Vector2(144, 208)
 metadata/world_id = &"dining_table_01"
 metadata/footprint_size = Vector2i(1, 1)
 
+[node name="Sprite2D" type="Sprite2D" parent="DiningTables/DiningTable01" unique_id=501000311]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(416, 160, 32, 32)
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="DiningTables/DiningTable01" unique_id=501000301]
 shape = SubResource("RectangleShape2D_station")
 
@@ -124,6 +210,12 @@ position = Vector2(272, 208)
 metadata/world_id = &"dining_table_02"
 metadata/footprint_size = Vector2i(1, 1)
 
+[node name="Sprite2D" type="Sprite2D" parent="DiningTables/DiningTable02" unique_id=501000312]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(416, 160, 32, 32)
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="DiningTables/DiningTable02" unique_id=501000302]
 shape = SubResource("RectangleShape2D_station")
 
@@ -131,6 +223,13 @@ shape = SubResource("RectangleShape2D_station")
 position = Vector2(368, 48)
 metadata/world_id = &"online_station"
 metadata/footprint_size = Vector2i(1, 1)
+
+[node name="Sprite2D" type="Sprite2D" parent="OnlineStation" unique_id=501000411]
+texture_filter = 1
+texture = ExtResource("2_tileset")
+offset = Vector2(0, -16)
+region_enabled = true
+region_rect = Rect2(480, 128, 32, 64)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="OnlineStation" unique_id=501000401]
 shape = SubResource("RectangleShape2D_station")

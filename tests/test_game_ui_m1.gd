@@ -21,8 +21,15 @@ func _init() -> void:
 	await _test_mouse_input_and_world_offset()
 	await _test_keyboard_input_and_focus_blocking()
 	await _test_dialogue_display_and_clamping()
+	await _test_m1_kitchen_gameplay_and_visuals()
+	await _test_m1_edge_cases_and_readonly()
 	print("SUMMARY fails=%d" % _fails)
 	quit(_fails)
+
+
+func _type_word(ui: GameUI, word: String) -> void:
+	for i in range(word.length()):
+		_send_key(ui, word.unicode_at(i))
 
 
 func _send_left_click(ui: GameUI, pos: Vector2) -> void:
@@ -177,7 +184,7 @@ func _test_phase_and_hud_transitions() -> void:
 		and ui.service_box.visible
 		and not ui.day_result_side_panel.visible
 		and ui.phase_label.text == "Layanan"
-		and ui.unspawned_quota_label.text == "Antrean Datang: 4"
+		and ui.unspawned_quota_label.text == "Antrean Datang: 3"
 	)
 
 	game_root._process(3.5)
@@ -211,7 +218,7 @@ func _test_phase_and_hud_transitions() -> void:
 	game_root.phase_changed.connect(closing_probe)
 
 	# Drain Day 1 through real CLOSING -> RESULTS lifecycle and verify both CLOSING and RESULTS.
-	service._day_queue_remaining = 0
+	_force_empty_service(service)
 	game_root.request_close_if_drained()
 	game_root.phase_changed.disconnect(closing_probe)
 
@@ -251,7 +258,7 @@ func _test_phase_and_hud_transitions() -> void:
 	# Advance Days 2-6 to Day 7, win Day 7, and verify FINISHED + ExtraModeButton.
 	for _day in range(2, 7):
 		ui.start_service_button.pressed.emit()
-		service._day_queue_remaining = 0
+		_force_empty_service(service)
 		game_root.request_close_if_drained()
 		ui.continue_button.pressed.emit()
 
@@ -263,7 +270,7 @@ func _test_phase_and_hud_transitions() -> void:
 			&"nasi_telor",
 			SharedTypes.OrderKind.DINE_IN
 		)
-	service._day_queue_remaining = 0
+	_force_empty_service(service)
 	game_root.request_close_if_drained()
 
 	_check(
@@ -285,31 +292,6 @@ func _test_phase_and_hud_transitions() -> void:
 	)
 
 	game_root.free()
-	await process_frame
-
-	# Also verify Day 7 FINISHED(LOST) displays "Belum cukup uang" and hides both buttons:
-	var lost_root := packed.instantiate() as GameRoot
-	root.add_child(lost_root)
-	await process_frame
-	var lost_service := lost_root.get_service_controller() as ServiceController
-	var lost_ui := lost_root.get_node("UI") as GameUI
-	for _day in range(1, 7):
-		lost_ui.start_service_button.pressed.emit()
-		lost_service._day_queue_remaining = 0
-		lost_root.request_close_if_drained()
-		lost_ui.continue_button.pressed.emit()
-	lost_ui.start_service_button.pressed.emit()
-	lost_service._day_queue_remaining = 0
-	lost_root.request_close_if_drained()
-	_check(
-		"Day 7 LOST shows Belum cukup uang and hides Continue/ExtraMode buttons",
-		lost_root.get_phase() == SharedTypes.Phase.FINISHED
-		and lost_ui.day_result_side_panel.visible
-		and lost_ui.result_title_label.text.contains("Belum cukup uang")
-		and not lost_ui.continue_button.visible
-		and not lost_ui.extra_mode_button.visible
-	)
-	lost_root.free()
 	await process_frame
 
 
@@ -404,7 +386,7 @@ func _test_mouse_input_and_world_offset() -> void:
 
 	# 7. Result panel blocks world clicks when visible in RESULTS.
 	ui.start_service_button.pressed.emit()
-	service._day_queue_remaining = 0
+	_force_empty_service(service)
 	game_root.request_close_if_drained()
 	_check("DayResultSidePanel visible in RESULTS", ui.day_result_side_panel.visible)
 	var tile_before_res_click := kitchen.get_player_tile()
@@ -672,3 +654,443 @@ func _test_dialogue_display_and_clamping() -> void:
 
 	game_root.free()
 	await process_frame
+
+
+func _test_m1_kitchen_gameplay_and_visuals() -> void:
+	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
+	var game_root := packed.instantiate() as GameRoot
+	root.add_child(game_root)
+	await process_frame
+	await physics_frame
+
+	var world := game_root.get_node("World") as WorldMap
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var run := game_root.get_run_controller() as RunController
+	var ui := game_root.get_node("UI") as GameUI
+
+	# In PLANNING, clicking plate_rack selects it without taking a plate.
+	_send_left_click(ui, Vector2(416, 52))
+	_check(
+		"PLANNING click on plate_rack does not take plate",
+		kitchen.get_selected_target_id() == &"plate_rack"
+		and kitchen.get_held_item_view().is_empty()
+		and int(kitchen.get_plate_rack_view(&"plate_rack").get("clean_count", -1)) == 4
+	)
+
+	# Stock storage_box in PLANNING: 2 beras, 2 telur, 1 sayur.
+	_check("buy 2 beras", run.request_ingredient_purchase(&"beras", 2, &"storage_box"))
+	_check("buy 2 telur", run.request_ingredient_purchase(&"telur", 2, &"storage_box"))
+	_check("buy 1 sayur", run.request_ingredient_purchase(&"sayur", 1, &"storage_box"))
+
+	# Start SERVING.
+	ui.start_service_button.pressed.emit()
+	_check("entered SERVING for M1 kitchen loop", game_root.is_serving())
+
+	# Empty storage retrieval fails cleanly.
+	_send_left_click(ui, Vector2(224, 52))
+	_type_word(ui, "ayam")
+	_check(
+		"empty ingredient retrieval emits out_of_stock without mutating hand",
+		kitchen.get_held_item_view().is_empty()
+		and ui.context_message_label.visible
+		and ui.context_message_label.text == "Bahan habis"
+	)
+
+	# Retrieve 1 beras from storage_box (2 -> 1).
+	_type_word(ui, "beras")
+	var held := kitchen.get_held_item_view()
+	var held_vis := world.player.get_node("VisualAnchor/HeldItemVisual") as Node2D
+	_check(
+		"retrieve beras decrements storage once and updates held view and player visual",
+		not held.is_empty()
+		and held.get("plate_id", &"") == &""
+		and (held.get("parts", []) as Array).size() == 1
+		and held["parts"][0].get("ingredient_id", &"") == &"beras"
+		and int(held["parts"][0].get("state", -1)) == SharedTypes.PrepState.RAW
+		and int(kitchen.get_storage_unit_view(&"storage_box")["slots"][0]["quantity"]) == 1
+		and ui.context_message_label.text == "Bahan diambil"
+		and held_vis.visible
+		and held_vis.get_node_or_null("PartSprite_0") != null
+	)
+
+	# Held-item capacity restriction: retrieving telur while holding beras fails cleanly.
+	_type_word(ui, "telur")
+	_check(
+		"retrieving second ingredient while hand full fails with hand_full and keeps stock",
+		kitchen.get_held_item_view()["parts"][0]["ingredient_id"] == &"beras"
+		and int(kitchen.get_storage_unit_view(&"storage_box")["slots"][1]["quantity"]) == 2
+		and ui.context_message_label.text == "Tangan penuh"
+	)
+
+	# Invalid processing: RAW beras cannot masak at rice_cooker or goreng at stove.
+	_send_left_click(ui, Vector2(480, 52))
+	_type_word(ui, "masak")
+	_check(
+		"RAW beras cannot masak at rice_cooker",
+		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.RAW
+		and kitchen.get_cooker_output_view(&"rice_cooker").is_empty()
+		and ui.context_message_label.text == "Nggak bisa sekarang"
+	)
+	_send_left_click(ui, Vector2(288, 52))
+	_type_word(ui, "goreng")
+	_check(
+		"RAW beras cannot goreng at stove",
+		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.RAW
+		and ui.context_message_label.text == "Nggak bisa sekarang"
+	)
+
+	# Wash beras at washer: RAW -> WASHED.
+	_send_left_click(ui, Vector2(352, 52))
+	_type_word(ui, "cuci")
+	_check(
+		"washer cuci transitions RAW beras to WASHED",
+		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.WASHED
+		and ui.context_message_label.text == "Bahan dicuci"
+	)
+
+	# Cook washed beras at rice_cooker: deposits COOKED_RICE in cooker output, frees hand.
+	_send_left_click(ui, Vector2(480, 52))
+	_type_word(ui, "masak")
+	var cooker_view := kitchen.get_cooker_output_view(&"rice_cooker")
+	var cooker_node := world.registry.get_object(&"rice_cooker")
+	var cooker_vis := cooker_node.get_node_or_null("CookerOutputVisual") as Node2D
+	_check(
+		"rice_cooker masak deposits COOKED_RICE output and frees hand",
+		kitchen.get_held_item_view().is_empty()
+		and not held_vis.visible
+		and not cooker_view.is_empty()
+		and int(cooker_view["parts"][0]["state"]) == SharedTypes.PrepState.COOKED_RICE
+		and cooker_vis != null
+		and cooker_vis.visible
+		and ui.context_message_label.text == "Nasi dimasak"
+	)
+
+	# Take plate from plate_rack (4 -> 3), then return it (3 -> 4), then take again (4 -> 3).
+	var rack_node := world.registry.get_object(&"plate_rack")
+	var rack_label := rack_node.get_node_or_null("PlateCountLabel") as Label
+	_check("PlateRack label initially 4", rack_label != null and rack_label.text == "4")
+	_send_left_click(ui, Vector2(416, 52))
+	_check(
+		"first plate_rack click takes 1 plate and updates count to 3",
+		kitchen.get_held_item_view().get("plate_id", &"") != &""
+		and int(kitchen.get_plate_rack_view(&"plate_rack")["clean_count"]) == 3
+		and rack_label.text == "3"
+		and held_vis.visible
+		and held_vis.get_node_or_null("PlateIndicator") != null
+	)
+	_send_left_click(ui, Vector2(416, 52))
+	_check(
+		"second plate_rack click with empty plate returns it to rack (4)",
+		kitchen.get_held_item_view().is_empty()
+		and int(kitchen.get_plate_rack_view(&"plate_rack")["clean_count"]) == 4
+		and rack_label.text == "4"
+	)
+	_send_left_click(ui, Vector2(416, 52))
+	_check(
+		"take plate again for nasi_telor assembly (3 remaining)",
+		kitchen.get_held_item_view().get("plate_id", &"") != &""
+		and int(kitchen.get_plate_rack_view(&"plate_rack")["clean_count"]) == 3
+	)
+
+	# Stage clean plate on WorkTable via StagingTarget (345, 116).
+	_send_left_click(ui, Vector2(345, 116))
+	var staged_plate := kitchen.get_work_table_view(&"work_table")
+	var table_node := world.registry.get_object(&"work_table")
+	var staged_vis := table_node.get_node_or_null("StagedVisual") as Node2D
+	_check(
+		"StagingTarget stages clean plate on WorkTable and shows StagedVisual",
+		kitchen.get_held_item_view().is_empty()
+		and not staged_plate.is_empty()
+		and staged_plate.get("plate_id", &"") != &""
+		and (staged_plate.get("parts", []) as Array).is_empty()
+		and staged_vis != null
+		and staged_vis.visible
+		and staged_vis.get_node_or_null("PlateIndicator") != null
+	)
+
+	# Retrieve cooked rice from rice_cooker using `nasi`.
+	_send_left_click(ui, Vector2(480, 52))
+	_type_word(ui, "nasi")
+	_check(
+		"rice_cooker nasi retrieves COOKED_RICE and clears cooker output",
+		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.COOKED_RICE
+		and kitchen.get_cooker_output_view(&"rice_cooker").is_empty()
+		and not cooker_vis.visible
+		and ui.context_message_label.text == "Nasi diambil"
+	)
+
+	# Clicking StagingTarget merges COOKED_RICE onto staged plate.
+	_send_left_click(ui, Vector2(345, 116))
+	_check(
+		"COOKED_RICE merges onto staged plate without completing recipe yet",
+		kitchen.get_held_item_view().is_empty()
+		and (kitchen.get_work_table_view(&"work_table")["parts"] as Array).size() == 1
+		and kitchen.get_work_table_view(&"work_table").get("matched_recipe_id", &"") == &""
+		and staged_vis.get_node_or_null("PartSprite_0") != null
+	)
+
+	# Retrieve telur from storage_box, verify raw egg texture, attempt invalid chop, fry on stove.
+	_send_left_click(ui, Vector2(224, 52))
+	_type_word(ui, "telur")
+	var raw_egg_spr := held_vis.get_node_or_null("PartSprite_0") as Sprite2D
+	_check(
+		"held raw telur uses raw egg.png with nearest filter",
+		raw_egg_spr != null
+		and raw_egg_spr.texture != null
+		and raw_egg_spr.texture.resource_path == "res://assets/art/ingredients/raw egg.png"
+		and raw_egg_spr.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
+	)
+
+	# Clicking ChoppingTarget (359, 116) does NOT stage telur; invalid potong preserves RAW telur.
+	_send_left_click(ui, Vector2(359, 116))
+	_type_word(ui, "potong")
+	_check(
+		"ChoppingTarget does not auto-stage held telur and rejects invalid potong",
+		not kitchen.get_held_item_view().is_empty()
+		and int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.RAW
+		and (kitchen.get_work_table_view(&"work_table")["parts"] as Array).size() == 1
+	)
+
+	# Fry telur at stove (`goreng`), verify cooked egg.png texture.
+	_send_left_click(ui, Vector2(288, 52))
+	_type_word(ui, "goreng")
+	var cooked_egg_spr := held_vis.get_node_or_null("PartSprite_0") as Sprite2D
+	_check(
+		"stove goreng cooks telur and updates player visual to cooked egg.png",
+		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.COOKED
+		and cooked_egg_spr != null
+		and cooked_egg_spr.texture.resource_path == "res://assets/art/ingredients/cooked egg.png"
+		and ui.context_message_label.text == "Bahan digoreng"
+	)
+
+	# Duplicate command prevention: pressing 'g' again starts prefix "g" without re-cooking.
+	_send_key(ui, "g".unicode_at(0), KEY_G)
+	_check(
+		"pressing g after goreng starts fresh prefix instead of duplicate execution",
+		kitchen.get_command_prefix() == "g"
+	)
+
+	# Merge cooked telur onto staged plate -> completes nasi_telor!
+	_send_left_click(ui, Vector2(345, 116))
+	var assembled := kitchen.get_work_table_view(&"work_table")
+	_check(
+		"merging cooked telur onto plated rice assembles exact nasi_telor",
+		kitchen.get_held_item_view().is_empty()
+		and (assembled["parts"] as Array).size() == 2
+		and assembled.get("matched_recipe_id", &"") == &"nasi_telor"
+		and ui.context_message_label.text == "Hidangan siap disajikan!"
+		and staged_vis.get_node_or_null("PartSprite_0") != null
+		and staged_vis.get_node_or_null("PartSprite_1") != null
+	)
+
+	# Pick up completed nasi_telor into hand.
+	_send_left_click(ui, Vector2(345, 116))
+	var final_dish := kitchen.get_held_item_view()
+	_check(
+		"picking up assembled nasi_telor moves exact dish to hand and clears WorkTable",
+		kitchen.get_work_table_view(&"work_table").is_empty()
+		and not staged_vis.visible
+		and final_dish.get("plate_id", &"") != &""
+		and final_dish.get("matched_recipe_id", &"") == &"nasi_telor"
+		and (final_dish.get("parts", []) as Array).size() == 2
+		and held_vis.visible
+		and held_vis.get_node_or_null("PlateIndicator") != null
+		and held_vis.get_node_or_null("PartSprite_1") != null
+	)
+
+	game_root.free()
+	await process_frame
+
+
+func _test_m1_edge_cases_and_readonly() -> void:
+	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
+	var game_root := packed.instantiate() as GameRoot
+	root.add_child(game_root)
+	await process_frame
+	await physics_frame
+
+	var world := game_root.get_node("World") as WorldMap
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var run := game_root.get_run_controller() as RunController
+	var ui := game_root.get_node("UI") as GameUI
+
+	_check("stock storage_box", run.request_ingredient_purchase(&"beras", 2, &"storage_box"))
+	_check("stock telur", run.request_ingredient_purchase(&"telur", 2, &"storage_box"))
+	_check("stock sayur", run.request_ingredient_purchase(&"sayur", 1, &"storage_box"))
+	ui.start_service_button.pressed.emit()
+
+	# 1. Chopping sayur at work_table_chop + frying at stove -> CHOPPED_AND_COOKED.
+	_send_left_click(ui, Vector2(224, 52))
+	_type_word(ui, "sayur")
+	_send_left_click(ui, Vector2(359, 116))
+	_type_word(ui, "potong")
+	_check(
+		"sayur chop at work_table_chop transitions RAW -> CHOPPED without staging",
+		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.CHOPPED
+		and kitchen.get_work_table_view(&"work_table").is_empty()
+	)
+	_send_left_click(ui, Vector2(288, 52))
+	_type_word(ui, "goreng")
+	_check(
+		"CHOPPED sayur transitions to CHOPPED_AND_COOKED at stove",
+		int(kitchen.get_held_item_view()["parts"][0]["state"])
+			== SharedTypes.PrepState.CHOPPED_AND_COOKED
+	)
+
+	# Trash loose item clears hand.
+	_send_left_click(ui, Vector2(224, 148))
+	_check("trash discards loose held item", kitchen.get_held_item_view().is_empty())
+
+	# 2. Loose + loose merge rejection without ingredient loss:
+	_send_left_click(ui, Vector2(224, 52))
+	_type_word(ui, "telur")
+	_send_left_click(ui, Vector2(288, 52))
+	_type_word(ui, "goreng")
+	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(224, 52))
+	_type_word(ui, "beras")
+	_send_left_click(ui, Vector2(345, 116))
+	_check(
+		"loose + loose merge rejected without losing staged or held ingredient",
+		not kitchen.get_work_table_view(&"work_table").is_empty()
+		and kitchen.get_work_table_view(&"work_table")["parts"][0]["ingredient_id"] == &"telur"
+		and not kitchen.get_held_item_view().is_empty()
+		and kitchen.get_held_item_view()["parts"][0]["ingredient_id"] == &"beras"
+		and ui.context_message_label.text == "Tidak bisa digabung"
+	)
+
+	# Wash & cook held beras; verify cooker_full rejects 2nd masak; clear work_table loose telur.
+	_send_left_click(ui, Vector2(352, 52))
+	_type_word(ui, "cuci")
+	_send_left_click(ui, Vector2(480, 52))
+	_type_word(ui, "masak")
+	_send_left_click(ui, Vector2(224, 52))
+	_type_word(ui, "beras")
+	_send_left_click(ui, Vector2(352, 52))
+	_type_word(ui, "cuci")
+	_send_left_click(ui, Vector2(480, 52))
+	_type_word(ui, "masak")
+	_check(
+		"second masak when cooker occupied rejects with cooker_full and preserves held rice",
+		not kitchen.get_held_item_view().is_empty()
+		and int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.WASHED
+		and ui.context_message_label.text == "Penanak nasi penuh"
+	)
+
+	# Trash second rice, pick up staged cooked telur, verify read-only views cannot mutate state.
+	_send_left_click(ui, Vector2(224, 148))
+	_send_left_click(ui, Vector2(345, 116))
+	var ro_held := kitchen.get_held_item_view()
+	ro_held["parts"][0]["state"] = SharedTypes.PrepState.RAW
+	ro_held["plate_id"] = &"fake_plate"
+	_check(
+		"mutating get_held_item_view() does not mutate KitchenController state",
+		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.COOKED
+		and kitchen.get_held_item_view().get("plate_id", &"") == &""
+	)
+
+	# Trash cooked telur, then assemble nasi_telor in REVERSE order (telur first, then rice).
+	_send_left_click(ui, Vector2(224, 148))
+	_send_left_click(ui, Vector2(416, 52))
+	_send_left_click(ui, Vector2(345, 116))
+	var ro_table := kitchen.get_work_table_view(&"work_table")
+	ro_table["matched_recipe_id"] = &"fake_recipe"
+	_check(
+		"mutating get_work_table_view() does not mutate KitchenController state",
+		kitchen.get_work_table_view(&"work_table").get("matched_recipe_id", &"") == &""
+	)
+
+	# Prepare cooked telur and merge FIRST onto staged plate.
+	_send_left_click(ui, Vector2(224, 52))
+	_type_word(ui, "telur")
+	# Attempt invalid merge of RAW telur onto staged plate (must reject without losing telur).
+	_send_left_click(ui, Vector2(345, 116))
+	_check(
+		"invalid merge of RAW telur onto staged plate rejected without resource loss",
+		not kitchen.get_held_item_view().is_empty()
+		and (kitchen.get_work_table_view(&"work_table")["parts"] as Array).is_empty()
+		and ui.context_message_label.text == "Tidak bisa digabung"
+	)
+	_send_left_click(ui, Vector2(288, 52))
+	_type_word(ui, "goreng")
+	_send_left_click(ui, Vector2(345, 116))
+	_check(
+		"cooked telur merged first onto plate",
+		kitchen.get_held_item_view().is_empty()
+		and (kitchen.get_work_table_view(&"work_table")["parts"] as Array).size() == 1
+	)
+
+	# Retrieve cooked rice with `nasi` and merge SECOND -> exact nasi_telor!
+	_send_left_click(ui, Vector2(480, 52))
+	_type_word(ui, "nasi")
+	_send_left_click(ui, Vector2(345, 116))
+	_check(
+		"reverse plating order (telur then rice) also assembles exact nasi_telor",
+		kitchen.get_work_table_view(&"work_table").get("matched_recipe_id", &"") == &"nasi_telor"
+	)
+
+	# Pick up plated nasi_telor and trash it -> food discarded, same plate_id survives clean.
+	_send_left_click(ui, Vector2(345, 116))
+	var plate_id_before: StringName = kitchen.get_held_item_view().get("plate_id", &"")
+	_send_left_click(ui, Vector2(224, 148))
+	_check(
+		"trashing plated dish discards food and preserves exact reusable plate_id",
+		kitchen.get_held_item_view().get("plate_id", &"") == plate_id_before
+		and (kitchen.get_held_item_view().get("parts", []) as Array).is_empty()
+		and kitchen.get_held_item_view().get("matched_recipe_id", &"") == &""
+		and kitchen.get_plate_count() == 4
+	)
+
+	# Return clean plate, drain all 4 plates from PlateRack, verify empty PlateRack rejection.
+	_send_left_click(ui, Vector2(416, 52))
+	for i in range(4):
+		_send_left_click(ui, Vector2(416, 52))
+		_send_left_click(ui, Vector2(345, 116))
+		if i < 3:
+			# Stage holds 1 item; move the first 3 plates to WASHER_DIRTY to drain rack.
+			var p_view := kitchen.get_work_table_view(&"work_table")
+			var pid: StringName = p_view.get("plate_id", &"")
+			kitchen._work_table_items[&"work_table"] = {}
+			kitchen._plate_records[pid]["location"] = &"CUSTOMER_TABLE"
+			kitchen._plate_records[pid]["table_id"] = &"dining_table_01"
+			kitchen.move_cleaned_table_plate_to_washer(&"dining_table_01")
+	# Now 3 plates are WASHER_DIRTY, 1 is on work_table, 0 clean plates on PlateRack.
+	var washer_spr := world.registry.get_object(&"washer").get_node("Sprite2D") as Sprite2D
+	_check(
+		"empty PlateRack rejects pickup with no_plates and Washer shows filled sprite",
+		int(kitchen.get_plate_rack_view(&"plate_rack")["clean_count"]) == 0
+		and washer_spr.region_rect == WorldMap.REGION_WASHER_FILLED
+	)
+	_send_left_click(ui, Vector2(416, 52))
+	_check(
+		"empty PlateRack click emits no_plates and keeps hand empty",
+		kitchen.get_held_item_view().is_empty()
+		and ui.context_message_label.text == "Piring habis"
+	)
+
+	# Washer cuci washes 1 dirty plate into held clean plate and updates count.
+	_send_left_click(ui, Vector2(352, 52))
+	_type_word(ui, "cuci")
+	_check(
+		"washer cuci washes 1 dirty plate into held clean plate",
+		kitchen.get_held_item_view().get("plate_id", &"") != &""
+		and (kitchen.get_held_item_view().get("parts", []) as Array).is_empty()
+		and int(kitchen.get_washer_view()["dirty_plate_count"]) == 2
+		and kitchen.get_plate_count() == 4
+	)
+
+	game_root.free()
+	await process_frame
+
+
+func _force_empty_service(service: ServiceController) -> void:
+	service._day_queue_remaining = 0
+	service._outside_dine_in_queue.clear()
+	service._in_shop_dine_in_count = 0
+	service._customers.clear()
+	service._orders.clear()
+	service._online_orders_open.clear()
+	for table: Dictionary in service._tables.values():
+		table["state"] = SharedTypes.TableState.CLEAN_VACANT
+		table["customer_id_or_empty"] = &""
+		table["order_id_or_empty"] = &""

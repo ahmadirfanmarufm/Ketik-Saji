@@ -7,7 +7,22 @@ extends Resource
 
 @export var ingredient_id: StringName = &""
 @export var display_name: String = ""
+@export var icon: Texture2D = null
+@export var raw_texture: Texture2D = null
+@export var cooked_texture: Texture2D = null
 @export var transitions: Array[IngredientTransition] = []
+
+
+## Returns the state-specific Texture2D when mapped, falling back to `icon`.
+func get_texture_for_state(state: SharedTypes.PrepState) -> Texture2D:
+	match state:
+		SharedTypes.PrepState.RAW:
+			if raw_texture != null:
+				return raw_texture
+		SharedTypes.PrepState.COOKED, SharedTypes.PrepState.COOKED_RICE:
+			if cooked_texture != null:
+				return cooked_texture
+	return icon
 
 
 ## True when applying `command` to this ingredient in `from_state` is valid.

@@ -110,6 +110,64 @@ func _test_ingredients() -> Array[IngredientDef]:
 				== SharedTypes.PrepState.COOKED
 		)
 
+	var ayam := by_id.get(&"ayam") as IngredientDef
+	var telur := by_id.get(&"telur") as IngredientDef
+	var tempe := by_id.get(&"tempe") as IngredientDef
+	var sapi := by_id.get(&"sapi") as IngredientDef
+	_check(
+		"ayam maps raw chicken.png and cooked chicken.png",
+		ayam != null
+		and ayam.get_texture_for_state(SharedTypes.PrepState.RAW) != null
+		and ayam.get_texture_for_state(SharedTypes.PrepState.RAW).resource_path
+			== "res://assets/art/ingredients/raw chicken.png"
+		and ayam.get_texture_for_state(SharedTypes.PrepState.COOKED) != null
+		and ayam.get_texture_for_state(SharedTypes.PrepState.COOKED).resource_path
+			== "res://assets/art/ingredients/cooked chicken.png"
+	)
+	_check(
+		"telur maps raw egg.png and cooked egg.png",
+		telur != null
+		and telur.get_texture_for_state(SharedTypes.PrepState.RAW) != null
+		and telur.get_texture_for_state(SharedTypes.PrepState.RAW).resource_path
+			== "res://assets/art/ingredients/raw egg.png"
+		and telur.get_texture_for_state(SharedTypes.PrepState.COOKED) != null
+		and telur.get_texture_for_state(SharedTypes.PrepState.COOKED).resource_path
+			== "res://assets/art/ingredients/cooked egg.png"
+	)
+	_check(
+		"tempe maps raw tempe.png and cooked tempe.png",
+		tempe != null
+		and tempe.get_texture_for_state(SharedTypes.PrepState.RAW) != null
+		and tempe.get_texture_for_state(SharedTypes.PrepState.RAW).resource_path
+			== "res://assets/art/ingredients/raw tempe.png"
+		and tempe.get_texture_for_state(SharedTypes.PrepState.COOKED) != null
+		and tempe.get_texture_for_state(SharedTypes.PrepState.COOKED).resource_path
+			== "res://assets/art/ingredients/cooked tempe.png"
+	)
+	_check(
+		"beras maps rice.png icon/COOKED_RICE without fabricated raw texture",
+		beras != null
+		and beras.icon != null
+		and beras.icon.resource_path == "res://assets/art/ingredients/rice.png"
+		and beras.raw_texture == null
+		and beras.get_texture_for_state(SharedTypes.PrepState.COOKED_RICE) == beras.icon
+	)
+	_check(
+		"sayur maps veggies.png icon/RAW without fabricated cooked texture",
+		sayur != null
+		and sayur.icon != null
+		and sayur.icon.resource_path == "res://assets/art/ingredients/veggies.png"
+		and sayur.raw_texture == sayur.icon
+		and sayur.cooked_texture == null
+	)
+	_check(
+		"sapi leaves unconfirmed meat textures unassigned",
+		sapi != null
+		and sapi.icon == null
+		and sapi.raw_texture == null
+		and sapi.cooked_texture == null
+	)
+
 	return list
 
 

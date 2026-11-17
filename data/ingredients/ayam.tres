@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" path="res://scripts/kitchen/ingredient_def.gd" id="1_kvk3w"]
 [ext_resource type="Script" path="res://scripts/kitchen/ingredient_transition.gd" id="2_fs31i"]
+[ext_resource type="Texture2D" uid="uid://d1vltjak6il2y" path="res://assets/art/ingredients/raw chicken.png" id="3_raw_chicken"]
+[ext_resource type="Texture2D" uid="uid://dgf2cxj232i36" path="res://assets/art/ingredients/cooked chicken.png" id="4_cooked_chicken"]
 
 [sub_resource type="Resource" id="Resource_0qppq"]
 script = ExtResource("2_fs31i")
@@ -12,4 +14,7 @@ to_state = 4
 script = ExtResource("1_kvk3w")
 ingredient_id = &"ayam"
 display_name = "Ayam"
+icon = ExtResource("3_raw_chicken")
+raw_texture = ExtResource("3_raw_chicken")
+cooked_texture = ExtResource("4_cooked_chicken")
 transitions = Array[ExtResource("2_fs31i")]([SubResource("Resource_0qppq")])

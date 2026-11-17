@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" path="res://scripts/kitchen/ingredient_def.gd" id="1_wjvpe"]
 [ext_resource type="Script" path="res://scripts/kitchen/ingredient_transition.gd" id="2_6ikyt"]
+[ext_resource type="Texture2D" uid="uid://brbvck6jpw1ar" path="res://assets/art/ingredients/raw tempe.png" id="3_raw_tempe"]
+[ext_resource type="Texture2D" uid="uid://hoesbyjef781" path="res://assets/art/ingredients/cooked tempe.png" id="4_cooked_tempe"]
 
 [sub_resource type="Resource" id="Resource_d6rr3"]
 script = ExtResource("2_6ikyt")
@@ -12,4 +14,7 @@ to_state = 4
 script = ExtResource("1_wjvpe")
 ingredient_id = &"tempe"
 display_name = "Tempe"
+icon = ExtResource("3_raw_tempe")
+raw_texture = ExtResource("3_raw_tempe")
+cooked_texture = ExtResource("4_cooked_tempe")
 transitions = Array[ExtResource("2_6ikyt")]([SubResource("Resource_d6rr3")])

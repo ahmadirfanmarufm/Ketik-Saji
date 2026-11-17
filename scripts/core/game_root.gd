@@ -226,6 +226,14 @@ func _wire_controllers() -> void:
 	var world_map := get_node_or_null("World") as WorldMap
 	if _kitchen_controller != null and _kitchen_controller.has_method(&"bind_world"):
 		_kitchen_controller.bind_world(world_map, self)
+	if _kitchen_controller != null and _kitchen_controller.has_method(&"bind_service"):
+		_kitchen_controller.bind_service(_service_controller)
+	if _service_controller != null and _service_controller.has_method(&"bind_systems"):
+		_service_controller.bind_systems(
+			_kitchen_controller as KitchenController,
+			_run_controller as RunController,
+			self
+		)
 	if _run_controller != null and _run_controller.has_method(&"bind_systems"):
 		_run_controller.bind_systems(
 			world_map,

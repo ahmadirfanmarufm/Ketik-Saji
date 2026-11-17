@@ -117,6 +117,7 @@ func _test_scene_binding_and_starter_kit() -> void:
 	await process_frame
 
 
+
 func _test_kitchen_click_routing_and_movement() -> void:
 	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
 	var game_root := packed.instantiate() as GameRoot
@@ -202,6 +203,7 @@ func _test_kitchen_click_routing_and_movement() -> void:
 
 	game_root.free()
 	await process_frame
+
 
 
 func _test_service_drained_four_conditions() -> void:
@@ -307,7 +309,7 @@ func _test_run_plan_and_once_only_transactions() -> void:
 		and kitchen.get_pending_delivery_views().size() == 1
 	)
 
-	service._day_queue_remaining = 0
+	_force_empty_service(service)
 	game_root._process(1.0)
 	_check("drained service closes to RESULTS", game_root.get_phase() == SharedTypes.Phase.RESULTS)
 	# Refunded +6000 -> 110000, minus starter rice_cooker electricity 2000 -> 108000.
@@ -349,6 +351,7 @@ func _test_run_plan_and_once_only_transactions() -> void:
 
 	game_root.free()
 	await process_frame
+
 
 
 func _test_stock_idempotency_and_reservation_rollback() -> void:
@@ -402,6 +405,7 @@ func _test_stock_idempotency_and_reservation_rollback() -> void:
 
 	game_root.free()
 	await process_frame
+
 
 	# 4. Failed immediate stock receipt in PLANNING releases reservation and leaves cash untouched.
 	var root_fail := GameRoot.new()
@@ -495,7 +499,7 @@ func _test_settlement_keys_and_phase_guards() -> void:
 	)
 
 	# Drain to RESULTS and verify all 18 DaySettlementView keys and values.
-	service._day_queue_remaining = 0
+	_force_empty_service(service)
 	game_root.request_close_if_drained()
 	_check("service closed to RESULTS", game_root.get_phase() == SharedTypes.Phase.RESULTS)
 
@@ -534,6 +538,7 @@ func _test_settlement_keys_and_phase_guards() -> void:
 	await process_frame
 
 
+
 func _test_same_tick_delivery_precedes_close() -> void:
 	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
 	var game_root := packed.instantiate() as GameRoot
@@ -552,7 +557,7 @@ func _test_same_tick_delivery_precedes_close() -> void:
 
 	# Drain service on the exact 100.0s tick when delivery becomes due:
 	# delivery must commit BEFORE close, so refund_total == 0.
-	service._day_queue_remaining = 0
+	_force_empty_service(service)
 	game_root._process(100.0)
 
 	var settlement := run.get_day_settlement_view(1)
@@ -566,6 +571,7 @@ func _test_same_tick_delivery_precedes_close() -> void:
 
 	game_root.free()
 	await process_frame
+
 
 
 func _test_day_lifecycle_guards_and_day7_extra() -> void:
@@ -620,7 +626,7 @@ func _test_day_lifecycle_guards_and_day7_extra() -> void:
 	)
 
 	# 3. Settlement during CLOSING succeeds.
-	service._day_queue_remaining = 0
+	_force_empty_service(service)
 	game_root.request_close_if_drained()
 	var day1_settlement := run.get_day_settlement_view(1)
 	_check(
@@ -656,7 +662,7 @@ func _test_day_lifecycle_guards_and_day7_extra() -> void:
 	# 8. Advance Days 2-6 to Day 7, win Day 7, and verify Extra Mode transition.
 	for day in range(2, 7):
 		_check("day %d start_service" % day, game_root.start_service_requested())
-		service._day_queue_remaining = 0
+		_force_empty_service(service)
 		game_root.request_close_if_drained()
 		_check("day %d continue to next planning" % day, game_root.request_continue_from_results())
 
@@ -668,7 +674,7 @@ func _test_day_lifecycle_guards_and_day7_extra() -> void:
 			&"nasi_telor",
 			SharedTypes.OrderKind.DINE_IN
 		)
-	service._day_queue_remaining = 0
+	_force_empty_service(service)
 	game_root.request_close_if_drained()
 	_check(
 		"Day 7 closes to FINISHED with WON outcome",
@@ -693,3 +699,16 @@ func _test_day_lifecycle_guards_and_day7_extra() -> void:
 
 	game_root.free()
 	await process_frame
+
+
+func _force_empty_service(service: ServiceController) -> void:
+	service._day_queue_remaining = 0
+	service._outside_dine_in_queue.clear()
+	service._in_shop_dine_in_count = 0
+	service._customers.clear()
+	service._orders.clear()
+	service._online_orders_open.clear()
+	for table: Dictionary in service._tables.values():
+		table["state"] = SharedTypes.TableState.CLEAN_VACANT
+		table["customer_id_or_empty"] = &""
+		table["order_id_or_empty"] = &""

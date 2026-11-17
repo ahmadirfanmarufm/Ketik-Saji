@@ -89,6 +89,7 @@ func _run_all() -> void:
 	_test_work_table_split_targets(world)
 	_test_placement_slots_and_markers(world)
 	_test_visual_only_nodes(world)
+	_test_art_integration_and_driver_visuals(world)
 	_test_interactable_neighbors_and_queries(world)
 	await _test_multi_tile_and_negative_queries(world)
 
@@ -225,6 +226,97 @@ func _test_visual_only_nodes(world: WorldMap) -> void:
 		and world.decorations.get_child_count() == 0
 	)
 	_check("Player cell (6, 4) remains free", world.grid.is_free(Vector2i(6, 4)))
+
+
+func _test_art_integration_and_driver_visuals(world: WorldMap) -> void:
+	_check(
+		"FloorTiles has TileSet and 117 populated cells with nearest filter",
+		world.floor_layer.tile_set != null
+		and world.floor_layer.tile_set.tile_size == Vector2i(32, 32)
+		and world.floor_layer.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
+		and world.floor_layer.get_used_cells().size() == 117
+		and world.floor_layer.get_cell_atlas_coords(Vector2i(5, 2)) == WorldMap.TILE_KITCHEN_FLOOR
+		and world.floor_layer.get_cell_atlas_coords(Vector2i(5, 6)) == WorldMap.TILE_DINING_FLOOR
+	)
+
+	var player_sprite := world.player.get_node_or_null("Visual/Sprite") as Sprite2D
+	_check(
+		"Player sprite uses player.png (16x32) with nearest filter and z_index 1",
+		player_sprite != null
+		and player_sprite.texture != null
+		and player_sprite.texture.resource_path == "res://assets/art/characters/player.png"
+		and player_sprite.texture.get_size() == Vector2(16, 32)
+		and player_sprite.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
+		and world.player.z_index == 1
+	)
+
+	var expected_regions: Dictionary[StringName, Rect2] = {
+		&"storage_box": WorldMap.REGION_STORAGE_BOX,
+		&"stove": WorldMap.REGION_STOVE,
+		&"washer": WorldMap.REGION_WASHER,
+		&"plate_rack": WorldMap.REGION_PLATE_RACK,
+		&"rice_cooker": WorldMap.REGION_RICE_COOKER,
+		&"trash": WorldMap.REGION_TRASH,
+		&"work_table": WorldMap.REGION_WORK_TABLE,
+		&"dining_table_01": WorldMap.REGION_DINING_TABLE,
+		&"dining_table_02": WorldMap.REGION_DINING_TABLE,
+		&"online_station": WorldMap.REGION_ONLINE_STATION,
+	}
+	for fixture_id: StringName in expected_regions:
+		var node := world.registry.get_object(fixture_id)
+		var spr := node.get_node_or_null("Sprite2D") as Sprite2D if node != null else null
+		_check(
+			"fixture sprite integrated " + String(fixture_id),
+			spr != null
+			and spr.texture != null
+			and spr.texture.resource_path == "res://assets/art/tiles/Warung-Tileset.png"
+			and spr.region_enabled
+			and spr.region_rect == expected_regions[fixture_id]
+			and spr.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
+		)
+
+	_check(
+		"WorldMap character textures bound (gojek, pegawai, 7 customer variants)",
+		world.driver_texture != null
+		and world.driver_texture.resource_path == "res://assets/art/characters/npc gojek.png"
+		and world.employee_texture != null
+		and world.employee_texture.resource_path == "res://assets/art/characters/pegawai.png"
+		and world.customer_textures.size() == 7
+		and world.get_customer_texture_by_index(0) != null
+		and world.get_customer_texture_for_id(&"cust_1_01") != null
+	)
+
+	# Verify GoFood driver visual sync for pickup spot and overflow:
+	world.sync_driver_visuals([
+		{
+			"driver_id": &"drv_test_01",
+			"order_id": &"ord_test_01",
+			"state": SharedTypes.DriverState.AT_PICKUP_SPOT,
+			"spot_id_or_empty": &"pickup_spot_01",
+		},
+		{
+			"driver_id": &"drv_test_02",
+			"order_id": &"ord_test_02",
+			"state": SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE,
+			"spot_id_or_empty": &"",
+		},
+	])
+	var spot_drv := world.registry.get_object(&"drv_test_01")
+	_check(
+		"in-spot driver registered as Area2D at pickup_spot_01 with free neighbor (10, 2)",
+		spot_drv is Area2D
+		and spot_drv.position == Vector2(368, 80)
+		and world.get_free_cardinal_neighbors(&"drv_test_01") == [Vector2i(10, 2)]
+		and not world.registry.has_object(&"drv_test_02")
+		and world.driver_objects.get_child_count() == 2
+	)
+	world.sync_driver_visuals([])
+	_check(
+		"clearing driver visuals cleans DriverObjects and WorldRegistry",
+		world.driver_objects.get_child_count() == 0
+		and not world.registry.has_object(&"drv_test_01")
+		and not world.grid.is_occupied(Vector2i(11, 2))
+	)
 
 
 func _test_interactable_neighbors_and_queries(world: WorldMap) -> void:

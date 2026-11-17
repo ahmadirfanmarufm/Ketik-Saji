@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/kitchen/ingredient_def.gd" id="1_ia015"]
 [ext_resource type="Script" path="res://scripts/kitchen/ingredient_transition.gd" id="2_tnnee"]
+[ext_resource type="Texture2D" uid="uid://c0qq0xnaico00" path="res://assets/art/ingredients/rice.png" id="3_rice"]
 
 [sub_resource type="Resource" id="Resource_vdvfl"]
 script = ExtResource("2_tnnee")
@@ -18,4 +19,6 @@ to_state = 2
 script = ExtResource("1_ia015")
 ingredient_id = &"beras"
 display_name = "Beras"
+icon = ExtResource("3_rice")
+cooked_texture = ExtResource("3_rice")
 transitions = Array[ExtResource("2_tnnee")]([SubResource("Resource_vdvfl"), SubResource("Resource_81cap")])

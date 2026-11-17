@@ -49,6 +49,27 @@ const FEEDBACK_LABELS: Dictionary[StringName, String] = {
 	&"out_of_stock": "Bahan habis",
 	&"wrong_order": "Pesanannya beda!",
 	&"invalid_action": "Nggak bisa sekarang",
+	&"item_taken": "Bahan diambil",
+	&"item_washed": "Bahan dicuci",
+	&"plate_washed": "Piring bersih diambil",
+	&"item_cooked": "Bahan digoreng",
+	&"rice_cooked": "Nasi dimasak",
+	&"rice_taken": "Nasi diambil",
+	&"item_chopped": "Bahan dipotong",
+	&"plate_taken": "Piring diambil",
+	&"plate_returned": "Piring dikembalikan",
+	&"no_plates": "Piring habis",
+	&"item_staged": "Ditaruh di meja",
+	&"item_picked_up": "Diambil dari meja",
+	&"item_merged": "Ditambahkan ke piring",
+	&"dish_ready": "Hidangan siap disajikan!",
+	&"invalid_merge": "Tidak bisa digabung",
+	&"cooker_full": "Penanak nasi penuh",
+	&"cooker_empty": "Belum ada nasi",
+	&"item_trashed": "Bahan dibuang",
+	&"order_served": "Pesanan disajikan!",
+	&"order_expired": "Waktu pesanan habis",
+	&"table_cleaned": "Meja dibersihkan",
 }
 
 @export var ui_safe_rect: Rect2 = Rect2(0.0, 0.0, 112.0, 360.0)
@@ -126,9 +147,13 @@ func _process(delta: float) -> void:
 		and is_instance_valid(_game_root)
 		and _game_root.has_method(&"is_serving")
 	):
-		if _game_root.is_serving() and service_elapsed_label != null:
-			var elapsed := float(_game_root.get_service_elapsed())
-			service_elapsed_label.text = "Waktu: %.1f dtk" % elapsed
+		if _game_root.is_serving():
+			if service_elapsed_label != null:
+				var elapsed := float(_game_root.get_service_elapsed())
+				service_elapsed_label.text = "Waktu: %.1f dtk" % elapsed
+			_refresh_dine_in_visuals()
+			if _feedback_text.is_empty() and _is_selected_target_dining_table():
+				_refresh_dialogue()
 
 	if _shake_remaining > 0.0:
 		_shake_remaining = maxf(0.0, _shake_remaining - maxf(0.0, delta))
@@ -314,8 +339,14 @@ func _connect_context_signals() -> void:
 			_kitchen_controller.kitchen_state_changed.connect(_on_kitchen_state_changed)
 
 	if _service_controller != null and is_instance_valid(_service_controller):
+		if not _service_controller.orders_changed.is_connected(_on_orders_changed):
+			_service_controller.orders_changed.connect(_on_orders_changed)
 		if not _service_controller.queues_changed.is_connected(_on_queues_changed):
 			_service_controller.queues_changed.connect(_on_queues_changed)
+		if not _service_controller.tables_changed.is_connected(_on_tables_changed):
+			_service_controller.tables_changed.connect(_on_tables_changed)
+		if not _service_controller.drivers_changed.is_connected(_on_drivers_changed):
+			_service_controller.drivers_changed.connect(_on_drivers_changed)
 
 	if _run_controller != null and is_instance_valid(_run_controller):
 		if not _run_controller.run_state_changed.is_connected(_on_run_state_changed):
@@ -345,8 +376,14 @@ func _disconnect_context_signals() -> void:
 			_kitchen_controller.kitchen_state_changed.disconnect(_on_kitchen_state_changed)
 
 	if _service_controller != null and is_instance_valid(_service_controller):
+		if _service_controller.orders_changed.is_connected(_on_orders_changed):
+			_service_controller.orders_changed.disconnect(_on_orders_changed)
 		if _service_controller.queues_changed.is_connected(_on_queues_changed):
 			_service_controller.queues_changed.disconnect(_on_queues_changed)
+		if _service_controller.tables_changed.is_connected(_on_tables_changed):
+			_service_controller.tables_changed.disconnect(_on_tables_changed)
+		if _service_controller.drivers_changed.is_connected(_on_drivers_changed):
+			_service_controller.drivers_changed.disconnect(_on_drivers_changed)
 
 	if _run_controller != null and is_instance_valid(_run_controller):
 		if _run_controller.run_state_changed.is_connected(_on_run_state_changed):
@@ -400,15 +437,34 @@ func _on_action_feedback(code: StringName) -> void:
 
 
 func _on_kitchen_state_changed() -> void:
+	_refresh_kitchen_visuals()
 	_refresh_dialogue()
 
 
 func _on_queues_changed() -> void:
 	_refresh_hud()
+	_refresh_dine_in_visuals()
+
+
+func _on_orders_changed() -> void:
+	_refresh_dine_in_visuals()
+	if _is_selected_target_dining_table():
+		_refresh_dialogue()
+
+
+func _on_tables_changed() -> void:
+	_refresh_dine_in_visuals()
+	if _is_selected_target_dining_table():
+		_refresh_dialogue()
+
+
+func _on_drivers_changed() -> void:
+	_refresh_driver_visuals()
 
 
 func _on_run_state_changed() -> void:
 	_refresh_hud()
+	_refresh_kitchen_visuals()
 	_refresh_results_panel()
 
 
@@ -424,8 +480,147 @@ func _refresh_all() -> void:
 	if not is_node_ready():
 		return
 	_refresh_hud()
+	_refresh_kitchen_visuals()
+	_refresh_dine_in_visuals()
+	_refresh_driver_visuals()
 	_refresh_dialogue()
 	_refresh_results_panel()
+
+
+func _refresh_kitchen_visuals() -> void:
+	if _world_map == null or not is_instance_valid(_world_map):
+		return
+	if _kitchen_controller == null or not is_instance_valid(_kitchen_controller):
+		return
+
+	var held_view := _kitchen_controller.get_held_item_view()
+	var held_has := not held_view.is_empty()
+	var held_plated: bool = held_has and held_view.get("plate_id", &"") != &""
+	var held_textures := _resolve_item_textures(held_view)
+	var player_visual := _world_map.player as PlayerVisual
+	if player_visual != null:
+		player_visual.sync_held_item_visual(held_has, held_plated, held_textures)
+
+	var table_view := _kitchen_controller.get_work_table_view(&"work_table")
+	var table_has := not table_view.is_empty()
+	var table_plated: bool = table_has and table_view.get("plate_id", &"") != &""
+	var table_textures := _resolve_item_textures(table_view)
+
+	var cooker_view := _kitchen_controller.get_cooker_output_view(&"rice_cooker")
+	var cooker_has := not cooker_view.is_empty()
+	var cooker_textures := _resolve_item_textures(cooker_view)
+	var cooker_tex: Texture2D = cooker_textures[0] if not cooker_textures.is_empty() else null
+
+	var rack_view := _kitchen_controller.get_plate_rack_view(&"plate_rack")
+	var clean_plates := int(rack_view.get("clean_count", 0))
+	var washer_view := _kitchen_controller.get_washer_view()
+	var dirty_plates := int(washer_view.get("dirty_plate_count", 0))
+
+	_world_map.sync_kitchen_visuals(
+		table_has,
+		table_plated,
+		table_textures,
+		cooker_has,
+		cooker_tex,
+		clean_plates,
+		dirty_plates
+	)
+
+
+func _resolve_item_textures(item_view: Dictionary) -> Array[Texture2D]:
+	var result: Array[Texture2D] = []
+	if item_view.is_empty() or _kitchen_controller == null:
+		return result
+	var raw_parts: Variant = item_view.get("parts", [])
+	if not (raw_parts is Array):
+		return result
+	for raw_part: Variant in raw_parts:
+		if not (raw_part is Dictionary):
+			continue
+		var part: Dictionary = raw_part
+		var ing_id := StringName(part.get("ingredient_id", &""))
+		var prep_state := int(part.get("state", 0)) as SharedTypes.PrepState
+		var def := _kitchen_controller.get_ingredient_def(ing_id)
+		result.append(def.get_texture_for_state(prep_state) if def != null else null)
+	return result
+
+
+func _refresh_driver_visuals() -> void:
+	if _world_map == null or not is_instance_valid(_world_map):
+		return
+	if _service_controller == null or not is_instance_valid(_service_controller):
+		return
+	_world_map.sync_driver_visuals(_service_controller.get_driver_views())
+
+
+func _refresh_dine_in_visuals() -> void:
+	if _world_map == null or not is_instance_valid(_world_map):
+		return
+	if _service_controller == null or not is_instance_valid(_service_controller):
+		return
+
+	var customer_views := _service_controller.get_customer_views()
+	var table_views: Array[Dictionary] = []
+	for table_id in _service_controller.get_registered_table_ids():
+		table_views.append(_service_controller.get_table_view(table_id))
+
+	var recipe_names: Dictionary = {}
+	if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
+		for view: Dictionary in customer_views:
+			var recipe_id := StringName(view.get("recipe_id", &""))
+			if recipe_id == &"" or recipe_names.has(recipe_id):
+				continue
+			var def := _kitchen_controller.get_recipe_def(recipe_id)
+			if def != null and not def.display_name.is_empty():
+				recipe_names[recipe_id] = def.display_name
+
+	_world_map.sync_dine_in_visuals(customer_views, table_views, recipe_names)
+
+
+func _is_selected_target_dining_table() -> bool:
+	if (
+		_kitchen_controller == null
+		or not is_instance_valid(_kitchen_controller)
+		or _service_controller == null
+		or not is_instance_valid(_service_controller)
+	):
+		return false
+	var target_id := _kitchen_controller.get_selected_target_id()
+	return target_id != &"" and _service_controller.has_table(target_id)
+
+
+func _format_dining_table_status(table_id: StringName) -> String:
+	if _service_controller == null or not is_instance_valid(_service_controller):
+		return ""
+	if table_id == &"" or not _service_controller.has_table(table_id):
+		return ""
+
+	var table_view := _service_controller.get_table_view(table_id)
+	var state: int = int(table_view.get("state", -1))
+	match state:
+		SharedTypes.TableState.CLEAN_VACANT:
+			return "Meja kosong bersih"
+		SharedTypes.TableState.DIRTY:
+			return "Meja kotor"
+		SharedTypes.TableState.OCCUPIED_WAITING:
+			var order_id := StringName(table_view.get("order_id_or_empty", &""))
+			var order_view := _service_controller.get_order_view(order_id)
+			var recipe_id := StringName(order_view.get("recipe_id", &""))
+			var dish_label: String = String(recipe_id)
+			if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
+				var def := _kitchen_controller.get_recipe_def(recipe_id)
+				if def != null and not def.display_name.is_empty():
+					dish_label = def.display_name
+			var secs: int = ceili(float(order_view.get("seconds_remaining", 0.0)))
+			return "Pesanan: %s (%d dtk)" % [dish_label, secs]
+		SharedTypes.TableState.OCCUPIED_EATING:
+			var cust_id := StringName(table_view.get("customer_id_or_empty", &""))
+			for cview: Dictionary in _service_controller.get_customer_views():
+				if StringName(cview.get("customer_id", &"")) == cust_id:
+					var secs: int = ceili(float(cview.get("eat_seconds_remaining", 0.0)))
+					return "Sedang makan (%d dtk)" % secs
+			return "Sedang makan"
+	return ""
 
 
 func _refresh_hud() -> void:
@@ -551,6 +746,10 @@ func _refresh_dialogue() -> void:
 	if not _feedback_text.is_empty():
 		context_message_label.visible = true
 		context_message_label.text = _feedback_text
+	elif is_serving and selected_id != &"":
+		var table_status := _format_dining_table_status(selected_id)
+		context_message_label.visible = not table_status.is_empty()
+		context_message_label.text = table_status
 	else:
 		context_message_label.visible = false
 		context_message_label.text = ""
