@@ -35,8 +35,11 @@ sources/0 = SubResource("TileSetAtlasSource_warung")
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_station"]
 size = Vector2(28, 28)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_work_target"]
-size = Vector2(12, 26)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_work_stage"]
+size = Vector2(19, 28)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_work_chop"]
+size = Vector2(10, 26)
 
 [node name="RestaurantWorld" type="Node2D" unique_id=678061488]
 texture_filter = 1
@@ -174,20 +177,24 @@ region_enabled = true
 region_rect = Rect2(544, 96, 32, 32)
 
 [node name="StagingTarget" type="Area2D" parent="KitchenWorkTables/WorkTable" unique_id=501000201]
-position = Vector2(-7, 0)
+position = Vector2(-5, 0)
 metadata/world_id = &"work_table_stage"
 metadata/parent_world_id = &"work_table"
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/WorkTable/StagingTarget" unique_id=501000202]
-shape = SubResource("RectangleShape2D_work_target")
+shape = SubResource("RectangleShape2D_work_stage")
 
 [node name="ChoppingTarget" type="Area2D" parent="KitchenWorkTables/WorkTable" unique_id=501000203]
-position = Vector2(7, 0)
+position = Vector2(10, 0)
 metadata/world_id = &"work_table_chop"
 metadata/parent_world_id = &"work_table"
 
+[node name="BoardVisual" type="Polygon2D" parent="KitchenWorkTables/WorkTable/ChoppingTarget" unique_id=501000206]
+polygon = PackedVector2Array(-4, -7, 4, -7, 4, 7, -4, 7)
+color = Color(0.84, 0.71, 0.50, 1)
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/WorkTable/ChoppingTarget" unique_id=501000204]
-shape = SubResource("RectangleShape2D_work_target")
+shape = SubResource("RectangleShape2D_work_chop")
 
 [node name="DiningTables" type="Node2D" parent="." unique_id=1975887348]
 

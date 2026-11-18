@@ -23,6 +23,7 @@ func _init() -> void:
 	await _test_dialogue_display_and_clamping()
 	await _test_m1_kitchen_gameplay_and_visuals()
 	await _test_m1_edge_cases_and_readonly()
+	await _test_worktable_hitboxes_player_movement_and_results_layout()
 	print("SUMMARY fails=%d" % _fails)
 	quit(_fails)
 
@@ -335,6 +336,7 @@ func _test_mouse_input_and_world_offset() -> void:
 		kitchen.get_selected_target_id() == &"storage_box"
 		and kitchen.get_player_tile() == Vector2i(3, 0)
 	)
+	ui.shop_cancel_button.pressed.emit()
 
 	# 4. WorkTable split targets:
 	# WorkTable is at local (208, 80) -> canvas (352, 116).
@@ -583,6 +585,7 @@ func _test_dialogue_display_and_clamping() -> void:
 
 	# Click top-left station storage_box at (224, 52):
 	_send_left_click(ui, Vector2(224, 52))
+	ui.shop_cancel_button.pressed.emit()
 	_check(
 		"dialogue shows Kotak Bahan and 6 ingredient commands",
 		ui.interaction_dialogue.visible
@@ -693,6 +696,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 
 	# Empty storage retrieval fails cleanly.
 	_send_left_click(ui, Vector2(224, 52))
+	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "ayam")
 	_check(
 		"empty ingredient retrieval emits out_of_stock without mutating hand",
@@ -836,6 +840,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 
 	# Retrieve telur from storage_box, verify raw egg texture, attempt invalid chop, fry on stove.
 	_send_left_click(ui, Vector2(224, 52))
+	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "telur")
 	var raw_egg_spr := held_vis.get_node_or_null("PartSprite_0") as Sprite2D
 	_check(
@@ -926,6 +931,7 @@ func _test_m1_edge_cases_and_readonly() -> void:
 
 	# 1. Chopping sayur at work_table_chop + frying at stove -> CHOPPED_AND_COOKED.
 	_send_left_click(ui, Vector2(224, 52))
+	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "sayur")
 	_send_left_click(ui, Vector2(359, 116))
 	_type_word(ui, "potong")
@@ -948,11 +954,13 @@ func _test_m1_edge_cases_and_readonly() -> void:
 
 	# 2. Loose + loose merge rejection without ingredient loss:
 	_send_left_click(ui, Vector2(224, 52))
+	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "telur")
 	_send_left_click(ui, Vector2(288, 52))
 	_type_word(ui, "goreng")
 	_send_left_click(ui, Vector2(345, 116))
 	_send_left_click(ui, Vector2(224, 52))
+	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "beras")
 	_send_left_click(ui, Vector2(345, 116))
 	_check(
@@ -970,6 +978,7 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	_send_left_click(ui, Vector2(480, 52))
 	_type_word(ui, "masak")
 	_send_left_click(ui, Vector2(224, 52))
+	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "beras")
 	_send_left_click(ui, Vector2(352, 52))
 	_type_word(ui, "cuci")
@@ -1007,6 +1016,7 @@ func _test_m1_edge_cases_and_readonly() -> void:
 
 	# Prepare cooked telur and merge FIRST onto staged plate.
 	_send_left_click(ui, Vector2(224, 52))
+	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "telur")
 	# Attempt invalid merge of RAW telur onto staged plate (must reject without losing telur).
 	_send_left_click(ui, Vector2(345, 116))
@@ -1099,3 +1109,133 @@ func _force_empty_service(service: ServiceController) -> void:
 		table["state"] = SharedTypes.TableState.CLEAN_VACANT
 		table["customer_id_or_empty"] = &""
 		table["order_id_or_empty"] = &""
+
+
+func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
+	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
+	var game_root := packed.instantiate() as GameRoot
+	root.add_child(game_root)
+	await process_frame
+	await physics_frame
+
+	var world := game_root.get_node("World") as WorldMap
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var service := game_root.get_service_controller() as ServiceController
+	var run := game_root.get_run_controller() as RunController
+	var ui := game_root.get_node("UI") as GameUI
+	var player_vis := world.player as PlayerVisual
+
+	run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
+	_type_word(ui, "buka")
+
+	# 1. WorkTable center & left area reliably select work_table_stage; cutting board selects chop.
+	var center := Vector2(352, 116)
+	var stage_ok := true
+	for dx in [-12, -7, -2, 0, 4]:
+		_send_left_click(ui, Vector2(320, 180))
+		_send_left_click(ui, center + Vector2(dx, 0))
+		if kitchen.get_selected_target_id() != &"work_table_stage":
+			stage_ok = false
+	var chop_ok := true
+	for dx in [6, 7, 10, 14]:
+		_send_left_click(ui, Vector2(320, 180))
+		_send_left_click(ui, center + Vector2(dx, 0))
+		if kitchen.get_selected_target_id() != &"work_table_chop":
+			chop_ok = false
+	_check("WorkTable staging zone covers left & center without gap or chop overlap", stage_ok)
+	_check("WorkTable chopping board zone selects work_table_chop cleanly", chop_ok)
+
+	# Stage plate via center click, ensure clicking plate center never enters chop mode.
+	_send_left_click(ui, Vector2(416, 52))
+	_send_left_click(ui, center)
+	var staged_vis := world.registry.get_object(&"work_table").get_node_or_null(
+		"StagedVisual"
+	) as Node2D
+	_check(
+		"center click stages plate cleanly inside staging region",
+		kitchen.get_held_item_view().is_empty()
+		and kitchen.get_work_table_view(&"work_table").get("plate_id", &"") != &""
+		and kitchen.get_selected_target_id() == &"work_table_stage"
+		and staged_vis != null
+		and staged_vis.position.is_equal_approx(Vector2(-5, -4))
+	)
+	_send_left_click(ui, Vector2(224, 52))
+	ui.shop_cancel_button.pressed.emit()
+	_type_word(ui, "sayur")
+	_send_left_click(ui, center + Vector2(10, 0))
+	_type_word(ui, "potong")
+	_check(
+		"chopping sayur on cutting board remains functional while plate is staged",
+		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.CHOPPED
+		and kitchen.get_work_table_view(&"work_table").get("plate_id", &"") != &""
+	)
+
+	# 2. Smooth Player movement: authoritative tile immediate, visual animates and redirects safely.
+	_send_left_click(ui, Vector2(320, 180))
+	await process_frame
+	for _i in range(40):
+		if not player_vis.is_moving_visually():
+			break
+		await process_frame
+	var start_pos := player_vis.get_visual_global_position()
+	_send_left_click(ui, Vector2(480, 116))
+	var expected_cell := kitchen.get_player_tile()
+	var mid_pos := player_vis.get_visual_global_position()
+	_check(
+		"player logical tile updates immediately while visual interpolates from previous tile",
+		expected_cell == Vector2i(10, 2)
+		and world.global_to_cell(world.player.global_position) == Vector2i(10, 2)
+		and player_vis.is_moving_visually()
+		and mid_pos.distance_to(start_pos) < mid_pos.distance_to(world.cell_to_global(expected_cell))
+	)
+	# Interrupt mid-flight with a second destination -> single tween redirects without drift.
+	await process_frame
+	_send_left_click(ui, Vector2(224, 180))
+	var next_cell := kitchen.get_player_tile()
+	for _i in range(50):
+		if not player_vis.is_moving_visually():
+			break
+		await process_frame
+	_check(
+		"interrupted player movement settles cleanly at final authoritative destination",
+		next_cell == Vector2i(2, 4)
+		and not player_vis.is_moving_visually()
+		and player_vis.get_visual_global_position().is_equal_approx(world.cell_to_global(next_cell))
+	)
+
+	# 3. Day Result UI layout fits inside 640x360 viewport with unclipped clickable ContinueButton.
+	_force_empty_service(service)
+	game_root.request_close_if_drained()
+	await process_frame
+	var vp_rect := ui.get_viewport().get_visible_rect()
+	var panel_rect := ui.day_result_side_panel.get_global_rect()
+	var title_rect := ui.result_title_label.get_global_rect()
+	var summary_rect := ui.settlement_summary_label.get_global_rect()
+	var cont_rect := ui.continue_button.get_global_rect()
+	_check(
+		"Day 1 Result UI keeps stats readable and ContinueButton unclipped inside viewport",
+		game_root.get_phase() == SharedTypes.Phase.RESULTS
+		and ui.day_result_side_panel.visible
+		and vp_rect.encloses(panel_rect)
+		and vp_rect.encloses(cont_rect)
+		and ui.result_title_label.is_visible_in_tree()
+		and ui.settlement_summary_label.is_visible_in_tree()
+		and ui.settlement_summary_label.text.contains("Kas Awal:")
+		and ui.settlement_summary_label.text.contains("Perkiraan Besok:")
+		and ui.continue_button.is_visible_in_tree()
+		and not ui.continue_button.disabled
+		and not cont_rect.intersects(title_rect)
+		and summary_rect.position.y >= title_rect.end.y - 1.0
+		and cont_rect.position.y > ui.settlement_summary_label.get_parent().get_global_rect().position.y
+	)
+	_send_left_click(ui, cont_rect.get_center())
+	await process_frame
+	_check(
+		"clicking visible ContinueButton advances cleanly to Day 2 PLANNING",
+		game_root.get_phase() == SharedTypes.Phase.PLANNING
+		and game_root.get_day_index() == 2
+		and not ui.day_result_side_panel.visible
+	)
+
+	game_root.free()
+	await process_frame

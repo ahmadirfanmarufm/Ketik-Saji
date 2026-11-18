@@ -31,6 +31,7 @@ func _init() -> void:
 	await _test_overflow_beyond_four_anchors_and_seated_timeout_visual()
 	await _test_catchup_tick_and_outside_queue_expiry()
 	await _test_credit_order_failure_diagnostic()
+	await _test_smooth_npc_movement_and_reset_cleanup()
 	print("SUMMARY fails=%d" % _fails)
 	quit(_fails)
 
@@ -60,6 +61,8 @@ func _select_world_target(ui: GameUI, world: WorldMap, target_id: StringName) ->
 	ev.button_index = MOUSE_BUTTON_LEFT
 	ev.position = canvas_pos
 	ui._unhandled_input(ev)
+	if ui.has_method(&"is_ingredient_shop_open") and ui.is_ingredient_shop_open():
+		ui.shop_cancel_button.pressed.emit()
 
 
 func _cook_plated_nasi_telor(ui: GameUI, world: WorldMap) -> void:
@@ -812,6 +815,88 @@ func _test_credit_order_failure_diagnostic() -> void:
 		== SharedTypes.OrderStatus.COMPLETED
 		and service._last_invariant_error.contains("ord_d1_001")
 		and service._last_invariant_error.contains("nasi_telor")
+	)
+
+	game_root.free()
+	await process_frame
+
+
+func _test_smooth_npc_movement_and_reset_cleanup() -> void:
+	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
+	var game_root := packed.instantiate() as GameRoot
+	root.add_child(game_root)
+	await process_frame
+	await physics_frame
+
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var service := game_root.get_service_controller() as ServiceController
+	var run := game_root.get_run_controller() as RunController
+	var ui := game_root.get_node("UI") as GameUI
+	var world := game_root.get_node("World") as WorldMap
+
+	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
+	run.request_ingredient_purchase(&"telur", 2, &"storage_box")
+	game_root.start_service_requested()
+	# Advance 40s so C1, C2 are seated and C3 spawns at WaitingAnchor01 (outside FIFO).
+	game_root._process(40.0)
+	ui._process(0.016)
+	var a1 := world.registry.get_object(&"dine_in_wait_01")
+	var c3_id := &"cust_d1_003"
+	var c3_node := world.get_customer_visual_node(c3_id)
+	_check(
+		"waiting NPC starts smoothly anchored at dine_in_wait_01",
+		c3_node != null
+		and c3_node.global_position.is_equal_approx(a1.global_position)
+		and not world.is_customer_moving_visually(c3_id)
+	)
+
+	# Serve C1 at table 1, let eat 20s -> table 1 DIRTY & C1 departs with smooth exit visual.
+	_cook_plated_nasi_telor(ui, world)
+	_select_world_target(ui, world, &"dining_table_01")
+	_type_word(ui, "saji")
+	game_root._process(20.0)
+	ui._process(0.016)
+	_check(
+		"leaving customer triggers non-blocking departing visual while keeping logical lookup null",
+		world.get_customer_visual_node(&"cust_d1_001") == null
+		and world.get_departing_visual_count() == 1
+	)
+
+	# Clean table 1 -> C3 promotes from WaitingAnchor01 to dining_table_01 smoothly!
+	_select_world_target(ui, world, &"dining_table_01")
+	_type_word(ui, "bersihkan")
+	ui._process(0.016)
+	var t1_node := world.registry.get_object(&"dining_table_01")
+	var expected_table_global := t1_node.global_position + Vector2(0, -12)
+	_check(
+		"promoted customer updates authoritative position immediately and starts move tween",
+		c3_node != null
+		and c3_node.global_position.is_equal_approx(expected_table_global)
+		and world.is_customer_moving_visually(c3_id)
+		and world.get_customer_visual_global_position(c3_id).distance_to(a1.global_position) < 20.0
+	)
+
+	# Wait for tween completion (driving process frames until tween stops, no infinite wait).
+	for _i in range(60):
+		if not world.is_customer_moving_visually(c3_id) and world.get_departing_visual_count() == 0:
+			break
+		await process_frame
+	_check(
+		"customer visual settles at dining table and departing visual self-cleans",
+		not world.is_customer_moving_visually(c3_id)
+		and world.get_customer_visual_global_position(c3_id).is_equal_approx(expected_table_global)
+		and world.get_departing_visual_count() == 0
+	)
+
+	# Force close / timeout -> day reset clears all customer visuals and departing tweens cleanly.
+	game_root._process(200.0)
+	ui._process(0.016)
+	_check(
+		"day reset after close clears all customer visuals and departing tweens cleanly",
+		game_root.get_phase() == SharedTypes.Phase.RESULTS
+		and world.get_departing_visual_count() == 0
+		and world.dine_in_waiting_anchors.get_child_count() == 4
+		and not world.is_customer_moving_visually(c3_id)
 	)
 
 	game_root.free()

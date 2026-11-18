@@ -83,7 +83,13 @@ var _cleanup_callables: Dictionary[StringName, Callable] = {}
 var _driver_visual_nodes: Dictionary[StringName, Node2D] = {}
 var _driver_visual_states: Dictionary[StringName, int] = {}
 var _driver_visual_spots: Dictionary[StringName, StringName] = {}
+var _driver_target_positions: Dictionary[StringName, Vector2] = {}
+var _driver_tweens: Dictionary[StringName, Tween] = {}
 var _customer_visual_nodes: Dictionary[StringName, Node2D] = {}
+var _customer_target_positions: Dictionary[StringName, Vector2] = {}
+var _customer_tweens: Dictionary[StringName, Tween] = {}
+var _departing_visuals: Array[Node2D] = []
+var _departing_tweens: Array[Tween] = []
 var _last_online_preview_key: String = ""
 
 @onready var floor_layer: TileMapLayer = $FloorTiles
@@ -124,8 +130,13 @@ func _ready() -> void:
 	queue_redraw()
 
 
+func _exit_tree() -> void:
+	_clear_all_visual_tweens()
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE:
+		_clear_all_visual_tweens()
 		_disconnect_all_cleanups()
 
 
@@ -352,7 +363,7 @@ func sync_kitchen_visuals(
 			staged_vis = Node2D.new()
 			staged_vis.name = "StagedVisual"
 			staged_vis.z_index = 1
-			staged_vis.position = Vector2(0, -4)
+			staged_vis.position = Vector2(-5, -4)
 			staged_vis.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 			table_node.add_child(staged_vis)
 		sync_food_item_visual(
@@ -402,6 +413,90 @@ func sync_kitchen_visuals(
 			washer_sprite.region_rect = (
 				REGION_WASHER_FILLED if washer_dirty_count > 0 else REGION_WASHER
 			)
+
+
+## Updates live pending-delivery countdown badges on destination storage stations.
+func sync_storage_delivery_visuals(pending_by_unit: Dictionary) -> void:
+	if registry == null:
+		return
+	for unit_id in registry.get_ids():
+		var unit_node := registry.get_object(unit_id)
+		if unit_node == null or not is_instance_valid(unit_node):
+			continue
+		var has_pending := pending_by_unit.has(unit_id)
+		var badge := unit_node.get_node_or_null("DeliveryPendingLabel") as Label
+		if badge == null and not has_pending:
+			continue
+		if badge == null:
+			badge = Label.new()
+			badge.name = "DeliveryPendingLabel"
+			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			badge.z_index = 2
+			badge.position = Vector2(-20, -20)
+			badge.custom_minimum_size = Vector2(40, 12)
+			badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			badge.add_theme_font_size_override("font_size", 7)
+			badge.modulate = Color(1.0, 0.88, 0.35, 1.0)
+			unit_node.add_child(badge)
+		badge.visible = has_pending
+		if has_pending:
+			var secs := maxi(0, ceili(float(pending_by_unit[unit_id])))
+			badge.text = "Kirim %ds" % secs
+
+
+## Synchronizes visuals for dynamically placed plate racks and rice cookers.
+func sync_extra_kitchen_visuals(cooker_views: Dictionary, rack_views: Dictionary) -> void:
+	if registry == null:
+		return
+	for rack_id: StringName in rack_views:
+		if rack_id == &"plate_rack":
+			continue
+		var rack_node := registry.get_object(rack_id)
+		if rack_node == null:
+			continue
+		var raw_rack: Variant = rack_views[rack_id]
+		var clean_count := 0
+		if raw_rack is Dictionary:
+			clean_count = int((raw_rack as Dictionary).get("clean_count", 0))
+		else:
+			clean_count = int(raw_rack)
+		var rack_sprite := rack_node.get_node_or_null("Sprite2D") as Sprite2D
+		if rack_sprite != null:
+			rack_sprite.modulate = (
+				Color.WHITE if clean_count > 0 else Color(0.65, 0.65, 0.65, 1.0)
+			)
+		var count_label := rack_node.get_node_or_null("PlateCountLabel") as Label
+		if count_label == null:
+			count_label = Label.new()
+			count_label.name = "PlateCountLabel"
+			count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			count_label.z_index = 2
+			count_label.position = Vector2(6, -18)
+			count_label.add_theme_font_size_override("font_size", 8)
+			rack_node.add_child(count_label)
+		count_label.text = str(clean_count)
+
+	for cooker_id: StringName in cooker_views:
+		if cooker_id == &"rice_cooker":
+			continue
+		var cooker_node := registry.get_object(cooker_id)
+		if cooker_node == null:
+			continue
+		var info: Dictionary = cooker_views[cooker_id]
+		var has_out := bool(info.get("has_output", false))
+		var tex := info.get("texture", null) as Texture2D
+		var cooker_vis := cooker_node.get_node_or_null("CookerOutputVisual") as Node2D
+		if cooker_vis == null:
+			cooker_vis = Node2D.new()
+			cooker_vis.name = "CookerOutputVisual"
+			cooker_vis.z_index = 2
+			cooker_vis.position = Vector2(0, -20)
+			cooker_vis.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			cooker_node.add_child(cooker_vis)
+		var textures: Array[Texture2D] = []
+		if has_out:
+			textures.append(tex)
+		sync_food_item_visual(cooker_vis, has_out, false, textures)
 
 
 ## Synchronizes passive OnlineStation preview dish and availability tint from
@@ -504,6 +599,205 @@ func hit_test_overflow_driver(world_global_pos: Vector2) -> StringName:
 	return &""
 
 
+## Hit-tests unoccupied PlacementSlot markers in world global coordinates.
+func hit_test_placement_slot(world_global_pos: Vector2) -> StringName:
+	if placement_slots == null or grid == null:
+		return &""
+	for child in placement_slots.get_children():
+		var slot_node := child as Node2D
+		if slot_node == null or not is_instance_valid(slot_node):
+			continue
+		var slot_id := StringName(slot_node.get_meta(SLOT_ID_META, &""))
+		if slot_id == &"":
+			slot_id = StringName(slot_node.get_meta(WORLD_ID_META, &""))
+		if slot_id == &"":
+			continue
+		var cells := _build_node_footprint(slot_node)
+		var occupied := false
+		for cell in cells:
+			if grid.is_occupied(cell):
+				occupied = true
+				break
+		if occupied:
+			continue
+		var fp_size: Vector2i = slot_node.get_meta(FOOTPRINT_SIZE_META, Vector2i.ONE)
+		var half_size := Vector2(fp_size * tile_size) * 0.5
+		var local_pt := slot_node.to_local(world_global_pos)
+		if Rect2(-half_size, half_size * 2.0).has_point(local_pt):
+			return slot_id
+	return &""
+
+
+func get_placement_slot_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	if placement_slots == null:
+		return ids
+	for child in placement_slots.get_children():
+		var slot_node := child as Node2D
+		if slot_node == null:
+			continue
+		var slot_id := StringName(slot_node.get_meta(SLOT_ID_META, &""))
+		if slot_id == &"":
+			slot_id = StringName(slot_node.get_meta(WORLD_ID_META, &""))
+		if slot_id != &"" and not ids.has(slot_id):
+			ids.append(slot_id)
+	ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+	return ids
+
+
+func get_placement_slot_view(slot_id: StringName) -> Dictionary:
+	if slot_id == &"" or registry == null or grid == null:
+		return {}
+	var slot_node := registry.get_object(slot_id)
+	if slot_node == null or not slot_node.has_meta(SLOT_ID_META):
+		return {}
+	var raw_allowed: PackedInt32Array = slot_node.get_meta(
+		ALLOWED_FIXTURE_KINDS_META,
+		PackedInt32Array()
+	)
+	var allowed_kinds: Array[int] = []
+	for k in raw_allowed:
+		allowed_kinds.append(int(k))
+	var fp_size: Vector2i = slot_node.get_meta(FOOTPRINT_SIZE_META, Vector2i.ONE)
+	var cells := _build_node_footprint(slot_node)
+	var occupied := false
+	for cell in cells:
+		if not grid.is_in_bounds(cell) or grid.is_occupied(cell):
+			occupied = true
+			break
+	return {
+		"slot_id": slot_id,
+		"allowed_fixture_kinds": allowed_kinds,
+		"footprint_size": fp_size,
+		"cells": cells,
+		"occupied": occupied,
+		"global_position": slot_node.global_position,
+	}
+
+
+## Spawns and registers a physical placed fixture Area2D into KitchenStations or DiningTables.
+func spawn_placed_fixture(
+	instance_id: StringName,
+	fixture_kind: int,
+	slot_id: StringName,
+	footprint_size: Vector2i
+) -> Node2D:
+	if instance_id == &"" or slot_id == &"" or registry == null or grid == null:
+		return null
+	if registry.has_object(instance_id):
+		return null
+	var slot_node := registry.get_object(slot_id)
+	if slot_node == null or not slot_node.has_meta(SLOT_ID_META):
+		return null
+	var container := (
+		dining_tables
+		if fixture_kind == SharedTypes.FixtureKind.DINING_TABLE
+		else kitchen_stations
+	)
+	if container == null:
+		return null
+
+	var area := Area2D.new()
+	area.name = String(instance_id)
+	area.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	area.position = container.to_local(slot_node.global_position)
+	area.set_meta(WORLD_ID_META, instance_id)
+	area.set_meta(FOOTPRINT_SIZE_META, footprint_size)
+	area.set_meta(SLOT_ID_META, slot_id)
+
+	var region := get_fixture_region_rect(fixture_kind)
+	var sprite := Sprite2D.new()
+	sprite.name = "Sprite2D"
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.texture = load("res://assets/art/tiles/Warung-Tileset.png") as Texture2D
+	if region.size != Vector2.ZERO:
+		sprite.region_enabled = true
+		sprite.region_rect = region
+		if region.size.y > float(tile_size.y):
+			sprite.offset = Vector2(0.0, -0.5 * (region.size.y - float(tile_size.y)))
+	area.add_child(sprite)
+
+	var shape_node := CollisionShape2D.new()
+	shape_node.name = "CollisionShape2D"
+	var rect_shape := RectangleShape2D.new()
+	rect_shape.size = Vector2(footprint_size * tile_size) - Vector2(4.0, 4.0)
+	shape_node.shape = rect_shape
+	area.add_child(shape_node)
+
+	container.add_child(area)
+	var cells := _build_node_footprint(area)
+	if cells.is_empty() or not register_object(instance_id, area, cells):
+		container.remove_child(area)
+		area.free()
+		return null
+	return area
+
+
+func remove_placed_fixture(instance_id: StringName) -> bool:
+	if instance_id == &"" or registry == null:
+		return false
+	var node := registry.get_object(instance_id)
+	if node == null:
+		return false
+	unregister_object(instance_id)
+	if is_instance_valid(node):
+		if node.get_parent() != null:
+			node.get_parent().remove_child(node)
+		node.free()
+	return true
+
+
+func sync_placement_slot_visuals(
+	show_planning_slots: bool,
+	occupied_slot_ids: Array[StringName] = []
+) -> void:
+	if placement_slots == null:
+		return
+	for child in placement_slots.get_children():
+		var slot_node := child as Node2D
+		if slot_node == null or not is_instance_valid(slot_node):
+			continue
+		var slot_id := StringName(slot_node.get_meta(SLOT_ID_META, &""))
+		if slot_id == &"":
+			slot_id = StringName(slot_node.get_meta(WORLD_ID_META, &""))
+		var is_occ := occupied_slot_ids.has(slot_id)
+		if not is_occ and grid != null:
+			for c in _build_node_footprint(slot_node):
+				if grid.is_occupied(c):
+					is_occ = true
+					break
+		var show_ind := show_planning_slots and not is_occ
+		var ind := slot_node.get_node_or_null("SlotIndicator") as Node2D
+		if ind == null and not show_ind:
+			continue
+		if ind == null:
+			ind = Node2D.new()
+			ind.name = "SlotIndicator"
+			ind.z_index = 1
+			var outline := Polygon2D.new()
+			outline.name = "SlotFill"
+			outline.polygon = PackedVector2Array([
+				Vector2(-13, -13),
+				Vector2(13, -13),
+				Vector2(13, 13),
+				Vector2(-13, 13),
+			])
+			outline.color = Color(0.32, 0.85, 0.52, 0.28)
+			ind.add_child(outline)
+			var lbl := Label.new()
+			lbl.name = "SlotLabel"
+			lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			lbl.position = Vector2(-14, -8)
+			lbl.custom_minimum_size = Vector2(28, 16)
+			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			lbl.add_theme_font_size_override("font_size", 8)
+			lbl.modulate = Color(0.75, 1.0, 0.82, 0.95)
+			lbl.text = "+Alat" if String(slot_id).contains("utility") else "+Meja"
+			ind.add_child(lbl)
+			slot_node.add_child(ind)
+		ind.visible = show_ind
+
+
 func get_driver_visual_node(driver_id: StringName) -> Node2D:
 	return _driver_visual_nodes.get(driver_id, null)
 
@@ -526,7 +820,10 @@ func sync_driver_visuals(
 	var existing_ids := _driver_visual_nodes.keys()
 	for old_id: StringName in existing_ids:
 		if not seen_ids.has(old_id):
-			_remove_driver_visual(old_id)
+			_remove_driver_visual(old_id, not driver_views.is_empty())
+
+	if driver_views.is_empty() and _customer_visual_nodes.is_empty():
+		_clear_departing_visuals()
 
 	var overflow_index := 0
 	for view: Dictionary in driver_views:
@@ -682,7 +979,14 @@ func _sync_in_spot_driver_visual(
 		return
 
 	var area := _ensure_driver_visual_node(driver_id)
-	area.position = spot_node.position
+	_move_npc_host(
+		area,
+		driver_id,
+		spot_node.position,
+		_driver_target_positions,
+		_driver_tweens,
+		_get_driver_child_bases()
+	)
 
 	var prev_state := int(_driver_visual_states.get(driver_id, -1))
 	var prev_spot := StringName(_driver_visual_spots.get(driver_id, &""))
@@ -718,20 +1022,31 @@ func _sync_overflow_driver_visual(
 		unregister_object(driver_id)
 
 	var area := _ensure_driver_visual_node(driver_id)
-	area.position = target_pos
+	_move_npc_host(
+		area,
+		driver_id,
+		target_pos,
+		_driver_target_positions,
+		_driver_tweens,
+		_get_driver_child_bases()
+	)
 	_driver_visual_states[driver_id] = SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE
 	_driver_visual_spots[driver_id] = &""
 	_update_driver_visual_badge(area, view, recipe_names, false)
 
 
-func _remove_driver_visual(driver_id: StringName) -> void:
+func _remove_driver_visual(driver_id: StringName, animate_exit: bool = false) -> void:
 	if registry != null and registry.has_object(driver_id):
 		unregister_object(driver_id)
 	var node: Node2D = _driver_visual_nodes.get(driver_id, null)
+	_kill_npc_tween(_driver_tweens, driver_id)
+	_driver_target_positions.erase(driver_id)
 	_driver_visual_nodes.erase(driver_id)
 	_driver_visual_states.erase(driver_id)
 	_driver_visual_spots.erase(driver_id)
 	if node != null and is_instance_valid(node):
+		if animate_exit:
+			_spawn_departing_visual(node, Vector2(22, 10))
 		if node.get_parent() != null:
 			node.get_parent().remove_child(node)
 		node.free()
@@ -756,6 +1071,44 @@ func get_customer_visual_node(customer_id: StringName) -> Node2D:
 	return _customer_visual_nodes.get(customer_id, null)
 
 
+func is_customer_moving_visually(customer_id: StringName) -> bool:
+	var t: Tween = _customer_tweens.get(customer_id, null)
+	return t != null and t.is_valid() and t.is_running()
+
+
+func get_customer_visual_global_position(customer_id: StringName) -> Vector2:
+	var node: Node2D = _customer_visual_nodes.get(customer_id, null)
+	if node == null or not is_instance_valid(node):
+		return Vector2.ZERO
+	var sprite_node := _find_host_visual_sprite(node)
+	if sprite_node != null:
+		return sprite_node.global_position
+	return node.global_position
+
+
+func is_driver_moving_visually(driver_id: StringName) -> bool:
+	var t: Tween = _driver_tweens.get(driver_id, null)
+	return t != null and t.is_valid() and t.is_running()
+
+
+func get_driver_visual_global_position(driver_id: StringName) -> Vector2:
+	var node: Node2D = _driver_visual_nodes.get(driver_id, null)
+	if node == null or not is_instance_valid(node):
+		return Vector2.ZERO
+	var sprite_node := _find_host_visual_sprite(node)
+	if sprite_node != null:
+		return sprite_node.global_position
+	return node.global_position
+
+
+func get_departing_visual_count() -> int:
+	var active := 0
+	for vis in _departing_visuals:
+		if vis != null and is_instance_valid(vis):
+			active += 1
+	return active
+
+
 func _sync_customer_visuals(
 	customer_views: Array[Dictionary],
 	recipe_names: Dictionary
@@ -770,13 +1123,25 @@ func _sync_customer_visuals(
 		var marker := _ensure_customer_visual_node(customer_id)
 		if marker == null:
 			continue
-		marker.position = _resolve_customer_visual_position(view)
+		var target_pos := _resolve_customer_visual_position(view)
+		_move_npc_host(
+			marker,
+			customer_id,
+			target_pos,
+			_customer_target_positions,
+			_customer_tweens,
+			_get_customer_child_bases()
+		)
 		_update_customer_visual_badge(marker, view, recipe_names)
 
+	var active_left := not seen_ids.is_empty()
 	var existing_ids := _customer_visual_nodes.keys()
 	for old_id: StringName in existing_ids:
 		if not seen_ids.has(old_id):
-			_remove_customer_visual(old_id)
+			_remove_customer_visual(old_id, active_left)
+
+	if not active_left and _driver_visual_nodes.is_empty():
+		_clear_departing_visuals()
 
 
 func _ensure_customer_visual_node(customer_id: StringName) -> Node2D:
@@ -895,13 +1260,162 @@ func _update_customer_visual_badge(
 		bar_fill.size = Vector2(28.0 * ratio, 3.0)
 
 
-func _remove_customer_visual(customer_id: StringName) -> void:
+func _remove_customer_visual(customer_id: StringName, animate_exit: bool = false) -> void:
 	var node: Node2D = _customer_visual_nodes.get(customer_id, null)
+	_kill_npc_tween(_customer_tweens, customer_id)
+	_customer_target_positions.erase(customer_id)
 	_customer_visual_nodes.erase(customer_id)
 	if node != null and is_instance_valid(node):
+		if animate_exit:
+			_spawn_departing_visual(node, Vector2(-20, 12))
 		if node.get_parent() != null:
 			node.get_parent().remove_child(node)
 		node.free()
+
+
+func _get_customer_child_bases() -> Dictionary:
+	return {
+		"Sprite2D": Vector2.ZERO,
+		"FallbackBody": Vector2.ZERO,
+		"TimerBg": Vector2(-14, -22),
+		"StatusLabel": Vector2(-24, -34),
+	}
+
+
+func _get_driver_child_bases() -> Dictionary:
+	return {
+		"Sprite2D": Vector2.ZERO,
+		"TimerBg": Vector2(-14, -19),
+		"StatusLabel": Vector2(-28, -31),
+	}
+
+
+func _find_host_visual_sprite(host: Node2D) -> Node2D:
+	var spr := host.get_node_or_null("Sprite2D") as Node2D
+	if spr != null:
+		return spr
+	return host.get_node_or_null("FallbackBody") as Node2D
+
+
+func _move_npc_host(
+	host: Node2D,
+	entity_id: StringName,
+	target_pos: Vector2,
+	target_map: Dictionary,
+	tween_map: Dictionary,
+	child_bases: Dictionary
+) -> void:
+	if not target_map.has(entity_id):
+		host.position = target_pos
+		target_map[entity_id] = target_pos
+		return
+
+	var prev_target: Vector2 = target_map[entity_id]
+	if prev_target.is_equal_approx(target_pos):
+		return
+
+	var sprite_node := _find_host_visual_sprite(host)
+	var cur_child_offset := sprite_node.position if sprite_node != null else Vector2.ZERO
+	var visual_offset := (prev_target + cur_child_offset) - target_pos
+
+	_kill_npc_tween(tween_map, entity_id)
+	host.position = target_pos
+	target_map[entity_id] = target_pos
+
+	if not host.is_inside_tree() or visual_offset.length() < 1.0:
+		for child_name: String in child_bases:
+			var child := host.get_node_or_null(child_name)
+			if child != null:
+				child.set("position", child_bases[child_name])
+		return
+
+	var duration := clampf(0.10 + visual_offset.length() / 320.0, 0.14, 0.30)
+	var tween := host.create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.set_ease(Tween.EASE_OUT)
+	tween_map[entity_id] = tween
+
+	for child_name: String in child_bases:
+		var child := host.get_node_or_null(child_name)
+		if child == null:
+			continue
+		var base_pos: Vector2 = child_bases[child_name]
+		child.set("position", base_pos + visual_offset)
+		tween.tween_property(child, "position", base_pos, duration)
+
+
+func _spawn_departing_visual(source_host: Node2D, exit_delta: Vector2) -> void:
+	if decorations == null or not is_inside_tree():
+		return
+	var source_sprite := _find_host_visual_sprite(source_host)
+	if source_sprite == null:
+		return
+
+	var ghost := Node2D.new()
+	ghost.name = "DepartingVisual_%d" % _departing_visuals.size()
+	ghost.z_index = source_host.z_index
+	ghost.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ghost.position = decorations.to_local(source_sprite.global_position)
+
+	if source_sprite is Sprite2D:
+		var spr_copy := Sprite2D.new()
+		spr_copy.texture = (source_sprite as Sprite2D).texture
+		spr_copy.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		ghost.add_child(spr_copy)
+	elif source_sprite is Polygon2D:
+		var poly_copy := Polygon2D.new()
+		poly_copy.polygon = (source_sprite as Polygon2D).polygon
+		poly_copy.color = (source_sprite as Polygon2D).color
+		ghost.add_child(poly_copy)
+
+	decorations.add_child(ghost)
+	_departing_visuals.append(ghost)
+
+	var tween := ghost.create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_QUAD)
+	tween.set_ease(Tween.EASE_IN)
+	tween.tween_property(ghost, "position", ghost.position + exit_delta, 0.22)
+	tween.tween_property(ghost, "modulate:a", 0.0, 0.22)
+	_departing_tweens.append(tween)
+	tween.finished.connect(
+		func() -> void:
+			_departing_tweens.erase(tween)
+			_departing_visuals.erase(ghost)
+			if is_instance_valid(ghost):
+				if ghost.get_parent() != null:
+					ghost.get_parent().remove_child(ghost)
+				ghost.free()
+	)
+
+
+func _kill_npc_tween(tween_map: Dictionary, entity_id: StringName) -> void:
+	var t: Tween = tween_map.get(entity_id, null)
+	tween_map.erase(entity_id)
+	if t != null and t.is_valid():
+		t.kill()
+
+
+func _clear_departing_visuals() -> void:
+	for t in _departing_tweens:
+		if t != null and t.is_valid():
+			t.kill()
+	_departing_tweens.clear()
+	for ghost in _departing_visuals:
+		if ghost != null and is_instance_valid(ghost):
+			if ghost.get_parent() != null:
+				ghost.get_parent().remove_child(ghost)
+			ghost.free()
+	_departing_visuals.clear()
+
+
+func _clear_all_visual_tweens() -> void:
+	for cid: StringName in _customer_tweens.keys():
+		_kill_npc_tween(_customer_tweens, cid)
+	for did: StringName in _driver_tweens.keys():
+		_kill_npc_tween(_driver_tweens, did)
+	_clear_departing_visuals()
 
 
 func _sync_dining_table_visuals(table_views: Array[Dictionary]) -> void:

@@ -10,8 +10,6 @@ layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_right = 640.0
-offset_bottom = 360.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -75,6 +73,13 @@ layout_mode = 2
 focus_mode = 2
 mouse_filter = 0
 text = "Edit Menu"
+clip_text = true
+
+[node name="FixtureShopButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+text = "Beli Alat"
 clip_text = true
 
 [node name="StartHintLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
@@ -166,11 +171,13 @@ mouse_filter = 2
 
 [node name="DayResultSidePanel" type="PanelContainer" parent="UIRoot"]
 visible = false
+clip_contents = true
+custom_minimum_size = Vector2(244, 336)
 layout_mode = 0
 offset_left = 384.0
-offset_top = 16.0
+offset_top = 12.0
 offset_right = 628.0
-offset_bottom = 344.0
+offset_bottom = 348.0
 mouse_filter = 0
 
 [node name="ResultColumn" type="VBoxContainer" parent="UIRoot/DayResultSidePanel"]
@@ -182,17 +189,30 @@ layout_mode = 2
 mouse_filter = 2
 text = "Hasil Hari 1"
 
-[node name="SettlementSummaryLabel" type="Label" parent="UIRoot/DayResultSidePanel/ResultColumn"]
+[node name="ResultSummaryScroll" type="ScrollContainer" parent="UIRoot/DayResultSidePanel/ResultColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 0
+horizontal_scroll_mode = 0
+
+[node name="SettlementSummaryLabel" type="Label" parent="UIRoot/DayResultSidePanel/ResultColumn/ResultSummaryScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+autowrap_mode = 3
+
+[node name="ResultFooter" type="VBoxContainer" parent="UIRoot/DayResultSidePanel/ResultColumn"]
 layout_mode = 2
 mouse_filter = 2
 
-[node name="ContinueButton" type="Button" parent="UIRoot/DayResultSidePanel/ResultColumn"]
+[node name="ContinueButton" type="Button" parent="UIRoot/DayResultSidePanel/ResultColumn/ResultFooter"]
 layout_mode = 2
 focus_mode = 2
 mouse_filter = 0
 text = "Lanjut"
 
-[node name="ExtraModeButton" type="Button" parent="UIRoot/DayResultSidePanel/ResultColumn"]
+[node name="ExtraModeButton" type="Button" parent="UIRoot/DayResultSidePanel/ResultColumn/ResultFooter"]
 visible = false
 layout_mode = 2
 focus_mode = 2
@@ -278,3 +298,246 @@ size_flags_horizontal = 3
 focus_mode = 2
 mouse_filter = 0
 text = "Konfirmasi"
+
+[node name="IngredientShopOverlay" type="Control" parent="UIRoot"]
+visible = false
+z_index = 20
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="WorldDimmer" type="ColorRect" parent="UIRoot/IngredientShopOverlay"]
+layout_mode = 0
+offset_left = 112.0
+offset_right = 640.0
+offset_bottom = 360.0
+mouse_filter = 0
+color = Color(0.05, 0.07, 0.11, 0.62)
+
+[node name="IngredientShopPopup" type="PanelContainer" parent="UIRoot/IngredientShopOverlay"]
+custom_minimum_size = Vector2(456, 324)
+layout_mode = 0
+offset_left = 148.0
+offset_top = 18.0
+offset_right = 604.0
+offset_bottom = 342.0
+mouse_filter = 0
+
+[node name="ShopColumn" type="VBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ShopHeaderRow" type="HBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ShopTitleLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopHeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+text = "Belanja Bahan"
+
+[node name="ShopTargetLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopHeaderRow"]
+layout_mode = 2
+mouse_filter = 2
+text = "Kotak Bahan"
+
+[node name="ShopCashLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopHeaderRow"]
+layout_mode = 2
+mouse_filter = 2
+text = "Kas: Rp100000"
+
+[node name="ShopStatusRow" type="HBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ShopCapacityLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopStatusRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+text = "Sisa kapasitas: 15"
+
+[node name="ShopDeliveryHintLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopStatusRow"]
+layout_mode = 2
+mouse_filter = 2
+text = "Tiba langsung"
+
+[node name="ShopSlotsRow" type="HBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ShopPendingLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+mouse_filter = 2
+text = "Tidak ada kiriman tertunda"
+autowrap_mode = 3
+
+[node name="ShopScroll" type="ScrollContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 0
+follow_focus = true
+
+[node name="ShopIngredientList" type="VBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="ShopErrorLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
+visible = false
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+mouse_filter = 2
+autowrap_mode = 3
+
+[node name="ShopFooterRow" type="HBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ShopTotalLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopFooterRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+text = "Total: Rp0"
+
+[node name="ShopRetrieveButton" type="Button" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopFooterRow"]
+visible = false
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+text = "Ambil Bahan"
+
+[node name="ShopCancelButton" type="Button" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopFooterRow"]
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+text = "ga jadi"
+
+[node name="ShopCheckoutButton" type="Button" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopFooterRow"]
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+text = "beli"
+
+[node name="FixtureShopOverlay" type="Control" parent="UIRoot"]
+visible = false
+z_index = 20
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="WorldDimmer" type="ColorRect" parent="UIRoot/FixtureShopOverlay"]
+layout_mode = 0
+offset_left = 112.0
+offset_right = 640.0
+offset_bottom = 360.0
+mouse_filter = 0
+color = Color(0.0588235, 0.0470588, 0.0431373, 0.65)
+
+[node name="FixtureShopPopup" type="PanelContainer" parent="UIRoot/FixtureShopOverlay"]
+clip_contents = true
+layout_mode = 0
+offset_left = 132.0
+offset_top = 14.0
+offset_right = 620.0
+offset_bottom = 346.0
+mouse_filter = 0
+
+[node name="FixtureColumn" type="VBoxContainer" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="FixtureHeaderRow" type="HBoxContainer" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="FixtureTitleLabel" type="Label" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureHeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 12
+text = "Belanja Peralatan"
+clip_text = true
+
+[node name="FixtureCashLabel" type="Label" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureHeaderRow"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Kas: Rp0"
+
+[node name="FixturePowerLabel" type="Label" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureHeaderRow"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Listrik: Rp0/hari"
+
+[node name="FixtureSlotsRow" type="HBoxContainer" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="FixtureScroll" type="ScrollContainer" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 0
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="FixtureList" type="VBoxContainer" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="FixtureErrorLabel" type="Label" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+autowrap_mode = 3
+
+[node name="FixtureFooterRow" type="HBoxContainer" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="FixtureSelectionLabel" type="Label" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureFooterRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Pilih slot & alat"
+clip_text = true
+
+[node name="FixtureCancelButton" type="Button" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureFooterRow"]
+custom_minimum_size = Vector2(56, 24)
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+theme_override_font_sizes/font_size = 11
+text = "ga jadi"
+
+[node name="FixtureConfirmButton" type="Button" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureFooterRow"]
+custom_minimum_size = Vector2(52, 24)
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+theme_override_font_sizes/font_size = 11
+text = "beli"

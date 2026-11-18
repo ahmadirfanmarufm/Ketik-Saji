@@ -97,10 +97,37 @@ func bind_systems(
 	service: ServiceController,
 	game_root: Node = null
 ) -> void:
+	if (
+		_kitchen_controller != null
+		and is_instance_valid(_kitchen_controller)
+		and _kitchen_controller.has_signal(&"kitchen_state_changed")
+		and _kitchen_controller.is_connected(
+			&"kitchen_state_changed",
+			_on_kitchen_state_changed_sync
+		)
+	):
+		_kitchen_controller.disconnect(&"kitchen_state_changed", _on_kitchen_state_changed_sync)
 	_world_map = world_map
 	_kitchen_controller = kitchen
 	_service_controller = service
 	_game_root = game_root
+	if (
+		_kitchen_controller != null
+		and is_instance_valid(_kitchen_controller)
+		and _kitchen_controller.has_signal(&"kitchen_state_changed")
+		and not _kitchen_controller.is_connected(
+			&"kitchen_state_changed",
+			_on_kitchen_state_changed_sync
+		)
+	):
+		_kitchen_controller.connect(&"kitchen_state_changed", _on_kitchen_state_changed_sync)
+
+
+func get_purchase_record(purchase_id: StringName) -> Dictionary:
+	_sync_purchase_ledger_with_kitchen()
+	if not _purchase_ledger.has(purchase_id):
+		return {}
+	return (_purchase_ledger[purchase_id] as Dictionary).duplicate(true)
 
 
 func get_day_index() -> int:
@@ -166,12 +193,208 @@ func select_daily_menu(recipe_ids: Array[StringName]) -> bool:
 	return true
 
 
-func request_fixture_purchase(utility_id: StringName, slot_id: StringName) -> bool:
+func get_utility_def(utility_id: StringName) -> UtilityDef:
+	_ensure_resources_loaded()
+	return _utility_defs.get(utility_id, null) as UtilityDef
+
+
+func get_utility_ids() -> Array[StringName]:
+	_ensure_resources_loaded()
+	var ids: Array[StringName] = []
+	for uid in UTILITY_IDS:
+		if _utility_defs.has(uid):
+			ids.append(uid)
+	for uid: StringName in _utility_defs:
+		if not ids.has(uid):
+			ids.append(uid)
+	return ids
+
+
+func get_fixture_daily_electricity_cost(utility_id: StringName, kind: int = -1) -> int:
+	_ensure_resources_loaded()
+	var def := _utility_defs.get(utility_id, null) as UtilityDef
+	var resolved_kind := kind
+	if resolved_kind < 0 and def != null:
+		resolved_kind = int(def.fixture_kind)
+	if economy_config != null:
+		if resolved_kind == SharedTypes.FixtureKind.FRIDGE:
+			return economy_config.fridge_electricity_per_day
+		if resolved_kind == SharedTypes.FixtureKind.RICE_COOKER:
+			return economy_config.rice_cooker_electricity_per_day
+	if def != null and def.daily_electricity_cost > 0:
+		return def.daily_electricity_cost
+	return 0
+
+
+func get_daily_electricity_estimate() -> int:
+	return _compute_daily_electricity_charge()
+
+
+func get_compatible_empty_slots(utility_id: StringName) -> Array[StringName]:
+	var result: Array[StringName] = []
+	if _world_map == null or not _world_map.has_method(&"get_placement_slot_ids"):
+		return result
+	for slot_id in _world_map.get_placement_slot_ids():
+		var check := can_purchase_fixture(utility_id, slot_id)
+		var reason: StringName = check.get("reason", &"")
+		if bool(check.get("ok", false)) or reason == &"insufficient_cash" or reason == &"not_planning":
+			result.append(slot_id)
+	return result
+
+
+func can_purchase_fixture(utility_id: StringName, slot_id: StringName) -> Dictionary:
+	_ensure_resources_loaded()
+	if not _run_started or economy_config == null:
+		return { "ok": false, "reason": &"not_started" }
+	if utility_id == &"" or not _utility_defs.has(utility_id):
+		return { "ok": false, "reason": &"invalid_utility" }
+	var def := _utility_defs[utility_id] as UtilityDef
+	if def == null or not def.validate().is_empty() or def.purchase_price <= 0:
+		return { "ok": false, "reason": &"invalid_utility" }
+	if slot_id == &"" or _world_map == null or _world_map.registry == null or _world_map.grid == null:
+		return { "ok": false, "reason": &"invalid_slot" }
+
+	var slot_node := _world_map.registry.get_object(slot_id)
+	if slot_node == null or not slot_node.has_meta(WorldMap.SLOT_ID_META):
+		return { "ok": false, "reason": &"invalid_slot" }
+	if StringName(slot_node.get_meta(WorldMap.SLOT_ID_META, &"")) != slot_id:
+		return { "ok": false, "reason": &"invalid_slot" }
+
+	for rec: Dictionary in _fixture_instances.values():
+		if rec.get("slot_id", &"") == slot_id:
+			return { "ok": false, "reason": &"slot_occupied" }
+
+	var slot_fp: Vector2i = slot_node.get_meta(WorldMap.FOOTPRINT_SIZE_META, Vector2i.ONE)
+	if (
+		def.footprint.x <= 0
+		or def.footprint.y <= 0
+		or def.footprint.x > slot_fp.x
+		or def.footprint.y > slot_fp.y
+	):
+		return { "ok": false, "reason": &"invalid_footprint" }
+
+	var origin_cell := _world_map.global_to_cell(slot_node.global_position)
+	var cells: Array[Vector2i] = []
+	for dy in range(def.footprint.y):
+		for dx in range(def.footprint.x):
+			var c := origin_cell + Vector2i(dx, dy)
+			if not _world_map.grid.is_in_bounds(c):
+				return { "ok": false, "reason": &"invalid_footprint" }
+			if _world_map.grid.is_occupied(c):
+				return { "ok": false, "reason": &"slot_occupied" }
+			cells.append(c)
+
+	var allowed: PackedInt32Array = slot_node.get_meta(
+		WorldMap.ALLOWED_FIXTURE_KINDS_META,
+		PackedInt32Array()
+	)
+	var kind_ok := false
+	for k in allowed:
+		if int(k) == int(def.fixture_kind):
+			kind_ok = true
+			break
+	if not kind_ok:
+		return { "ok": false, "reason": &"incompatible_slot" }
+
+	var has_access := false
+	for n in _world_map.grid.get_footprint_neighbors(cells):
+		if _world_map.grid.is_free(n) and not cells.has(n):
+			has_access = true
+			break
+	if not has_access:
+		return { "ok": false, "reason": &"no_cardinal_access" }
+
 	if not _is_planning_phase():
+		return { "ok": false, "reason": &"not_planning" }
+	if _cash < def.purchase_price:
+		return { "ok": false, "reason": &"insufficient_cash" }
+
+	return { "ok": true, "reason": &"ok", "cells": cells }
+
+
+func request_fixture_purchase(utility_id: StringName, slot_id: StringName) -> bool:
+	var check := can_purchase_fixture(utility_id, slot_id)
+	if not bool(check.get("ok", false)):
 		return false
-	if utility_id == &"" or slot_id == &"" or not _utility_defs.has(utility_id):
+
+	var def := _utility_defs[utility_id] as UtilityDef
+	var kind: SharedTypes.FixtureKind = def.fixture_kind
+	var prefix: StringName = (
+		&"dining_table" if kind == SharedTypes.FixtureKind.DINING_TABLE else utility_id
+	)
+	var idx := 1
+	var instance_id := StringName("%s_%02d" % [prefix, idx])
+	while _fixture_instances.has(instance_id) or _world_map.registry.has_object(instance_id):
+		idx += 1
+		instance_id = StringName("%s_%02d" % [prefix, idx])
+
+	var spawned: Node2D = null
+	if _world_map.has_method(&"spawn_placed_fixture"):
+		spawned = _world_map.spawn_placed_fixture(instance_id, int(kind), slot_id, def.footprint)
+	if spawned == null:
 		return false
-	return false
+
+	var registered_ok := false
+	if kind == SharedTypes.FixtureKind.DINING_TABLE:
+		if _service_controller != null:
+			registered_ok = _service_controller.register_table(instance_id)
+	elif kind == SharedTypes.FixtureKind.BOX or kind == SharedTypes.FixtureKind.FRIDGE:
+		if _kitchen_controller != null:
+			registered_ok = _kitchen_controller.register_storage_unit(instance_id, kind)
+	elif kind == SharedTypes.FixtureKind.PLATE_RACK:
+		if _kitchen_controller != null:
+			var rack_plates := (
+				def.plates_per_rack
+				if def.plates_per_rack > 0
+				else economy_config.plates_per_rack
+			)
+			registered_ok = _kitchen_controller.register_plate_rack(instance_id, rack_plates)
+	else:
+		if _kitchen_controller != null and _kitchen_controller.has_method(&"register_fixture_kind"):
+			registered_ok = _kitchen_controller.register_fixture_kind(instance_id, kind)
+
+	if not registered_ok:
+		if _world_map.has_method(&"remove_placed_fixture"):
+			_world_map.remove_placed_fixture(instance_id)
+		return false
+
+	if _kitchen_controller != null:
+		var cells: Array = check.get("cells", [])
+		if cells.has(_kitchen_controller.get_player_tile()):
+			var alt := _world_map.find_nearest_free_neighbor(
+				instance_id,
+				_kitchen_controller.get_player_tile()
+			)
+			if alt != WorldMap.INVALID_CELL:
+				_kitchen_controller.on_floor_clicked(alt)
+
+	_next_purchase_seq += 1
+	var purchase_id := StringName("pur_%d_%04d" % [_day_index, _next_purchase_seq])
+	_cash -= def.purchase_price
+	_fixture_instances[instance_id] = {
+		"instance_id": instance_id,
+		"utility_id": utility_id,
+		"fixture_kind": kind,
+		"slot_id": slot_id,
+		"starter_grant": false,
+		"actual_amount_paid": def.purchase_price,
+	}
+	_purchase_ledger[purchase_id] = {
+		"purchase_id": purchase_id,
+		"day_index": _day_index,
+		"kind": &"FIXTURE",
+		"storage_unit_id": &"",
+		"item_or_fixture_id": utility_id,
+		"fixture_instance_id": instance_id,
+		"slot_id": slot_id,
+		"quantity": 1,
+		"actual_amount_paid": def.purchase_price,
+		"status": &"DELIVERED",
+	}
+	if _kitchen_controller != null:
+		_kitchen_controller.kitchen_state_changed.emit()
+	run_state_changed.emit()
+	return true
 
 
 func request_fixture_sale(fixture_instance_id: StringName) -> bool:
@@ -182,24 +405,157 @@ func request_fixture_sale(fixture_instance_id: StringName) -> bool:
 	return false
 
 
+func request_ingredient_basket_purchase(
+	quantities_by_id: Dictionary,
+	storage_unit_id: StringName
+) -> bool:
+	if not _can_attempt_ingredient_purchase(storage_unit_id):
+		return false
+	if quantities_by_id.is_empty():
+		return false
+
+	var sorted_ids: Array[StringName] = []
+	var clean_items: Dictionary[StringName, int] = {}
+	var total_cost := 0
+	for raw_id: Variant in quantities_by_id.keys():
+		var ingredient_id := StringName(raw_id)
+		var raw_qty: Variant = quantities_by_id[raw_id]
+		if not (raw_qty is int):
+			return false
+		var quantity := int(raw_qty)
+		if ingredient_id == &"" or quantity <= 0:
+			return false
+		var unit_price := economy_config.get_ingredient_price(ingredient_id)
+		if unit_price <= 0:
+			return false
+		if clean_items.has(ingredient_id):
+			return false
+		clean_items[ingredient_id] = quantity
+		sorted_ids.append(ingredient_id)
+		total_cost += unit_price * quantity
+
+	if total_cost <= 0 or total_cost > _cash:
+		return false
+	sorted_ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+
+	if _kitchen_controller.has_method(&"can_receive_stock_basket"):
+		if not _kitchen_controller.can_receive_stock_basket(clean_items, storage_unit_id):
+			return false
+	else:
+		for ingredient_id in sorted_ids:
+			if not _kitchen_controller.can_receive_stock(
+				ingredient_id,
+				clean_items[ingredient_id],
+				storage_unit_id
+			):
+				return false
+
+	var in_serving := _is_serving_phase()
+	var due_at := 0.0
+	if in_serving:
+		var now := 0.0
+		if _game_root != null and _game_root.has_method(&"get_service_elapsed"):
+			now = float(_game_root.get_service_elapsed())
+		due_at = now + economy_config.service_delivery_seconds
+		if due_at < 0.0:
+			return false
+
+	var batch: Array[Dictionary] = []
+	for ingredient_id in sorted_ids:
+		var quantity := clean_items[ingredient_id]
+		_next_purchase_seq += 1
+		var purchase_id := StringName("pur_%d_%04d" % [_day_index, _next_purchase_seq])
+		if not _kitchen_controller.reserve_incoming_capacity(
+			purchase_id,
+			ingredient_id,
+			quantity,
+			storage_unit_id
+		):
+			for prev in batch:
+				_kitchen_controller.release_reserved_capacity(
+					prev["purchase_id"],
+					storage_unit_id
+				)
+			return false
+		var unit_price := economy_config.get_ingredient_price(ingredient_id)
+		batch.append({
+			"purchase_id": purchase_id,
+			"ingredient_id": ingredient_id,
+			"quantity": quantity,
+			"paid": unit_price * quantity,
+		})
+
+	if in_serving:
+		var committed_items: Array[Dictionary] = []
+		for item in batch:
+			var purchase_id: StringName = item["purchase_id"]
+			var ingredient_id: StringName = item["ingredient_id"]
+			var quantity: int = int(item["quantity"])
+			var ok := _kitchen_controller.schedule_delivery(
+				purchase_id,
+				ingredient_id,
+				quantity,
+				storage_unit_id,
+				due_at
+			)
+			if not ok:
+				if _kitchen_controller.has_method(&"rollback_scheduled_delivery"):
+					for done in committed_items:
+						_kitchen_controller.rollback_scheduled_delivery(
+							done["purchase_id"],
+							storage_unit_id
+						)
+				for rem in batch:
+					_kitchen_controller.release_reserved_capacity(
+						rem["purchase_id"],
+						storage_unit_id
+					)
+				return false
+			committed_items.append(item)
+	else:
+		var received_ok := false
+		if _kitchen_controller.has_method(&"receive_stock_basket"):
+			received_ok = _kitchen_controller.receive_stock_basket(batch, storage_unit_id)
+		else:
+			received_ok = batch.size() == 1 and _kitchen_controller.receive_stock(
+				batch[0]["purchase_id"],
+				batch[0]["ingredient_id"],
+				int(batch[0]["quantity"]),
+				storage_unit_id
+			)
+		if not received_ok:
+			for rem in batch:
+				_kitchen_controller.release_reserved_capacity(
+					rem["purchase_id"],
+					storage_unit_id
+				)
+			return false
+
+	_cash -= total_cost
+	for item in batch:
+		var purchase_id: StringName = item["purchase_id"]
+		_purchase_ledger[purchase_id] = {
+			"purchase_id": purchase_id,
+			"day_index": _day_index,
+			"kind": &"INGREDIENT",
+			"storage_unit_id": storage_unit_id,
+			"item_or_fixture_id": item["ingredient_id"],
+			"quantity": int(item["quantity"]),
+			"actual_amount_paid": int(item["paid"]),
+			"status": &"PENDING" if in_serving else &"DELIVERED",
+		}
+	run_state_changed.emit()
+	return true
+
+
 func request_ingredient_purchase(
 	ingredient_id: StringName,
 	quantity: int,
 	storage_unit_id: StringName
 ) -> bool:
-	if not _run_started or economy_config == null or _kitchen_controller == null:
+	if not _can_attempt_ingredient_purchase(storage_unit_id):
 		return false
-	if not _is_planning_or_serving_phase():
-		return false
-	if ingredient_id == &"" or quantity <= 0 or storage_unit_id == &"":
-		return false
-	if not _fixture_instances.has(storage_unit_id):
-		return false
-	var fixture_kind: int = int(_fixture_instances[storage_unit_id].get("fixture_kind", -1))
-	if (
-		fixture_kind != SharedTypes.FixtureKind.BOX
-		and fixture_kind != SharedTypes.FixtureKind.FRIDGE
-	):
+	if ingredient_id == &"" or quantity <= 0:
 		return false
 
 	var unit_price := economy_config.get_ingredient_price(ingredient_id)
@@ -340,6 +696,7 @@ func credit_order_once(
 
 
 func refund_canceled_deliveries_once(purchase_ids: Array[StringName]) -> void:
+	_sync_purchase_ledger_with_kitchen()
 	var changed := false
 	for purchase_id in purchase_ids:
 		if not _purchase_ledger.has(purchase_id):
@@ -347,6 +704,18 @@ func refund_canceled_deliveries_once(purchase_ids: Array[StringName]) -> void:
 		var record: Dictionary = _purchase_ledger[purchase_id]
 		if record.get("status", &"") != &"PENDING":
 			continue
+		if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
+			if (
+				_kitchen_controller.has_method(&"is_purchase_delivered")
+				and _kitchen_controller.is_purchase_delivered(purchase_id)
+			):
+				record["status"] = &"DELIVERED"
+				continue
+			if (
+				_kitchen_controller.has_method(&"is_purchase_pending")
+				and _kitchen_controller.is_purchase_pending(purchase_id)
+			):
+				continue
 		record["status"] = &"REFUNDED"
 		_cash += int(record.get("actual_amount_paid", 0))
 		changed = true
@@ -356,6 +725,7 @@ func refund_canceled_deliveries_once(purchase_ids: Array[StringName]) -> void:
 
 
 func settle_day_once(report: Dictionary) -> Dictionary:
+	_sync_purchase_ledger_with_kitchen()
 	if not _run_started or not report.has("day_index"):
 		return {}
 	var report_day := int(report.get("day_index", -1))
@@ -496,6 +866,11 @@ func _bind_starter_fixtures() -> void:
 					instance_id,
 					economy_config.plates_per_rack
 				)
+			elif (
+				kind != SharedTypes.FixtureKind.DINING_TABLE
+				and _kitchen_controller.has_method(&"register_fixture_kind")
+			):
+				_kitchen_controller.register_fixture_kind(instance_id, kind)
 
 		if _service_controller != null and kind == SharedTypes.FixtureKind.DINING_TABLE:
 			_service_controller.register_table(instance_id)
@@ -540,11 +915,9 @@ func _compute_daily_electricity_charge() -> int:
 		return 0
 	var total := 0
 	for rec: Dictionary in _fixture_instances.values():
+		var uid := StringName(rec.get("utility_id", &""))
 		var kind: int = int(rec.get("fixture_kind", -1))
-		if kind == SharedTypes.FixtureKind.FRIDGE:
-			total += economy_config.fridge_electricity_per_day
-		elif kind == SharedTypes.FixtureKind.RICE_COOKER:
-			total += economy_config.rice_cooker_electricity_per_day
+		total += get_fixture_daily_electricity_cost(uid, kind)
 	return total
 
 
@@ -639,3 +1012,37 @@ func _is_serving_phase() -> bool:
 
 func _is_planning_or_serving_phase() -> bool:
 	return _is_planning_phase() or _is_serving_phase()
+
+
+func _can_attempt_ingredient_purchase(storage_unit_id: StringName) -> bool:
+	if not _run_started or economy_config == null or _kitchen_controller == null:
+		return false
+	if not _is_planning_or_serving_phase():
+		return false
+	if storage_unit_id == &"" or not _fixture_instances.has(storage_unit_id):
+		return false
+	var fixture_kind: int = int(_fixture_instances[storage_unit_id].get("fixture_kind", -1))
+	return (
+		fixture_kind == SharedTypes.FixtureKind.BOX
+		or fixture_kind == SharedTypes.FixtureKind.FRIDGE
+	)
+
+
+func _on_kitchen_state_changed_sync() -> void:
+	_sync_purchase_ledger_with_kitchen()
+
+
+func _sync_purchase_ledger_with_kitchen() -> void:
+	if (
+		_kitchen_controller == null
+		or not is_instance_valid(_kitchen_controller)
+		or not _kitchen_controller.has_method(&"is_purchase_delivered")
+	):
+		return
+	for purchase_id: StringName in _purchase_ledger:
+		var record: Dictionary = _purchase_ledger[purchase_id]
+		if (
+			record.get("status", &"") == &"PENDING"
+			and _kitchen_controller.is_purchase_delivered(purchase_id)
+		):
+			record["status"] = &"DELIVERED"

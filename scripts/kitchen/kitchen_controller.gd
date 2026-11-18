@@ -56,9 +56,11 @@ var _work_table_items: Dictionary[StringName, Dictionary] = {}
 var _cooker_outputs: Dictionary[StringName, Dictionary] = {}
 var _storage_units: Dictionary[StringName, Dictionary] = {}
 var _plate_records: Dictionary[StringName, Dictionary] = {}
+var _fixture_kinds: Dictionary[StringName, int] = {}
 var _washer_dirty_plates: Array[StringName] = []
 var _pending_deliveries: Dictionary[StringName, Dictionary] = {}
 var _delivered_purchase_ids: Dictionary[StringName, bool] = {}
+var _last_service_now: float = 0.0
 
 
 func _ready() -> void:
@@ -90,7 +92,7 @@ func bind_world(world_map: WorldMap, game_root: Node = null) -> void:
 		var initial_cell := _world_map.global_to_cell(_world_map.player.global_position)
 		if _world_map.grid.is_free(initial_cell):
 			_player_tile = initial_cell
-	_sync_player_visual()
+	_sync_player_visual(false)
 
 
 ## Binds ServiceController for dining-table and online-delivery command dispatch.
@@ -147,6 +149,7 @@ func register_storage_unit(storage_unit_id: StringName, kind: SharedTypes.Fixtur
 		"slots": slots,
 		"reservations": {},
 	}
+	_fixture_kinds[storage_unit_id] = int(kind)
 	return true
 
 
@@ -166,7 +169,56 @@ func register_plate_rack(rack_id: StringName, plates_count: int) -> bool:
 			"source_rack_id": rack_id,
 			"location": &"RACK",
 		}
+	_fixture_kinds[rack_id] = SharedTypes.FixtureKind.PLATE_RACK
 	return true
+
+
+## Registers an operational kitchen fixture instance by kind once by ID.
+func register_fixture_kind(instance_id: StringName, kind: SharedTypes.FixtureKind) -> bool:
+	if instance_id == &"" or _fixture_kinds.has(instance_id):
+		return false
+	_fixture_kinds[instance_id] = int(kind)
+	if kind == SharedTypes.FixtureKind.RICE_COOKER and not _cooker_outputs.has(instance_id):
+		_cooker_outputs[instance_id] = {}
+	return true
+
+
+## Unregisters a dynamically placed fixture on rollback or removal.
+func unregister_fixture_instance(instance_id: StringName) -> void:
+	if instance_id == &"":
+		return
+	_fixture_kinds.erase(instance_id)
+	_storage_units.erase(instance_id)
+	_cooker_outputs.erase(instance_id)
+	var remove_plates: Array[StringName] = []
+	for plate_id: StringName in _plate_records:
+		if _plate_records[plate_id].get("source_rack_id", &"") == instance_id:
+			remove_plates.append(plate_id)
+	for plate_id in remove_plates:
+		_plate_records.erase(plate_id)
+
+
+func get_fixture_kind(instance_id: StringName) -> int:
+	return _resolve_target_fixture_kind(instance_id)
+
+
+func get_cooker_ids() -> Array[StringName]:
+	var ids: Array[StringName] = [&"rice_cooker"]
+	for fid: StringName in _fixture_kinds:
+		if _fixture_kinds[fid] == SharedTypes.FixtureKind.RICE_COOKER and not ids.has(fid):
+			ids.append(fid)
+	for cid: StringName in _cooker_outputs:
+		if not ids.has(cid):
+			ids.append(cid)
+	return ids
+
+
+func get_plate_rack_ids() -> Array[StringName]:
+	var ids: Array[StringName] = [&"plate_rack"]
+	for fid: StringName in _fixture_kinds:
+		if _fixture_kinds[fid] == SharedTypes.FixtureKind.PLATE_RACK and not ids.has(fid):
+			ids.append(fid)
+	return ids
 
 
 ## Registers a work-table surface slot once by ID.
@@ -341,15 +393,22 @@ func get_allowed_commands_for_selected_target() -> Array[String]:
 		result.assign(["saji"])
 		return result
 
-	match _selected_target_id:
-		&"storage_box", &"fridge":
+	var target_kind := _resolve_target_fixture_kind(_selected_target_id)
+	match target_kind:
+		SharedTypes.FixtureKind.BOX, SharedTypes.FixtureKind.FRIDGE:
 			result.assign(["ayam", "beras", "sapi", "sayur", "telur", "tempe"])
-		&"stove":
+			return result
+		SharedTypes.FixtureKind.STOVE:
 			result.assign(["goreng"])
-		&"washer":
+			return result
+		SharedTypes.FixtureKind.WASHER:
 			result.assign(["cuci"])
-		&"rice_cooker":
+			return result
+		SharedTypes.FixtureKind.RICE_COOKER:
 			result.assign(["masak", "nasi"])
+			return result
+
+	match _selected_target_id:
 		&"work_table_chop":
 			result.assign(["potong"])
 		&"online_station":
@@ -419,12 +478,100 @@ func get_pending_delivery_views() -> Array[Dictionary]:
 	return result
 
 
+func get_ingredient_ids() -> Array[StringName]:
+	_ensure_catalogs_loaded()
+	var ids: Array[StringName] = []
+	ids.assign(_ingredients_by_id.keys())
+	ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+	return ids
+
+
+func is_purchase_delivered(purchase_id: StringName) -> bool:
+	if purchase_id == &"":
+		return false
+	if _delivered_purchase_ids.has(purchase_id):
+		return true
+	if _pending_deliveries.has(purchase_id):
+		return _pending_deliveries[purchase_id].get("status", &"") == &"DELIVERED"
+	return false
+
+
+func is_purchase_pending(purchase_id: StringName) -> bool:
+	if purchase_id == &"" or not _pending_deliveries.has(purchase_id):
+		return false
+	return _pending_deliveries[purchase_id].get("status", &"") == &"PENDING"
+
+
+func get_storage_remaining_capacity(
+	storage_unit_id: StringName,
+	draft_basket: Dictionary = {}
+) -> int:
+	if not _storage_units.has(storage_unit_id):
+		return 0
+	var sim_slots := _simulate_unit_with_basket(storage_unit_id, draft_basket)
+	if sim_slots.is_empty():
+		return 0
+	var total_free := 0
+	for slot: Dictionary in sim_slots:
+		total_free += maxi(0, int(slot.get("capacity", 0)) - int(slot.get("quantity", 0)))
+	return total_free
+
+
+func can_receive_stock_basket(items: Dictionary, storage_unit_id: StringName) -> bool:
+	if items.is_empty():
+		return false
+	return not _simulate_unit_with_basket(storage_unit_id, items).is_empty()
+
+
+func _simulate_unit_with_basket(
+	storage_unit_id: StringName,
+	items: Dictionary
+) -> Array[Dictionary]:
+	_ensure_catalogs_loaded()
+	if not _storage_units.has(storage_unit_id):
+		return []
+
+	var unit: Dictionary = _storage_units[storage_unit_id]
+	var sim_slots: Array[Dictionary] = []
+	for slot: Dictionary in unit["slots"]:
+		sim_slots.append(slot.duplicate())
+
+	var reservations: Dictionary = unit["reservations"]
+	for res: Dictionary in reservations.values():
+		var r_ing: StringName = res.get("ingredient_id", &"")
+		var r_qty: int = int(res.get("quantity", 0))
+		if not _deposit_into_slots(sim_slots, r_ing, r_qty):
+			return []
+
+	var sorted_keys: Array[StringName] = []
+	for raw_key: Variant in items.keys():
+		var ing_id := StringName(raw_key)
+		var qty: int = int(items[raw_key])
+		if ing_id == &"" or qty < 0 or (qty > 0 and not _ingredients_by_id.has(ing_id)):
+			return []
+		if qty > 0:
+			sorted_keys.append(ing_id)
+	sorted_keys.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+
+	for ing_id in sorted_keys:
+		var qty: int = int(items[ing_id])
+		if not _deposit_into_slots(sim_slots, ing_id, qty):
+			return []
+	return sim_slots
+
+
 func can_receive_stock(
 	ingredient_id: StringName,
 	quantity: int,
 	storage_unit_id: StringName
 ) -> bool:
-	if ingredient_id == &"" or quantity <= 0 or not _storage_units.has(storage_unit_id):
+	_ensure_catalogs_loaded()
+	if (
+		ingredient_id == &""
+		or quantity <= 0
+		or not _storage_units.has(storage_unit_id)
+		or not _ingredients_by_id.has(ingredient_id)
+	):
 		return false
 	return _compute_available_capacity(storage_unit_id, ingredient_id) >= quantity
 
@@ -469,33 +616,91 @@ func release_reserved_capacity(
 	return reservations.erase(purchase_id)
 
 
+func receive_stock_basket(items: Array[Dictionary], storage_unit_id: StringName) -> bool:
+	_ensure_catalogs_loaded()
+	if items.is_empty() or not _storage_units.has(storage_unit_id):
+		return false
+
+	var unit: Dictionary = _storage_units[storage_unit_id]
+	var reservations: Dictionary = unit["reservations"]
+	var seen_purchase_ids: Dictionary[StringName, bool] = {}
+	var validated_lines: Array[Dictionary] = []
+
+	for raw_item: Dictionary in items:
+		var purchase_id := StringName(raw_item.get("purchase_id", &""))
+		var ingredient_id := StringName(raw_item.get("ingredient_id", &""))
+		var quantity := int(raw_item.get("quantity", 0))
+		if seen_purchase_ids.has(purchase_id):
+			return false
+		if not _validate_receive_item_for_unit(
+			purchase_id,
+			ingredient_id,
+			quantity,
+			storage_unit_id
+		):
+			return false
+		seen_purchase_ids[purchase_id] = true
+		validated_lines.append({
+			"purchase_id": purchase_id,
+			"ingredient_id": ingredient_id,
+			"quantity": quantity,
+		})
+
+	# Check capacity with any unrelated pending reservations intact before committing.
+	var cap_slots: Array[Dictionary] = []
+	for slot: Dictionary in unit["slots"]:
+		cap_slots.append(slot.duplicate())
+	for res_id: StringName in reservations:
+		if seen_purchase_ids.has(res_id):
+			continue
+		var res: Dictionary = reservations[res_id]
+		if not _deposit_into_slots(
+			cap_slots,
+			res.get("ingredient_id", &""),
+			int(res.get("quantity", 0))
+		):
+			return false
+	for line in validated_lines:
+		if not _deposit_into_slots(cap_slots, line["ingredient_id"], int(line["quantity"])):
+			return false
+
+	# Simulate exact resulting slots for the delivered basket without unrelated reservations.
+	var final_slots: Array[Dictionary] = []
+	for slot: Dictionary in unit["slots"]:
+		final_slots.append(slot.duplicate())
+	for line in validated_lines:
+		if not _deposit_into_slots(final_slots, line["ingredient_id"], int(line["quantity"])):
+			return false
+
+	unit["slots"] = final_slots
+	for pid: StringName in seen_purchase_ids:
+		reservations.erase(pid)
+		_delivered_purchase_ids[pid] = true
+		if _pending_deliveries.has(pid):
+			_pending_deliveries[pid]["status"] = &"DELIVERED"
+	kitchen_state_changed.emit()
+	return true
+
+
 func receive_stock(
 	purchase_id: StringName,
 	ingredient_id: StringName,
 	quantity: int,
 	storage_unit_id: StringName
 ) -> bool:
-	if purchase_id == &"" or ingredient_id == &"" or quantity <= 0:
-		return false
-	if _delivered_purchase_ids.has(purchase_id):
-		return false
-	if _pending_deliveries.has(purchase_id):
-		if _pending_deliveries[purchase_id].get("status", &"") != &"PENDING":
-			return false
-	if not _storage_units.has(storage_unit_id):
+	_ensure_catalogs_loaded()
+	if not _validate_receive_item_for_unit(
+		purchase_id,
+		ingredient_id,
+		quantity,
+		storage_unit_id
+	):
 		return false
 
 	var unit: Dictionary = _storage_units[storage_unit_id]
 	var reservations: Dictionary = unit["reservations"]
 	var had_reservation := reservations.has(purchase_id)
-	if had_reservation:
-		var res: Dictionary = reservations[purchase_id]
-		if (
-			res.get("ingredient_id", &"") != ingredient_id
-			or int(res.get("quantity", 0)) != quantity
-		):
-			return false
-	elif not can_receive_stock(ingredient_id, quantity, storage_unit_id):
+	if not had_reservation and not can_receive_stock(ingredient_id, quantity, storage_unit_id):
 		return false
 
 	if not _deposit_into_slots(unit["slots"], ingredient_id, quantity):
@@ -510,6 +715,50 @@ func receive_stock(
 	return true
 
 
+func _validate_receive_item_for_unit(
+	purchase_id: StringName,
+	ingredient_id: StringName,
+	quantity: int,
+	storage_unit_id: StringName
+) -> bool:
+	if (
+		purchase_id == &""
+		or ingredient_id == &""
+		or quantity <= 0
+		or not _ingredients_by_id.has(ingredient_id)
+	):
+		return false
+	if _delivered_purchase_ids.has(purchase_id):
+		return false
+	if not _storage_units.has(storage_unit_id):
+		return false
+	if _pending_deliveries.has(purchase_id):
+		var pending: Dictionary = _pending_deliveries[purchase_id]
+		if pending.get("status", &"") != &"PENDING":
+			return false
+		if pending.get("storage_unit_id", &"") != storage_unit_id:
+			return false
+		if (
+			pending.get("ingredient_id", &"") != ingredient_id
+			or int(pending.get("quantity", 0)) != quantity
+		):
+			return false
+		if float(pending.get("due_at", 0.0)) > _get_live_service_clock_now():
+			return false
+
+	var reservations: Dictionary = _storage_units[storage_unit_id]["reservations"]
+	if reservations.has(purchase_id):
+		var res: Dictionary = reservations[purchase_id]
+		if (
+			res.get("ingredient_id", &"") != ingredient_id
+			or int(res.get("quantity", 0)) != quantity
+		):
+			return false
+	elif _has_reservation_id(purchase_id):
+		return false
+	return true
+
+
 func schedule_delivery(
 	purchase_id: StringName,
 	ingredient_id: StringName,
@@ -517,10 +766,12 @@ func schedule_delivery(
 	storage_unit_id: StringName,
 	due_at: float
 ) -> bool:
+	_ensure_catalogs_loaded()
 	if (
 		purchase_id == &""
 		or ingredient_id == &""
 		or quantity <= 0
+		or not _ingredients_by_id.has(ingredient_id)
 		or _delivered_purchase_ids.has(purchase_id)
 		or _pending_deliveries.has(purchase_id)
 		or due_at < 0.0
@@ -538,6 +789,8 @@ func schedule_delivery(
 		):
 			return false
 	else:
+		if _has_reservation_id(purchase_id):
+			return false
 		if not reserve_incoming_capacity(purchase_id, ingredient_id, quantity, storage_unit_id):
 			return false
 
@@ -550,6 +803,23 @@ func schedule_delivery(
 		"status": &"PENDING",
 	}
 	kitchen_state_changed.emit()
+	return true
+
+
+## Rolls back an uncommitted scheduled delivery during atomic basket abort.
+func rollback_scheduled_delivery(
+	purchase_id: StringName,
+	storage_unit_id: StringName
+) -> bool:
+	if purchase_id == &"" or is_purchase_delivered(purchase_id):
+		return false
+	if _pending_deliveries.has(purchase_id):
+		var record: Dictionary = _pending_deliveries[purchase_id]
+		if record.get("status", &"") != &"PENDING":
+			return false
+		_pending_deliveries.erase(purchase_id)
+	if _storage_units.has(storage_unit_id):
+		(_storage_units[storage_unit_id]["reservations"] as Dictionary).erase(purchase_id)
 	return true
 
 
@@ -572,6 +842,7 @@ func cancel_pending_deliveries(_day_index: int) -> Array[StringName]:
 
 
 func clear_non_fridge_food_for_next_day() -> void:
+	_last_service_now = 0.0
 	_held_item.clear()
 	for table_id: StringName in _work_table_items:
 		_work_table_items[table_id] = {}
@@ -596,6 +867,7 @@ func clear_non_fridge_food_for_next_day() -> void:
 
 
 func advance_service_time(now: float) -> void:
+	_last_service_now = maxf(_last_service_now, now)
 	var changed := false
 	for purchase_id: StringName in _pending_deliveries:
 		var record: Dictionary = _pending_deliveries[purchase_id]
@@ -611,6 +883,16 @@ func advance_service_time(now: float) -> void:
 				changed = true
 	if changed:
 		kitchen_state_changed.emit()
+
+
+func _get_live_service_clock_now() -> float:
+	if (
+		_game_root != null
+		and is_instance_valid(_game_root)
+		and _game_root.has_method(&"get_service_elapsed")
+	):
+		return maxf(_last_service_now, float(_game_root.get_service_elapsed()))
+	return _last_service_now
 
 
 func try_consume_serving_item(
@@ -697,7 +979,9 @@ func _is_serving_phase() -> bool:
 	return _game_root.get_phase() == SharedTypes.Phase.SERVING
 
 
-func _on_game_root_phase_changed(_phase: int, _day_index: int) -> void:
+func _on_game_root_phase_changed(phase: int, _day_index: int) -> void:
+	if phase == SharedTypes.Phase.PLANNING or phase == SharedTypes.Phase.SERVING:
+		_last_service_now = 0.0
 	clear_command_prefix()
 
 
@@ -712,14 +996,18 @@ func _has_reservation_id(purchase_id: StringName) -> bool:
 func _teleport_player_to(tile: Vector2i) -> void:
 	var changed := _player_tile != tile
 	_player_tile = tile
-	_sync_player_visual()
+	_sync_player_visual(changed)
 	if changed:
 		player_tile_changed.emit(_player_tile)
 
 
-func _sync_player_visual() -> void:
+func _sync_player_visual(animate: bool = false) -> void:
 	if _world_map != null and _world_map.player != null and _world_map.grid != null:
-		_world_map.player.global_position = _world_map.cell_to_global(_player_tile)
+		var target_global := _world_map.cell_to_global(_player_tile)
+		if _world_map.player.has_method(&"move_to_global"):
+			_world_map.player.move_to_global(target_global, animate)
+		else:
+			_world_map.player.global_position = target_global
 
 
 func _set_selected_target(target_id: StringName) -> void:
@@ -745,10 +1033,32 @@ func _execute_typed_command(command: String) -> void:
 	_perform_typed_command(StringName(command))
 
 
-func _perform_click_action(target_id: StringName) -> void:
+func _resolve_target_fixture_kind(target_id: StringName) -> int:
+	if _fixture_kinds.has(target_id):
+		return int(_fixture_kinds[target_id])
+	if _storage_units.has(target_id):
+		return int(_storage_units[target_id].get("kind", SharedTypes.FixtureKind.BOX))
 	match target_id:
+		&"storage_box":
+			return SharedTypes.FixtureKind.BOX
+		&"fridge":
+			return SharedTypes.FixtureKind.FRIDGE
+		&"stove":
+			return SharedTypes.FixtureKind.STOVE
+		&"washer":
+			return SharedTypes.FixtureKind.WASHER
 		&"plate_rack":
-			_handle_plate_rack_click(target_id)
+			return SharedTypes.FixtureKind.PLATE_RACK
+		&"rice_cooker":
+			return SharedTypes.FixtureKind.RICE_COOKER
+	return -1
+
+
+func _perform_click_action(target_id: StringName) -> void:
+	if _resolve_target_fixture_kind(target_id) == SharedTypes.FixtureKind.PLATE_RACK:
+		_handle_plate_rack_click(target_id)
+		return
+	match target_id:
 		&"work_table_stage":
 			_handle_work_table_stage_click(&"work_table")
 		&"trash":
@@ -766,18 +1076,24 @@ func _perform_typed_command(command: StringName) -> void:
 		_try_take_raw_ingredient(_selected_target_id, command)
 		return
 
-	match _selected_target_id:
-		&"washer":
+	var target_kind := _resolve_target_fixture_kind(_selected_target_id)
+	match target_kind:
+		SharedTypes.FixtureKind.WASHER:
 			if command == &"cuci":
 				_try_washer_cuci()
-		&"stove":
+			return
+		SharedTypes.FixtureKind.STOVE:
 			if command == &"goreng":
 				_try_process_held_ingredient(&"goreng", &"item_cooked")
-		&"rice_cooker":
+			return
+		SharedTypes.FixtureKind.RICE_COOKER:
 			if command == &"masak":
-				_try_rice_cooker_masak(&"rice_cooker")
+				_try_rice_cooker_masak(_selected_target_id)
 			elif command == &"nasi":
-				_try_rice_cooker_nasi(&"rice_cooker")
+				_try_rice_cooker_nasi(_selected_target_id)
+			return
+
+	match _selected_target_id:
 		&"work_table_chop":
 			if command == &"potong":
 				_try_process_held_ingredient(&"potong", &"item_chopped")
@@ -1000,7 +1316,26 @@ func _try_take_raw_ingredient(storage_unit_id: StringName, ingredient_id: String
 			kitchen_state_changed.emit()
 			return true
 
+	if _has_pending_delivery_for(storage_unit_id, ingredient_id):
+		action_feedback.emit(&"delivery_pending")
+		return false
+
 	action_feedback.emit(&"out_of_stock")
+	return false
+
+
+func _has_pending_delivery_for(
+	storage_unit_id: StringName,
+	ingredient_id: StringName
+) -> bool:
+	for record: Dictionary in _pending_deliveries.values():
+		if record.get("status", &"") != &"PENDING":
+			continue
+		if (
+			record.get("storage_unit_id", &"") == storage_unit_id
+			and record.get("ingredient_id", &"") == ingredient_id
+		):
+			return true
 	return false
 
 
@@ -1030,6 +1365,9 @@ func _try_washer_cuci() -> bool:
 
 
 func _try_process_held_ingredient(command: StringName, success_feedback: StringName) -> bool:
+	if _held_item.is_empty():
+		action_feedback.emit(&"hand_empty")
+		return false
 	if not _is_single_loose_held_item():
 		action_feedback.emit(&"invalid_action")
 		return false
@@ -1055,6 +1393,9 @@ func _try_process_held_ingredient(command: StringName, success_feedback: StringN
 
 
 func _try_rice_cooker_masak(cooker_id: StringName) -> bool:
+	if _held_item.is_empty():
+		action_feedback.emit(&"hand_empty")
+		return false
 	if not _is_single_loose_held_item():
 		action_feedback.emit(&"invalid_action")
 		return false
