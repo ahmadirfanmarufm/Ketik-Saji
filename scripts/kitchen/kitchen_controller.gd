@@ -384,8 +384,7 @@ func get_allowed_commands_for_selected_target() -> Array[String]:
 	if _game_root != null and is_instance_valid(_game_root) and not _is_serving_phase():
 		return result
 	if _storage_units.has(_selected_target_id):
-		result.assign(["ayam", "beras", "sapi", "sayur", "telur", "tempe"])
-		return result
+		return _get_storage_ingredient_commands()
 	if _is_dining_table_target(_selected_target_id):
 		result.assign(["saji", "bersihkan"])
 		return result
@@ -396,8 +395,7 @@ func get_allowed_commands_for_selected_target() -> Array[String]:
 	var target_kind := _resolve_target_fixture_kind(_selected_target_id)
 	match target_kind:
 		SharedTypes.FixtureKind.BOX, SharedTypes.FixtureKind.FRIDGE:
-			result.assign(["ayam", "beras", "sapi", "sayur", "telur", "tempe"])
-			return result
+			return _get_storage_ingredient_commands()
 		SharedTypes.FixtureKind.STOVE:
 			result.assign(["goreng"])
 			return result
@@ -1767,3 +1765,11 @@ func _deposit_into_slots(
 				remaining -= add
 
 	return remaining == 0
+
+
+func _get_storage_ingredient_commands() -> Array[String]:
+	var commands: Array[String] = []
+	for ingredient_id in get_ingredient_ids():
+		if ingredient_id != &"":
+			commands.append(String(ingredient_id))
+	return commands
