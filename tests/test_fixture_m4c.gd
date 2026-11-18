@@ -20,6 +20,7 @@ func _init() -> void:
 	await _test_additional_stove_placement_and_cooking()
 	await _test_other_dynamic_fixtures_and_electricity_persistence()
 	await _test_fixture_shop_responsive_layout()
+	await _test_dynamic_dining_table_seating_and_chair_hitbox()
 	print("SUMMARY fails=%d" % _fails)
 	quit(0 if _fails == 0 else 1)
 
@@ -746,4 +747,93 @@ func _test_fixture_shop_responsive_layout() -> void:
 	)
 
 	g_all.free()
+	await process_frame
+
+
+func _test_dynamic_dining_table_seating_and_chair_hitbox() -> void:
+	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
+	var game_root := packed.instantiate() as GameRoot
+	root.add_child(game_root)
+	await process_frame
+	await physics_frame
+
+	var run := game_root.get_run_controller() as RunController
+	var service := game_root.get_service_controller() as ServiceController
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var ui := game_root.get_node("UI") as GameUI
+	var world := game_root.get_node("World") as WorldMap
+
+	var bought := run.request_fixture_purchase(&"dining_table", &"slot_table_01")
+	var dt3 := world.registry.get_object(&"dining_table_03") as Area2D
+	_check("m5a2_dynamic_dining_table_03_purchased_as_area2d", bought and dt3 != null)
+	if dt3 == null:
+		game_root.free()
+		return
+
+	var chair_spr := dt3.get_node_or_null("ChairVisual") as Sprite2D
+	var seat_anchor := dt3.get_node_or_null("SeatAnchor") as Marker2D
+	var tabletop := dt3.get_node_or_null("TabletopPlaceholder") as Node2D
+	var table_hb := dt3.get_node_or_null("TableHitbox") as CollisionShape2D
+	var chair_hb := dt3.get_node_or_null("ChairHitbox") as CollisionShape2D
+	_check(
+		"m5a2_dynamic_table_shares_chair_seat_anchor_and_placeholder_structure",
+		chair_spr != null
+		and chair_spr.position.y > 0.0
+		and chair_spr.region_enabled
+		and chair_spr.region_rect == WorldMap.REGION_DINING_CHAIR
+		and seat_anchor != null
+		and seat_anchor.position.y > 0.0
+		and world.get_table_seat_anchor(&"dining_table_03") == seat_anchor
+		and tabletop != null
+		and dt3.get_node_or_null("Sprite2D") == null
+		and table_hb != null
+		and chair_hb != null
+		and chair_hb.position.y > 0.0
+	)
+	_check(
+		"m5a2_dynamic_table_chair_unregistered_and_south_cell_free",
+		world.registry.find_id(chair_spr) == &""
+		and world.registry.find_id(seat_anchor) == &""
+		and world.grid.get_footprint(&"dining_table_03") == [Vector2i(0, 5)]
+		and world.grid.is_free(Vector2i(0, 6))
+	)
+
+	# Verify customer 3 seats at dining_table_03 SeatAnchor, chair click selects it,
+	# and south floor cell (0, 6) remains clickable.
+	game_root.start_service_requested()
+	game_root._process(40.0)
+	ui._process(0.016)
+	var t3_view := service.get_table_view(&"dining_table_03")
+	var c3_id := StringName(t3_view.get("customer_id_or_empty", &""))
+	var c3_vis := world.get_customer_visual_node(c3_id)
+	_check(
+		"m5a2_dynamic_table_customer_visual_aligns_with_seat_anchor",
+		c3_id != &""
+		and c3_vis != null
+		and c3_vis.global_position.is_equal_approx(seat_anchor.global_position)
+	)
+
+	var chair_click := InputEventMouseButton.new()
+	chair_click.pressed = true
+	chair_click.button_index = MOUSE_BUTTON_LEFT
+	chair_click.position = world.get_canvas_transform() * chair_hb.global_position
+	ui._unhandled_input(chair_click)
+	_check(
+		"m5a2_dynamic_table_chair_click_selects_dining_table_03",
+		kitchen.get_selected_target_id() == &"dining_table_03"
+		and world.get_free_cardinal_neighbors(&"dining_table_03").has(kitchen.get_player_tile())
+	)
+
+	var south_click := InputEventMouseButton.new()
+	south_click.pressed = true
+	south_click.button_index = MOUSE_BUTTON_LEFT
+	south_click.position = world.get_canvas_transform() * world.cell_to_global(Vector2i(0, 6))
+	ui._unhandled_input(south_click)
+	_check(
+		"m5a2_dynamic_table_south_floor_cell_still_moves_player",
+		kitchen.get_player_tile() == Vector2i(0, 6)
+		and kitchen.get_selected_target_id() == &""
+	)
+
+	game_root.free()
 	await process_frame

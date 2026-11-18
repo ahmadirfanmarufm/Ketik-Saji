@@ -1,0 +1,40 @@
+[gd_scene format=3]
+
+[ext_resource type="Texture2D" uid="uid://cebm8jteebukm" path="res://assets/art/tiles/Warung-Tileset.png" id="1_tileset"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_table"]
+size = Vector2(28, 28)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_chair"]
+size = Vector2(22, 12)
+
+[node name="DiningTable" type="Area2D"]
+texture_filter = 1
+metadata/footprint_size = Vector2i(1, 1)
+
+[node name="ChairVisual" type="Sprite2D" parent="."]
+position = Vector2(0, 13)
+texture_filter = 1
+texture = ExtResource("1_tileset")
+region_enabled = true
+region_rect = Rect2(416, 160, 32, 32)
+
+[node name="TabletopPlaceholder" type="Node2D" parent="."]
+
+[node name="TabletopBase" type="Polygon2D" parent="TabletopPlaceholder"]
+polygon = PackedVector2Array(-12, -12, 12, -12, 12, 8, -12, 8)
+color = Color(0.35, 0.21, 0.12, 1)
+
+[node name="TabletopSurface" type="Polygon2D" parent="TabletopPlaceholder"]
+polygon = PackedVector2Array(-11, -11, 11, -11, 11, 3, -11, 3)
+color = Color(0.76, 0.56, 0.34, 1)
+
+[node name="SeatAnchor" type="Marker2D" parent="."]
+position = Vector2(0, 16)
+
+[node name="TableHitbox" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_table")
+
+[node name="ChairHitbox" type="CollisionShape2D" parent="."]
+position = Vector2(0, 18)
+shape = SubResource("RectangleShape2D_chair")

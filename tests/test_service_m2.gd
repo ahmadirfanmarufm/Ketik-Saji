@@ -32,6 +32,7 @@ func _init() -> void:
 	await _test_catchup_tick_and_outside_queue_expiry()
 	await _test_credit_order_failure_diagnostic()
 	await _test_smooth_npc_movement_and_reset_cleanup()
+	await _test_chair_hitbox_and_south_floor_interaction()
 	print("SUMMARY fails=%d" % _fails)
 	quit(_fails)
 
@@ -376,10 +377,10 @@ func _test_full_dine_in_serve_eat_clean_wash_and_fifo_loop() -> void:
 	var c3_id := StringName(t1_reoccupied["customer_id_or_empty"])
 	var o3_view := service.get_order_view(StringName(t1_reoccupied["order_id_or_empty"]))
 	var c3_vis := world.get_customer_visual_node(c3_id)
-	var table1_node := world.registry.get_object(&"dining_table_01")
+	var seat_anchor := world.get_table_seat_anchor(&"dining_table_01")
 	var expected_seated_pos := world.dine_in_waiting_anchors.to_local(
-		table1_node.global_position
-	) + Vector2(0, -12)
+		seat_anchor.global_position
+	)
 	_check(
 		"bersihkan sends plate to washer, clears dirty visual, seats C3 with deadline",
 		ui.get_feedback_code() == &"table_cleaned"
@@ -390,6 +391,7 @@ func _test_full_dine_in_serve_eat_clean_wash_and_fifo_loop() -> void:
 		and int(service.get_customer_queue_view()["outside_dinein_count"]) == 1
 		and is_equal_approx(float(o3_view["deadline_at"]), 140.0)
 		and is_equal_approx(float(o3_view["seconds_remaining"]), 65.0)
+		and seat_anchor != null
 		and c3_vis != null
 		and c3_vis.position.is_equal_approx(expected_seated_pos)
 	)
@@ -862,15 +864,16 @@ func _test_smooth_npc_movement_and_reset_cleanup() -> void:
 		and world.get_departing_visual_count() == 1
 	)
 
-	# Clean table 1 -> C3 promotes from WaitingAnchor01 to dining_table_01 smoothly!
+	# Clean table 1 -> C3 promotes from WaitingAnchor01 to dining_table_01 SeatAnchor smoothly!
 	_select_world_target(ui, world, &"dining_table_01")
 	_type_word(ui, "bersihkan")
 	ui._process(0.016)
-	var t1_node := world.registry.get_object(&"dining_table_01")
-	var expected_table_global := t1_node.global_position + Vector2(0, -12)
+	var seat_anchor := world.get_table_seat_anchor(&"dining_table_01")
+	var expected_table_global := seat_anchor.global_position
 	_check(
 		"promoted customer updates authoritative position immediately and starts move tween",
-		c3_node != null
+		seat_anchor != null
+		and c3_node != null
 		and c3_node.global_position.is_equal_approx(expected_table_global)
 		and world.is_customer_moving_visually(c3_id)
 		and world.get_customer_visual_global_position(c3_id).distance_to(a1.global_position) < 20.0
@@ -897,6 +900,99 @@ func _test_smooth_npc_movement_and_reset_cleanup() -> void:
 		and world.get_departing_visual_count() == 0
 		and world.dine_in_waiting_anchors.get_child_count() == 4
 		and not world.is_customer_moving_visually(c3_id)
+	)
+
+	game_root.free()
+	await process_frame
+
+
+func _send_canvas_left_click(ui: GameUI, canvas_pos: Vector2) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.pressed = true
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.position = canvas_pos
+	ev.global_position = canvas_pos
+	ui._unhandled_input(ev)
+
+
+func _test_chair_hitbox_and_south_floor_interaction() -> void:
+	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
+	var game_root := packed.instantiate() as GameRoot
+	root.add_child(game_root)
+	await process_frame
+	await physics_frame
+
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var service := game_root.get_service_controller() as ServiceController
+	var run := game_root.get_run_controller() as RunController
+	var ui := game_root.get_node("UI") as GameUI
+	var world := game_root.get_node("World") as WorldMap
+
+	run.request_ingredient_purchase(&"beras", 1, &"storage_box")
+	run.request_ingredient_purchase(&"telur", 1, &"storage_box")
+	game_root.start_service_requested()
+	game_root._process(0.0)
+	ui._process(0.016)
+
+	var t1_node := world.registry.get_object(&"dining_table_01") as Area2D
+	var seat_anchor := world.get_table_seat_anchor(&"dining_table_01")
+	var chair_hb := t1_node.get_node("ChairHitbox") as CollisionShape2D
+	var c1_vis := world.get_customer_visual_node(&"cust_d1_001")
+	_check(
+		"M5-A2 SEATED_WAITING customer aligns with dining_table_01 SeatAnchor",
+		seat_anchor != null
+		and c1_vis != null
+		and c1_vis.global_position.is_equal_approx(seat_anchor.global_position)
+	)
+
+	# Clicking south walkable floor cell (2, 8) moves player to (2, 8) without selecting table.
+	var south_cell := Vector2i(2, 8)
+	_send_canvas_left_click(ui, world.get_canvas_transform() * world.cell_to_global(south_cell))
+	_check(
+		"clicking center of south cell (2, 8) moves player to floor without selecting table",
+		kitchen.get_player_tile() == south_cell
+		and kitchen.get_selected_target_id() == &""
+	)
+
+	# Clicking tabletop selects dining_table_01.
+	_send_canvas_left_click(ui, world.get_canvas_transform() * t1_node.global_position)
+	_check(
+		"clicking tabletop selects dining_table_01",
+		kitchen.get_selected_target_id() == &"dining_table_01"
+		and kitchen.get_player_tile() == south_cell
+	)
+
+	# Cook nasi_telor, walk to (3, 6), then click south ChairHitbox to teleport adjacent and serve.
+	_cook_plated_nasi_telor(ui, world)
+	_send_canvas_left_click(ui, world.get_canvas_transform() * world.cell_to_global(Vector2i(3, 6)))
+	_send_canvas_left_click(ui, world.get_canvas_transform() * chair_hb.global_position)
+	var chair_selected := (
+		kitchen.get_selected_target_id() == &"dining_table_01"
+		and world.get_free_cardinal_neighbors(&"dining_table_01").has(kitchen.get_player_tile())
+	)
+	_type_word(ui, "saji")
+	ui._process(0.016)
+	_check(
+		"clicking ChairHitbox selects dining_table_01, teleports cardinal, saji -> EATING at SeatAnchor",
+		chair_selected
+		and ui.get_feedback_code() == &"order_served"
+		and int(service.get_table_view(&"dining_table_01")["state"])
+		== SharedTypes.TableState.OCCUPIED_EATING
+		and c1_vis.global_position.is_equal_approx(seat_anchor.global_position)
+	)
+
+	# Finish eating -> DIRTY -> click ChairHitbox and clean via bersihkan.
+	game_root._process(20.0)
+	ui._process(0.016)
+	_send_canvas_left_click(ui, world.get_canvas_transform() * world.cell_to_global(Vector2i(3, 8)))
+	_send_canvas_left_click(ui, world.get_canvas_transform() * chair_hb.global_position)
+	_type_word(ui, "bersihkan")
+	_check(
+		"clicking ChairHitbox on DIRTY table supports bersihkan to CLEAN_VACANT",
+		kitchen.get_selected_target_id() == &"dining_table_01"
+		and ui.get_feedback_code() == &"table_cleaned"
+		and int(service.get_table_view(&"dining_table_01")["state"])
+		== SharedTypes.TableState.CLEAN_VACANT
 	)
 
 	game_root.free()

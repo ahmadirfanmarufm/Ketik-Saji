@@ -129,6 +129,7 @@ func _run_all() -> void:
 	_test_work_table_split_targets(world)
 	_test_placement_slots_and_markers(world)
 	_test_visual_only_nodes(world)
+	_test_m5a2_starter_dining_tables(world)
 	_test_art_integration_and_driver_visuals(world)
 	_test_interactable_neighbors_and_queries(world)
 	_test_m5a1_all_slots_occupied_reachability(world)
@@ -344,6 +345,63 @@ func _test_visual_only_nodes(world: WorldMap) -> void:
 	)
 
 
+func _test_m5a2_starter_dining_tables(world: WorldMap) -> void:
+	for table_id: StringName in [&"dining_table_01", &"dining_table_02"]:
+		var table_node := world.registry.get_object(table_id) as Area2D
+		_check("starter table is Area2D " + String(table_id), table_node != null)
+		if table_node == null:
+			continue
+
+		var chair_spr := table_node.get_node_or_null("ChairVisual") as Sprite2D
+		var seat_anchor := table_node.get_node_or_null("SeatAnchor") as Marker2D
+		var tabletop := table_node.get_node_or_null("TabletopPlaceholder") as Node2D
+		var table_hb := table_node.get_node_or_null("TableHitbox") as CollisionShape2D
+		var chair_hb := table_node.get_node_or_null("ChairHitbox") as CollisionShape2D
+
+		_check(
+			"starter ChairVisual south-side with chair sprite " + String(table_id),
+			chair_spr != null
+			and chair_spr.position.y > 0.0
+			and chair_spr.texture != null
+			and chair_spr.texture.resource_path == "res://assets/art/tiles/Warung-Tileset.png"
+			and chair_spr.region_enabled
+			and chair_spr.region_rect == WorldMap.REGION_DINING_CHAIR
+			and chair_spr.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
+		)
+		_check(
+			"starter SeatAnchor south-side Marker2D " + String(table_id),
+			seat_anchor != null
+			and seat_anchor.position.y > 0.0
+			and world.get_table_seat_anchor(table_id) == seat_anchor
+		)
+		_check(
+			"starter tabletop placeholder distinct from chair " + String(table_id),
+			tabletop != null
+			and table_node.get_node_or_null("Sprite2D") == null
+			and tabletop.get_node_or_null("TabletopSurface") != null
+		)
+		var table_cell := world.global_to_cell(table_node.global_position)
+		var south_cell := table_cell + Vector2i(0, 1)
+		var south_center_global := world.cell_to_global(south_cell)
+		_check(
+			"starter table/chair hitboxes & south cell clear " + String(table_id),
+			table_hb != null
+			and chair_hb != null
+			and chair_hb.position.y > 0.0
+			and WorldMap.point_hits_area_shapes(table_node, table_node.global_position)
+			and WorldMap.point_hits_area_shapes(table_node, chair_hb.global_position)
+			and not WorldMap.point_hits_area_shapes(table_node, south_center_global)
+		)
+		_check(
+			"chair & SeatAnchor unregistered and 1x1 footprint preserved " + String(table_id),
+			world.registry.find_id(chair_spr) == &""
+			and world.registry.find_id(seat_anchor) == &""
+			and world.grid.get_footprint(table_id) == [table_cell]
+			and world.grid.is_free(south_cell)
+		)
+	_check("M5-A2 preserves exact 31 registered scene IDs", world.registry.get_ids().size() == 31)
+
+
 func _test_art_integration_and_driver_visuals(world: WorldMap) -> void:
 	_check(
 		"FloorTiles has TileSet and 108 populated cells with nearest filter",
@@ -374,8 +432,6 @@ func _test_art_integration_and_driver_visuals(world: WorldMap) -> void:
 		&"rice_cooker": WorldMap.REGION_RICE_COOKER,
 		&"trash": WorldMap.REGION_TRASH,
 		&"work_table": WorldMap.REGION_WORK_TABLE,
-		&"dining_table_01": WorldMap.REGION_DINING_TABLE,
-		&"dining_table_02": WorldMap.REGION_DINING_TABLE,
 		&"online_station": WorldMap.REGION_ONLINE_STATION,
 	}
 	for fixture_id: StringName in expected_regions:

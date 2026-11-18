@@ -12,6 +12,7 @@
 [ext_resource type="Texture2D" uid="uid://q7ox023rvesa" path="res://assets/art/characters/npc 5.png" id="9_npc5"]
 [ext_resource type="Texture2D" uid="uid://d4wefrwc4md2" path="res://assets/art/characters/npc 6.png" id="10_npc6"]
 [ext_resource type="Texture2D" uid="uid://cknw5tegiabwu" path="res://assets/art/characters/npc 7.png" id="11_npc7"]
+[ext_resource type="PackedScene" path="res://scenes/world/dining_table.tscn" id="12_dining_table"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_warung"]
 texture = ExtResource("2_tileset")
@@ -201,33 +202,15 @@ shape = SubResource("RectangleShape2D_work_chop")
 
 [node name="DiningTables" type="Node2D" parent="." unique_id=1975887348]
 
-[node name="DiningTable01" type="Area2D" parent="DiningTables" unique_id=1842323601]
+[node name="DiningTable01" parent="DiningTables" unique_id=1842323601 instance=ExtResource("12_dining_table")]
 position = Vector2(80, 240)
 metadata/world_id = &"dining_table_01"
 metadata/footprint_size = Vector2i(1, 1)
 
-[node name="Sprite2D" type="Sprite2D" parent="DiningTables/DiningTable01" unique_id=501000311]
-texture_filter = 1
-texture = ExtResource("2_tileset")
-region_enabled = true
-region_rect = Rect2(416, 160, 32, 32)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="DiningTables/DiningTable01" unique_id=501000301]
-shape = SubResource("RectangleShape2D_station")
-
-[node name="DiningTable02" type="Area2D" parent="DiningTables" unique_id=743940907]
+[node name="DiningTable02" parent="DiningTables" unique_id=743940907 instance=ExtResource("12_dining_table")]
 position = Vector2(144, 240)
 metadata/world_id = &"dining_table_02"
 metadata/footprint_size = Vector2i(1, 1)
-
-[node name="Sprite2D" type="Sprite2D" parent="DiningTables/DiningTable02" unique_id=501000312]
-texture_filter = 1
-texture = ExtResource("2_tileset")
-region_enabled = true
-region_rect = Rect2(416, 160, 32, 32)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="DiningTables/DiningTable02" unique_id=501000302]
-shape = SubResource("RectangleShape2D_station")
 
 [node name="OnlineStation" type="Area2D" parent="." unique_id=150000100]
 position = Vector2(208, 144)

@@ -39,10 +39,11 @@ const REGION_PLATE_RACK: Rect2 = Rect2(544, 128, 32, 64)
 const REGION_RICE_COOKER: Rect2 = Rect2(672, 0, 32, 64)
 const REGION_WORK_TABLE: Rect2 = Rect2(544, 96, 32, 32)
 const REGION_TRASH: Rect2 = Rect2(608, 96, 32, 32)
-const REGION_DINING_TABLE: Rect2 = Rect2(416, 160, 32, 32)
+const REGION_DINING_CHAIR: Rect2 = Rect2(416, 160, 32, 32)
 const REGION_ONLINE_STATION: Rect2 = Rect2(480, 128, 32, 64)
 const REGION_LONG_COUNTER: Rect2 = Rect2(416, 32, 96, 32)
 const REGION_INTERIOR_WALL: Rect2 = Rect2(160, 64, 32, 32)
+const DINING_TABLE_SCENE: PackedScene = preload("res://scenes/world/dining_table.tscn")
 
 const DRIVER_HITBOX_SIZE: Vector2 = Vector2(28, 28)
 const DRIVER_OVERFLOW_STEP: Vector2 = Vector2(0, -24)
@@ -290,8 +291,6 @@ func get_fixture_region_rect(fixture_kind: int) -> Rect2:
 			return REGION_PLATE_RACK
 		SharedTypes.FixtureKind.RICE_COOKER:
 			return REGION_RICE_COOKER
-		SharedTypes.FixtureKind.DINING_TABLE:
-			return REGION_DINING_TABLE
 	return Rect2()
 
 
@@ -692,6 +691,16 @@ func get_placement_slot_view(slot_id: StringName) -> Dictionary:
 	}
 
 
+## Returns the SeatAnchor Marker2D child of a registered dining table, if present.
+func get_table_seat_anchor(table_id: StringName) -> Marker2D:
+	if table_id == &"" or registry == null:
+		return null
+	var table_node := registry.get_object(table_id)
+	if table_node == null or not is_instance_valid(table_node):
+		return null
+	return table_node.get_node_or_null("SeatAnchor") as Marker2D
+
+
 ## Spawns and registers a physical placed fixture Area2D into KitchenStations or DiningTables.
 func spawn_placed_fixture(
 	instance_id: StringName,
@@ -706,15 +715,19 @@ func spawn_placed_fixture(
 	var slot_node := registry.get_object(slot_id)
 	if slot_node == null or not slot_node.has_meta(SLOT_ID_META):
 		return null
-	var container := (
-		dining_tables
-		if fixture_kind == SharedTypes.FixtureKind.DINING_TABLE
-		else kitchen_stations
-	)
+	var is_table := (fixture_kind == SharedTypes.FixtureKind.DINING_TABLE)
+	var container := dining_tables if is_table else kitchen_stations
 	if container == null:
 		return null
 
-	var area := Area2D.new()
+	var area: Area2D = (
+		DINING_TABLE_SCENE.instantiate() as Area2D
+		if is_table
+		else _create_placed_utility_area(fixture_kind, footprint_size)
+	)
+	if area == null:
+		return null
+
 	area.name = String(instance_id)
 	area.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	area.position = container.to_local(slot_node.global_position)
@@ -722,6 +735,17 @@ func spawn_placed_fixture(
 	area.set_meta(FOOTPRINT_SIZE_META, footprint_size)
 	area.set_meta(SLOT_ID_META, slot_id)
 
+	container.add_child(area)
+	var cells := _build_node_footprint(area)
+	if cells.is_empty() or not register_object(instance_id, area, cells):
+		container.remove_child(area)
+		area.free()
+		return null
+	return area
+
+
+func _create_placed_utility_area(fixture_kind: int, footprint_size: Vector2i) -> Area2D:
+	var area := Area2D.new()
 	var region := get_fixture_region_rect(fixture_kind)
 	var sprite := Sprite2D.new()
 	sprite.name = "Sprite2D"
@@ -740,13 +764,6 @@ func spawn_placed_fixture(
 	rect_shape.size = Vector2(footprint_size * tile_size) - Vector2(4.0, 4.0)
 	shape_node.shape = rect_shape
 	area.add_child(shape_node)
-
-	container.add_child(area)
-	var cells := _build_node_footprint(area)
-	if cells.is_empty() or not register_object(instance_id, area, cells):
-		container.remove_child(area)
-		area.free()
-		return null
 	return area
 
 
@@ -1233,10 +1250,13 @@ func _resolve_customer_visual_position(view: Dictionary) -> Vector2:
 		return Vector2(304, 80) + CUSTOMER_OVERFLOW_STEP * float(queue_idx)
 
 	var table_id := StringName(view.get("assigned_table_id", &""))
+	var seat_anchor := get_table_seat_anchor(table_id)
+	if seat_anchor != null:
+		return dine_in_waiting_anchors.to_local(seat_anchor.global_position)
 	var table_node := registry.get_object(table_id)
 	if table_node != null:
-		return dine_in_waiting_anchors.to_local(table_node.global_position) + Vector2(0, -12)
-	return Vector2(80, 228)
+		return dine_in_waiting_anchors.to_local(table_node.global_position) + Vector2(0, 16)
+	return Vector2(80, 256)
 
 
 func _update_customer_visual_badge(

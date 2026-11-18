@@ -1,7 +1,7 @@
 # Ketik Saji — Coordinator Decision Review (Milestone 0 & M5-A Update)
 
-**Date:** 2026-11-16 (updated 2026-11-18 for M5-A World Layout & Customer Seating approval and M5-A1 completion)
-**Baseline status:** Milestones 0–4 (`M0`–`M4-C`) PASS in `main` @ `e5898bb` | **M5-A1 World Layout (`12×9`) IMPLEMENTED & VERIFIED (`10` headless suites, `913/913` assertions, plus `640×360` and `480×270` GUI viewport checks); M5-A2 Customer Seating (`ChairVisual`, `SeatAnchor`, customer seating changes) PENDING IMPLEMENTATION**
+**Date:** 2026-11-16 (updated 2026-11-18 for M5-A World Layout & Customer Seating approval and M5-A1/M5-A2 completion)
+**Baseline status:** Milestones 0–4 (`M0`–`M4-C`) & M5-A1 (`489f15d`) PASS | **M5-A2 Customer Seating (`ChairVisual`, `SeatAnchor`, `ChairHitbox`, `TabletopPlaceholder`) IMPLEMENTED & VERIFIED (`10` headless suites, `935/935` assertions, plus `640×360` and `480×270` GUI viewport checks)**
 **Authority order respected:** Coordinator explicit decisions > `docs/SHARED_BASELINE.md` > `docs/ARCHITECTURE.md` > `docs/DECISION_REGISTER.md` > `docs/systems/*.md` > `docs/WORLD_LAYOUT_AND_VIEWPORT.md` > `docs/IMPLEMENTATION_PLAN.md` / `docs/ACCEPTANCE_TESTS.md` > `CLAUDE.md` / `docs/CODING_STANDARDS.md` > this review.
 
 This document reconciles the pre-A3 review items and the 2026-11-18 **M5-A World Layout & Customer Seating** coordinator approvals against canonical documentation. Historical Milestone 0 context is preserved below alongside the signed-off decisions.
@@ -24,7 +24,7 @@ Status vocabulary used below:
 | `CDR-05` | Viewport, `12×9` world layout, right-side queue, and `World`/HUD framing (`VIS-01`–`VIS-03`) | **APPROVED & IMPLEMENTED (M0 Candidate B technical default; CONFIRMED & VERIFIED 2026-11-18 in M5-A1)** | **No** | Approved by Coordinator (`12×9` `32×32` px grid, col 9 queue with 4 anchors, cols 10–11 road; `World` `(144,36)` & `LeftHUDRegion` `112` px verified at `640×360` and `480×270`) |
 | `CDR-06` | Canonical object IDs, `5` utility + `6` table `PlacementSlots`, pickup spots `(7,5)..(7,7)`, and `OnlineStation` `(6,4)` | **APPROVED & IMPLEMENTED (A3 footprint confirmed 2026-11-16; M5-A1 `12×9` layout & 11 slots CONFIRMED & VERIFIED 2026-11-18)** | **No** | Approved by Coordinator (preserve starter IDs, `5` utility slots, `6` table slots, passive long counter & col 8 wall, pickups at `(7,5)..(7,7)`) |
 | `CDR-07` | `WorldGrid` occupancy vs. floor walkability & non-walkable pickup cells | **APPROVED & IMPLEMENTED (CONFIRMED 2026-11-16 in M0 & 2026-11-18 in M5-A1)** | **No** | Approved by Coordinator (`occupy()` walkability-agnostic, `is_free()` required for teleport, pickup cells `(7,5)..(7,7)` non-walkable) |
-| `CDR-08` | M5-A2 dining-table `ChairVisual` / `SeatAnchor` south-side seating & temporary tabletop art rule (`VIS-04`) | **APPROVED (CONFIRMED 2026-11-18 — M5-A2 Implementation Pending)** | **No** | Approved by Coordinator (south-side visual-only `ChairVisual` + `SeatAnchor`, extended table hitbox, shared starter/dynamic table structure, chair sprite not used as tabletop) |
+| `CDR-08` | M5-A2 dining-table `ChairVisual` / `SeatAnchor` south-side seating & temporary tabletop art rule (`VIS-04`) | **APPROVED & IMPLEMENTED (CONFIRMED & VERIFIED 2026-11-18 in M5-A2)** | **No** | Approved by Coordinator (south-side visual-only `ChairVisual` + `SeatAnchor`, extended table hitbox, shared `dining_table.tscn` starter/dynamic structure, chair sprite not used as tabletop) |
 
 ---
 
@@ -138,7 +138,7 @@ Status vocabulary used below:
   - *Initial M0 pre-implementation snapshot (2026-11-16):* `GameRoot/World` started temporarily at `(0, 0)` with no `LeftHUDRegion` (`ui_safe_rect`) built yet and no `Camera2D`.
   - *Current verified state (M5-A1):* `project.godot` uses `640×360` viewport / `1280×720` window override (`canvas_items` stretch, Nearest texture filter `3`). `GameRoot/World.position` is `(144, 36)`, `GameUI.ui_safe_rect` (`LeftHUDRegion`) is `Rect2(0, 0, 112, 360)`, `world_visible_rect` is `Rect2(112, 0, 528, 360)` (`Rect2(112, 0, 368, 270)` at `480×270`), and no `Camera2D` or `SubViewport` is used.
 - **Resolution of prior M0 fit-test questions:**
-  - All prior M0 open items (`640×360` + `480×270` fit validation, `ui_safe_rect` / `world_visible_rect` bounds, and selecting `World` transform offset over `Camera2D`) were resolved via `CC-02` Option A and verified in M5-A1 (only M5-A2 customer seating offsets/hitboxes remain open under `CDR-08`).
+  - All prior M0 open items (`640×360` + `480×270` fit validation, `ui_safe_rect` / `world_visible_rect` bounds, and selecting `World` transform offset over `Camera2D`) were resolved via `CC-02` Option A and verified in M5-A1 (M5-A2 customer seating offsets/hitboxes were also subsequently implemented and verified under `CDR-08`).
 - **Required approvers:** Coordinator (confirmed `CC-02` Option A & M5-A1 framing).
 
 ### Approval (`CDR-05`)
@@ -206,7 +206,7 @@ Status vocabulary used below:
 
 ## CDR-08 — M5-A2 Customer Seating & Dining-Table Art Direction (`VIS-04`)
 
-- **Current status:** **APPROVED (CONFIRMED 2026-11-18 — M5-A2 Implementation Pending)**
+- **Current status:** **APPROVED & IMPLEMENTED (CONFIRMED & VERIFIED 2026-11-18 in M5-A2)**
 - **Approved coordinator rules:**
   - Each dining table (`dining_table_01`, `dining_table_02`, and dynamically purchased `dining_table_03+` via M4-C) owns a child `ChairVisual` (`Sprite2D`) and a child `SeatAnchor` (`Marker2D`) on the **south side** of the table.
   - The chair is **visual-only** (not registered in `WorldRegistry` or `WorldGrid`), and the dining table remains the sole authoritative gameplay target for `saji` and `bersihkan`, with an extended/additional hitbox over the chair region so clicking the chair/customer selects the table.
@@ -218,7 +218,7 @@ Status vocabulary used below:
 - **Rejected alternatives:** Separate registered chair targets; new seating manager; reusing the chair sprite as the tabletop.
 - **Approver:** Coordinator
 - **Date:** 2026-11-18
-- **Notes:** M5-A1 world layout checkpoint has passed (`10` headless suites, `913/913` assertions, plus `640×360` and `480×270` GUI viewport checks). M5-A2 implementation and verification remain pending (`ChairVisual`, `SeatAnchor`, extended table hitbox, and temporary tabletop placeholder have not yet been implemented).
+- **Notes:** Implemented and verified in M5-A2 (`scenes/world/dining_table.tscn`, `scenes/world/restaurant_world.tscn`, `scripts/world/world_map.gd`) across all `10` headless test suites (`935/935` assertions) and `640×360` / `480×270` GUI viewport checks (`TabletopPlaceholder` stays active until dedicated dining-table art arrives).
 
 ---
 

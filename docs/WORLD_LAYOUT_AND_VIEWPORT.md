@@ -3,8 +3,8 @@
 **Authority:** coordinator's explicit **M5-A World Layout & Customer Seating** approval (2026-11-18) updates the earlier v2.1 sketch (`references/current_screen_layout_NON_BINDING.png`, which used a provisional `13×9` grid with a left-side waiting lane). Read alongside `docs/SHARED_BASELINE.md`, `docs/ARCHITECTURE.md`, `docs/DECISION_REGISTER.md` (`VIS-01`–`VIS-04`), and `docs/systems/04_UI_FEEDBACK_LOCALIZATION.md`.
 
 > **Status note (2026-11-18):**
-> - **M5-A1 World Layout (`12×9`):** **Implemented and verified** in `scenes/world/restaurant_world.tscn`, `scripts/world/world_grid.gd`, `scripts/world/world_map.gd`, `scripts/kitchen/kitchen_controller.gd`, and `scripts/ui/game_ui.gd` (validated across all `10` headless test suites — `913/913` assertions — and `640×360` / `480×270` GUI viewport checks).
-> - **M5-A2 Customer Seating (`VIS-04`):** **Pending implementation.** `ChairVisual`, `SeatAnchor`, and customer seating changes (including the temporary tabletop placeholder) have **not yet been implemented**.
+> - **M5-A1 World Layout (`12×9`):** **Implemented and verified** in `scenes/world/restaurant_world.tscn`, `scripts/world/world_grid.gd`, `scripts/world/world_map.gd`, `scripts/kitchen/kitchen_controller.gd`, and `scripts/ui/game_ui.gd` (validated across all `10` headless test suites and `640×360` / `480×270` GUI viewport checks).
+> - **M5-A2 Customer Seating (`VIS-04`):** **Implemented and verified** in `scenes/world/dining_table.tscn`, `scenes/world/restaurant_world.tscn`, and `scripts/world/world_map.gd` (`ChairVisual`, `SeatAnchor`, `ChairHitbox`, `TabletopPlaceholder`, and `SeatAnchor`-based customer positioning validated across `10/10` headless suites — `935/935` assertions — and `640×360` / `480×270` GUI checks; `TabletopPlaceholder` stays active until dedicated dining-table art is supplied).
 
 ## 1. Approved M5-A screen and world composition (`12×9` grid, `32×32` px tiles)
 
@@ -39,7 +39,7 @@
   - **Interior wall (`dinding`):** `col 8, rows 0..4` and `(8,8)`.
 - **Player starting cell:** `DEFAULT_START_TILE = Vector2i(6, 3)` (free kitchen floor cell directly north of `online_station` at `(6,4)`).
 
-## 2. Approved M5-A2 customer seating & table art rules (`VIS-04` — Pending Implementation)
+## 2. Approved M5-A2 customer seating & table art rules (`VIS-04` — Implemented & Verified)
 
 - **Child nodes on every dining table:** Each dining table (`dining_table_01`, `dining_table_02`, and dynamically purchased `dining_table_03+` spawned via `WorldMap.spawn_placed_fixture()`) owns:
   - `ChairVisual` (`Sprite2D`) positioned on the **south side** of the table.
@@ -53,14 +53,14 @@
   - `Rect2(416, 160, 32, 32)` in `Warung-Tileset.png` depicts a **chair** and must **not** be used as the dining-table tabletop sprite.
   - Until a dedicated dining-table sprite is confirmed by the art team, the tabletop must use a **clearly identified temporary placeholder** (while `ChairVisual` uses the chair sprite), without inventing or silently substituting unapproved final art.
 
-## 3. Source-level validation status (M5-A1 Verified vs. M5-A2 Pending)
+## 3. Source-level validation status (M5-A1 & M5-A2 Verified)
 
 ### Completed and verified in M5-A1 (World Layout `12×9`)
-1. **`World` offset and `LeftHUDRegion` width coupling (Verified in M5-A1):** With the world width changing from `416` px (`13` cols) to `384` px (`12` cols), `GameRoot/World.position = Vector2(144, 36)`, `GameUI.ui_safe_rect = Rect2(0, 0, 112, 360)`, and `GameUI.world_visible_rect = Rect2(112, 0, 528, 360)` (`Rect2(112, 0, 368, 270)` at `480×270`) were evaluated together and verified across `10` headless test suites (`913/913` assertions) and non-headless GUI viewport checks at `640×360` (`1280×720` window) and `480×270` (including compact `FixtureShopPopup` slot buttons for all `11` slots, HUD click blocking, and screen-to-world coordinate conversion).
+1. **`World` offset and `LeftHUDRegion` width coupling (Verified in M5-A1):** With the world width changing from `416` px (`13` cols) to `384` px (`12` cols), `GameRoot/World.position = Vector2(144, 36)`, `GameUI.ui_safe_rect = Rect2(0, 0, 112, 360)`, and `GameUI.world_visible_rect = Rect2(112, 0, 528, 360)` (`Rect2(112, 0, 368, 270)` at `480×270`) were evaluated together and verified across `10` headless test suites (`913/913` assertions at M5-A1; `935/935` after M5-A2) and non-headless GUI viewport checks at `640×360` (`1280×720` window) and `480×270` (including compact `FixtureShopPopup` slot buttons for all `11` slots, HUD click blocking, and screen-to-world coordinate conversion).
 2. **M5-A1 marker & hitbox positions (Verified in M5-A1):** Authored and verified local positions for `dine_in_wait_01..04` along column `9` (`(304, 80)`, `(304, 144)`, `(304, 208)`, `(304, 240)` -> cells `(9,2)`, `(9,4)`, `(9,6)`, `(9,7)`), `driver_overflow` in the right-side road (`(368, 240)` -> cell `(11,7)`), `pickup_spot_01..03` at `(240, 176/208/240)` -> non-walkable cells `(7,5)..(7,7)`, and `online_station` at `(208, 144)` -> cell `(6,4)`.
-3. **All-slots-occupied cardinal access (Verified in M5-A1):** Verified in headless tests (`tests/test_world_hierarchy.gd` `208/208` PASS and `tests/test_fixture_m4c.gd` `104/104` PASS) that all `12` starter interactables, all `11` `PlacementSlots`, and all `3` `DriverPickupSpots` retain at least one `is_free()` cardinal neighbor both initially and when all `5` utility slots and `6` table slots are simultaneously occupied.
+3. **All-slots-occupied cardinal access (Verified in M5-A1):** Verified in headless tests (`tests/test_world_hierarchy.gd` and `tests/test_fixture_m4c.gd`) that all `12` starter interactables, all `11` `PlacementSlots`, and all `3` `DriverPickupSpots` retain at least one `is_free()` cardinal neighbor both initially and when all `5` utility slots and `6` table slots are simultaneously occupied.
 
-### Pending implementation and source-level validation in M5-A2 (Customer Seating)
-1. **South-side `ChairVisual` and `SeatAnchor` offsets (Pending M5-A2):** Author and validate exact south-side local offsets for `ChairVisual` (`Sprite2D`) and `SeatAnchor` (`Marker2D`) on starter tables (`dining_table_01..02`) and dynamically purchased tables (`dining_table_03+`), ensuring seated customers render on the south chair rather than on top of the tabletop.
-2. **Extended dining-table hitbox bounds (Pending M5-A2):** Validate the extended/secondary dining-table `CollisionShape2D` covering the south chair region so clicking the chair/customer selects the associated table without overlapping adjacent table, slot, or pickup hitboxes.
-3. **Temporary tabletop placeholder & seating regression verification (Pending M5-A2):** Validate that `Rect2(416, 160, 32, 32)` is used only for `ChairVisual`, a clearly identified temporary placeholder is used for the tabletop, and all headless + GUI seating checks pass after M5-A2 implementation.
+### Completed and verified in M5-A2 (Customer Seating)
+1. **South-side `ChairVisual` and `SeatAnchor` offsets (Verified in M5-A2):** Shared `scenes/world/dining_table.tscn` places `ChairVisual` (`Sprite2D`, `Rect2(416, 160, 32, 32)`) at `(0, 13)` and `SeatAnchor` (`Marker2D`) at `(0, 16)` on starter tables (`dining_table_01..02`) and dynamically purchased tables (`dining_table_03+`), keeping seated `SEATED_WAITING` and `EATING` customers centered on the south chair inside world bounds.
+2. **Extended dining-table hitbox bounds (Verified in M5-A2):** `TableHitbox` (`28×28` at `(0, 0)`) and `ChairHitbox` (`22×12` at `(0, 18)`) select the owning `dining_table_*` across tabletop and chair regions without overlapping adjacent row-5/row-7 tables or stealing floor clicks at the centers of south-adjacent walkable floor cells (`row 6` / `row 8`).
+3. **Temporary tabletop placeholder & seating regression verification (Verified in M5-A2):** `TabletopPlaceholder` renders a wooden tabletop distinct from `Rect2(416, 160, 32, 32)` (`ChairVisual`), `ChairVisual`/`SeatAnchor` remain unregistered (`31` registered IDs preserved), and all `10` headless suites (`935/935` assertions) plus `640×360` / `480×270` GUI seating checks pass.
