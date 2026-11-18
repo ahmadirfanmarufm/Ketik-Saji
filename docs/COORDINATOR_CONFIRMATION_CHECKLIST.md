@@ -1,8 +1,8 @@
 # Ketik Saji — Consolidated Coordinator Confirmation Checklist
 
-**Date:** 2026-11-16
-**Project state:** Track A1 (Documentation Consistency Audit) PASS | Track A2 (World Foundation Hardening, Godot 4.7.2) PASS | Milestone 0 **PARTIAL** | Track A3 **NOT STARTED**
-**Related review:** `docs/COORDINATOR_DECISION_REVIEW.md`
+**Date:** 2026-11-16 (updated 2026-11-18 for M5-A World Layout & Customer Seating approval and M5-A1 completion)
+**Project state:** Milestones 0–4 (`M0`–`M4-C`) PASS in `main` @ `e5898bb` | **M5-A1 World Layout (`12×9`) IMPLEMENTED & VERIFIED (`10` headless suites, `913/913` assertions, plus `640×360` and `480×270` GUI viewport checks); M5-A2 Customer Seating (`ChairVisual`, `SeatAnchor`, customer seating changes) PENDING IMPLEMENTATION**
+**Related review:** `docs/COORDINATOR_DECISION_REVIEW.md`, `docs/DECISION_REGISTER.md` (`VIS-01`–`VIS-04`)
 
 ---
 
@@ -51,7 +51,10 @@ The following **25** decisions and technical freezes are already confirmed in `d
 | `D-01` | Day 1 starter kit (1 box, 1 stove, 1 washer, 1 rack, 1 cooker, 2 tables + map work table/trash); `+4/day` demand growth; Day 7 post-electricity goal; optional Extra Mode | `docs/DECISION_REGISTER.md`; `docs/SHARED_BASELINE.md` | Pending (Milestone 0/4/5) |
 | `D-02` | Ingredient buys target one chosen storage unit: immediate in `PLANNING`, `100s` delivery in `SERVING`, full refund once if still `PENDING` at close | `docs/DECISION_REGISTER.md`; `docs/systems/03_PLANNING_ECONOMY_PROGRESSION.md` §4 | Pending (Milestone 4) |
 | `E-01` | World-first UI: per-diner icons + `100s`/`20s` rings, per-driver icons + `60s` rings, `100s` shipment rings, ghost command above target, persistent HUD strip | `docs/DECISION_REGISTER.md`; `docs/systems/04_UI_FEEDBACK_LOCALIZATION.md` §1–2 | Pending (Milestone 0/2/3/4) |
-| `VIS-01` / `VIS-02` (Architecture) | Persistent left HUD band + adjacent visible dine-in lane + right restaurant in **one** 2D viewport (`World: Node2D` + `UI: CanvasLayer`); 32 px art; `10×9` superseded; GUI blocks click-through | `docs/DECISION_REGISTER.md` (`VIS-01`, `VIS-02`); `docs/WORLD_LAYOUT_AND_VIEWPORT.md` §1–2 | Partial (`13×9` 32 px grid in `restaurant_world.tscn`; dimensions & framing method open — see `CC-02`) |
+| `VIS-01` (Layout Direction & `12×9` Grid) | Persistent left vertical HUD band (`LeftHUDRegion` / `ui_safe_rect`) with playable `12×9` (`32×32` px, `384×288` px) restaurant world on the right; kitchen upper (`rows 0..3`), divider (`row 4`), dining lower (`rows 5..8`); dine-in queue relocated to **column 9 on the right** (`4` waiting anchors); road/driver overflow in **columns 10–11** (superseding the M0 `13×9` left-lane sketch) | `docs/DECISION_REGISTER.md` (`VIS-01`); `docs/WORLD_LAYOUT_AND_VIEWPORT.md` §1 | Approved 2026-11-18 & Implemented/Verified in M5-A1 (`10` headless suites / `913/913` assertions + `640×360` and `480×270` GUI viewport checks) |
+| `VIS-02` (Viewport Composition & Framing) | World and UI share **one** 2D viewport (`World: Node2D` + `UI: CanvasLayer`); `World` transform offset (`Vector2(144, 36)`) and `LeftHUDRegion` width (`112` px, `ui_safe_rect = Rect2(0, 0, 112, 360)`) evaluated together against viewport bounds and HUD click blocking; planning panels may temporarily overlap the world | `docs/DECISION_REGISTER.md` (`VIS-02`); `docs/WORLD_LAYOUT_AND_VIEWPORT.md` §1, §3 | Approved & Implemented/Verified in M5-A1 (M0 Candidate B framing re-evaluated and verified for the `12×9` world at `640×360` and `480×270`) |
+| `VIS-03` (M5-A1 World Layout & `PlacementSlots`) | `12×9` grid (`108` `FloorTiles` cells); starter IDs preserved; `5` utility slots (`slot_utility_01..05`) + `6` dining-table slots (`slot_table_01..06`); passive row-4 long counter (`cols 0..5`) and col-8 wall (`rows 0..4 & 8`, walkable doorway `rows 5..7`); `online_station` at `(6,4)`; non-walkable pickup spots `(7,5)..(7,7)`; player start `(6,3)` | `docs/DECISION_REGISTER.md` (`VIS-03`); `docs/WORLD_LAYOUT_AND_VIEWPORT.md` §1 | Approved 2026-11-18 & Implemented/Verified in M5-A1 (`restaurant_world.tscn`, `world_grid.gd`, `world_map.gd`, `kitchen_controller.gd`, `game_ui.gd`) |
+| `VIS-04` (M5-A2 Customer Seating & Table Art) | Every starter and dynamically purchased dining table owns south-side child `ChairVisual [Sprite2D]` + `SeatAnchor [Marker2D]`; visual-only chair with extended table hitbox; `ServiceController` sole seating/order owner; do **not** use chair sprite (`Rect2(416,160,32,32)`) as tabletop sprite (use temporary tabletop placeholder until dedicated table art is confirmed) | `docs/DECISION_REGISTER.md` (`VIS-04`); `docs/WORLD_LAYOUT_AND_VIEWPORT.md` §2 | Approved 2026-11-18 (design decision); **M5-A2 implementation pending** (`ChairVisual`, `SeatAnchor`, extended table hitbox, and customer seating changes not yet implemented) |
 | `TECH-01` | Frozen `GameRoot -> World` container tree (`FloorTiles`, `DineInWaitingAnchors`, `Player`, `KitchenStations`, `KitchenWorkTables`, `DiningTables`, `OnlineStation`, `DriverPickupSpots`, `DriverOverflowAnchors`, `DriverObjects`, `PlacementSlots`) + 4 single-owner controllers/UI; no autoloads | `docs/DECISION_REGISTER.md`; `docs/ARCHITECTURE.md` §1–2 | Implementation task pending: `restaurant_world.tscn` uses provisional `WaitingLane`, `OnlineArea`, `WorkTable` inside `KitchenStations`, and `Decorations` (only `Decorations` needs clarification — see `CC-05`) |
 | `TECH-02` | Single monotonic `service_elapsed` clock in `GameRoot` + `advance_service_time(now)` per owner; no per-order Godot `Timer` nodes | `docs/DECISION_REGISTER.md`; `docs/ARCHITECTURE.md` §3 | Pending (Milestone 0 `game_root.gd`) |
 | `TECH-03` | Single 4-arg `try_consume_serving_item`; target-specific `try_serve_table` / `try_serve_driver`; ID-based once-only accounting | `docs/DECISION_REGISTER.md`; `docs/ARCHITECTURE.md` §5–6 | Pending (Milestone 1/2/3) |
@@ -75,7 +78,7 @@ These **6** items require explicit coordinator decision or content sign-off. Whe
 7. **Impact on implementation:** Blocks controller skeletons (`KitchenController`, Movement module) and Milestone 1 routing. **Does not block Track A3** (core enums and `.tres` schemas).
 8. **Affected systems or programmers:** Coordinator, Movement programmer, `KitchenController` owner, `GameUI` (UI-to-world click gate).
 9. **Required approvers:** Coordinator, Movement programmer, `KitchenController` owner.
-10. **Current status:** `WAITING FOR COORDINATOR` (joint sign-off with `TA-01`)
+10. **Current status:** `APPROVED & IMPLEMENTED (Option A confirmed 2026-11-16 in DECISION_REGISTER.md — KitchenController sole owner of player_tile & click routing, implemented in M0/M1)`
 
 ---
 
@@ -92,7 +95,7 @@ These **6** items require explicit coordinator decision or content sign-off. Whe
 7. **Impact on implementation:** Blocks finalizing Milestone 0 `LeftHUDRegion` anchoring and framing in `game_root.tscn` (`E06`/`E06a`). **Does not block Track A3** or controller logic.
 8. **Affected systems or programmers:** Coordinator, World owner, `GameUI` owner, Movement programmer.
 9. **Required approvers:** Coordinator, World owner, `GameUI` owner, Movement programmer.
-10. **Current status:** `WAITING FOR COORDINATOR` (pending Milestone 0 blockout fit test)
+10. **Current status:** `APPROVED & IMPLEMENTED (Option A — Historical M0 status: WAITING FOR COORDINATOR pending Milestone 0 blockout fit test, implemented in M0 via VIS-02 TECHNICAL DEFAULT Candidate B with World at (144, 36) and LeftHUDRegion 112×360; M5-A1 completion note [2026-11-18]: coordinator-approved joint evaluation of World offset and LeftHUDRegion width for the 12×9 384×288 world completed and verified in M5-A1 with World.position = Vector2(144, 36) and ui_safe_rect = Rect2(0, 0, 112, 360) across 10 headless suites [913/913 assertions] and 640×360 / 480×270 GUI viewport checks)`
 
 ---
 
@@ -108,7 +111,7 @@ These **6** items require explicit coordinator decision or content sign-off. Whe
 7. **Impact on implementation:** Blocks completing Milestone 0 `restaurant_world.tscn` and Milestone 4 slot-based shop data. **Does not block Track A3** (schemas can use `footprint: Vector2i = Vector2i(1, 1)` default once `TQ-01` is synced).
 8. **Affected systems or programmers:** Coordinator, World owner, `KitchenController`, `ServiceController`, `RunController`.
 9. **Required approvers:** Coordinator, World owner, `KitchenController` owner, `ServiceController` owner, `RunController` owner.
-10. **Current status:** `WAITING FOR COORDINATOR` (joint IDs in `TA-03`)
+10. **Current status:** `APPROVED & IMPLEMENTED (Option B — Historical M0–M4 baseline used provisional 13×9 coordinates with 4 PlacementSlots; approved 2026-11-18 and implemented/verified in M5-A1: 12×9 32×32 px layout; starter IDs preserved; 5 utility slots + 6 table slots; passive row-4 long counter cols 0..5 & col-8 wall with doorway rows 5..7; online_station at (6,4); non-walkable pickup_spot_01..03 at (7,5)..(7,7); col-9 dine-in queue with 4 anchors; cols 10..11 road driver overflow; player start at (6,3); verified across 10 headless suites [913/913 assertions] and 640×360 / 480×270 GUI checks)`
 
 ---
 
@@ -140,7 +143,7 @@ These **6** items require explicit coordinator decision or content sign-off. Whe
 7. **Impact on implementation:** Minor cleanup during Milestone 0 `restaurant_world.tscn` reconciliation. **Does not block Track A3.**
 8. **Affected systems or programmers:** Coordinator, World owner.
 9. **Required approvers:** Coordinator, World owner.
-10. **Current status:** `DISCUSSION NEEDED`
+10. **Current status:** `APPROVED & IMPLEMENTED (Option A confirmed 2026-11-16 in DECISION_REGISTER.md & 2026-11-18 in M5-A1: retain Decorations as a passive visual-only child of World; passive long counter and interior wall verified in M5-A1 without registering gameplay targets)`
 
 ---
 
@@ -156,7 +159,19 @@ These **6** items require explicit coordinator decision or content sign-off. Whe
 7. **Impact on implementation:** Affects Milestone 1 `Trash` (`B06`) and Milestone 4 `request_fixture_sale` (`D01`). **Does not block Track A3 or Milestone 0.**
 8. **Affected systems or programmers:** Coordinator, `KitchenController` owner, `RunController` owner.
 9. **Required approvers:** Coordinator.
-10. **Current status:** `DISCUSSION NEEDED` (can wait until playtesting / before Milestone 1 & 4)
+10. **Current status:** `DISCUSSION NEEDED` (can wait until playtesting / before final sign-off; reversible defaults `#1` trash plate preservation and `#3` starter `actual_amount_paid = 0` remain `PROPOSED` per `DECISION_REGISTER.md`)
+
+---
+
+### `CC-07` — M5-A2 Dining-Table Customer Seating & Tabletop Art Rule (Primary ID for `VIS-04` / `CDR-08`)
+1. **Decision ID:** `CC-07` (cross-ref `VIS-04`, `CDR-08`)
+2. **Topic:** Customer chair visual placement, seat anchor resolution, table click hitbox coverage, dynamic M4-C table parity, and dining-table vs. chair sprite assignment
+3. **Approved coordinator rules (2026-11-18):**
+   - Each dining table (`dining_table_01`, `dining_table_02`, and dynamically purchased `dining_table_03+`) owns a child `ChairVisual` (`Sprite2D`) and a child `SeatAnchor` (`Marker2D`) on the **south side** of the table via a shared scene or construction path.
+   - The chair is **visual-only** (not registered in `WorldRegistry` or `WorldGrid`); the dining table remains the authoritative target for `saji` and `bersihkan`, with an additional/extended hitbox over the south chair region so clicking the chair selects the table.
+   - `ServiceController` remains sole owner of customer queues, table occupancy, serving, eating, timeouts, cleaning, and day reset (no seating manager or duplicate state).
+   - **Art rule:** Do **not** use the existing chair sprite (`Rect2(416, 160, 32, 32)` in `Warung-Tileset.png`) as the dining-table tabletop sprite. Use a clearly identified temporary tabletop placeholder until a dedicated dining-table sprite is confirmed.
+4. **Current status:** `APPROVED (2026-11-18 design decision — M5-A2 implementation pending; ChairVisual, SeatAnchor, extended table hitbox, and customer seating changes have not yet been implemented)`
 
 ---
 
@@ -279,23 +294,24 @@ Each unresolved issue has **one** primary row below (cross-referenced IDs stay s
 
 | ID | Decision | Priority | Required Participants | Status | Final Decision / Notes |
 |---|---|---|---|---|---|
-| `TQ-01` | Track A3 `.tres` schema split (`UtilityDef.footprint`, `RecipeDef.unlock_day` vs. `RecipeEconomyEntry`, `EconomyConfig`) | **P0** *(for A3)* | `KitchenController`, `RunController`, World | `WAITING FOR TEAM AGREEMENT` | |
-| `CC-01` / `TA-01` | Movement vs. `KitchenController` ownership, `player_tile`, and single click router (`CDR-04`) | **P0** *(for Controllers/M1)* | Coordinator, Movement, `KitchenController`, `GameUI` | `WAITING FOR COORDINATOR` | Joint coordinator + team ownership sign-off |
-| `TA-02` | `WorldMap`/`WorldGrid` spatial query helpers, tie-break metric, driver registration (`CDR-03`) | **P1** | World, Movement, `KitchenController` | `WAITING FOR TEAM AGREEMENT` | |
-| `TQ-02` | `WorldGrid.occupy()` walkability-agnostic vs. placement-slot validation (`CDR-07`) | **P1** | Coordinator, World, Movement | `DISCUSSION NEEDED` | |
-| `TQ-04` | World target picking mechanism (`Area2D` hitboxes vs. cell lookup, split `WorkTable`) | **P1** | World, Movement, `KitchenController`, `ServiceController` | `WAITING FOR TEAM AGREEMENT` | |
-| `CC-03` / `TA-03` | `OnlineStation` placement, `PlacementSlots` categories, canonical starter/dynamic IDs (`CDR-06`) | **P1** | Coordinator, World, `KitchenController`, `ServiceController`, `RunController` | `WAITING FOR COORDINATOR` | Map positions + team ID naming contract |
-| `CC-02` / `TA-04` | Logical viewport, `ui_safe_rect` width, `World` offset vs. `Camera2D` framing (`VIS-01`/`VIS-02`, `CDR-05`) | **P1** | Coordinator, World, `GameUI`, Movement | `WAITING FOR COORDINATOR` | Does not block A3; resolve via M0 fit test |
-| `TA-05` | `GameRoot` controller wiring & single `is_drained()` close-guard route | **P1** | `GameRoot`, `KitchenController`, `ServiceController`, `RunController` | `WAITING FOR TEAM AGREEMENT` | |
-| `TQ-05` | Linking pre-placed starter scene nodes to `RunController` `fixture_instances` | **P1** | World, `KitchenController`, `ServiceController`, `RunController` | `WAITING FOR TEAM AGREEMENT` | |
-| `TQ-08` | `LeftHUDRegion` `mouse_filter` & `Belanja` modal keyboard focus isolation | **P1** | `GameUI`, `KitchenController`, Movement | `WAITING FOR TEAM AGREEMENT` | |
-| `CC-05` | Retain visual-only `Decorations` node under `World` during `TECH-01` container migration | **P2** | Coordinator, World | `DISCUSSION NEEDED` | Canonical 11 nodes already settled (`TECH-01`) |
-| `CC-06` | Pre-Milestone 1/4 confirmation of trash-plate & `Rp0` starter-resale defaults (`PD-01`, `PD-03`) | **P2** | Coordinator, `KitchenController`, `RunController` | `DISCUSSION NEEDED` | |
-| `CC-04` | Day 4–7 recipe intake timeline, placeholder icons & final balance target | **P2** | Coordinator, Artists, `RunController`, `GameUI` | `WAITING FOR COORDINATOR` | |
-| `TQ-03` | Final `TileSet` vs. `@export` walkability rects on `FloorTiles` | **P2** | World, Artists | `DEFERRED` | |
-| `TQ-07` | In-repo acceptance test folder & `GameRoot` simulated clock override | **P2** | `GameRoot`, `KitchenController`, `ServiceController`, `RunController` | `DISCUSSION NEEDED` | |
-| `PD-01`–`PD-10` | Provisional gameplay defaults & `EconomyConfig` `TUNING` balance knobs | **P3** | Coordinator, All owners (playtest) | `DEFERRED` | |
-| `TQ-06` / `CDR-02` | `ARCHITECTURE.md` `PlayerVisual` shorthand note & minor code/doc naming polish | **P3** | World, `GameUI`, Docs | `DEFERRED` | |
+| `TQ-01` | Track A3 `.tres` schema split (`UtilityDef.footprint`, `RecipeDef.unlock_day` vs. `RecipeEconomyEntry`, `EconomyConfig`) | **P0** *(for A3)* | `KitchenController`, `RunController`, World | `APPROVED & IMPLEMENTED` | Confirmed 2026-11-16 (`DECISION_REGISTER.md`); implemented in Track A3 |
+| `CC-01` / `TA-01` | Movement vs. `KitchenController` ownership, `player_tile`, and single click router (`CDR-04`) | **P0** *(for Controllers/M1)* | Coordinator, Movement, `KitchenController`, `GameUI` | `APPROVED & IMPLEMENTED` | Option A confirmed 2026-11-16 (`DECISION_REGISTER.md`: `KitchenController` sole owner; `PlayerVisual` helper); implemented in M0/M1 |
+| `TA-02` | `WorldMap`/`WorldGrid` spatial query helpers, tie-break metric, driver registration (`CDR-03`) | **P1** | World, Movement, `KitchenController` | `APPROVED & IMPLEMENTED` | Confirmed 2026-11-16 (`DECISION_REGISTER.md`: Manhattan distance + `CARDINAL_OFFSETS` tie-break); implemented in M0 |
+| `TQ-02` | `WorldGrid.occupy()` walkability-agnostic vs. placement-slot validation (`CDR-07`) | **P1** | Coordinator, World, Movement | `APPROVED & IMPLEMENTED` | Confirmed 2026-11-16 (`DECISION_REGISTER.md`) & 2026-11-18 M5-A1 (`occupy()` walkability-agnostic; pickup cells `(7,5)..(7,7)` non-walkable) |
+| `TQ-04` | World target picking mechanism (`Area2D` hitboxes vs. cell lookup, split `WorkTable`) | **P1** | World, Movement, `KitchenController`, `ServiceController` | `RESOLVED IN IMPLEMENTATION (M0–M4)` | Technical choice implemented in M0/M4-C (`Area2D` picking for interactables + `StagingTarget`/`ChoppingTarget` on `WorkTable` + `Marker2D` hit-test for `PlacementSlots`) |
+| `CC-03` / `TA-03` | `OnlineStation` placement, `PlacementSlots` categories, canonical starter/dynamic IDs (`CDR-06`, `VIS-03`) | **P1** | Coordinator, World, `KitchenController`, `ServiceController`, `RunController` | `APPROVED & IMPLEMENTED (2026-11-18 M5-A1)` | M5-A1 `12×9` layout & `11` slots (`5` utility + `6` table), passive row-4 counter & col-8 wall, `online_station` `(6,4)`, non-walkable pickups `(7,5)..(7,7)`, col-9 queue (`4` anchors), cols `10..11` road overflow, player start `(6,3)` implemented & verified (`10` suites / `913/913` + GUI checks) |
+| `CC-02` / `TA-04` | Logical viewport, `ui_safe_rect` width, `World` offset vs. `Camera2D` framing (`VIS-01`–`VIS-03`, `CDR-05`) | **P1** | Coordinator, World, `GameUI`, Movement | `APPROVED & IMPLEMENTED (2026-11-18 M5-A1)` | Single 2D viewport + `World` transform offset; M5-A1 evaluated & verified `World` at `(144, 36)` and `LeftHUDRegion` `112×360` at `640×360` and `480×270` (`10` suites / `913/913` + GUI checks) |
+| `CC-07` / `VIS-04` | Dining-table `ChairVisual` + `SeatAnchor` south-side customer seating & tabletop art rule (`CDR-08`) | **P1** *(for M5-A2)* | Coordinator, World, `ServiceController`, `GameUI` | `APPROVED (2026-11-18; M5-A2 Pending)` | Design approved 2026-11-18 (south-side visual-only `ChairVisual` + `SeatAnchor` on starter & dynamic tables, extended table hitbox, chair sprite not used as tabletop); **M5-A2 implementation pending** |
+| `TA-05` | `GameRoot` controller wiring & single `is_drained()` close-guard route | **P1** | `GameRoot`, `KitchenController`, `ServiceController`, `RunController` | `RESOLVED IN IMPLEMENTATION (M0)` | Implemented in `GameRoot._process()` with idempotent `request_close_if_drained()` per `TECH-02` / `A-03` |
+| `TQ-05` | Linking pre-placed starter scene nodes to `RunController` `fixture_instances` | **P1** | World, `KitchenController`, `ServiceController`, `RunController` | `RESOLVED IN IMPLEMENTATION (M0/M4)` | Bound via `STARTER_FIXTURE_SPECS` (`starter_grant = true`, `actual_amount_paid = 0`; `#3` resale default tracked under `CC-06`) |
+| `TQ-08` | `LeftHUDRegion` `mouse_filter` & `Belanja` modal keyboard focus isolation | **P1** | `GameUI`, `KitchenController`, Movement | `RESOLVED IN IMPLEMENTATION (M1/M4)` | Implemented in `GameUI._is_point_blocked_by_ui()` and `_is_keyboard_blocked_by_focus_or_modal()` |
+| `CC-05` | Retain visual-only `Decorations` node under `World` during `TECH-01` container migration | **P2** | Coordinator, World | `APPROVED & IMPLEMENTED (Option A)` | Confirmed 2026-11-16 (`DECISION_REGISTER.md`) & 2026-11-18 M5-A1 (`Decorations` stays passive visual-only sibling) |
+| `CC-06` | Pre-Milestone 1/4 confirmation of trash-plate & `Rp0` starter-resale defaults (`PD-01`, `PD-03`) | **P2** | Coordinator, `KitchenController`, `RunController` | `DISCUSSION NEEDED` | Implemented as reversible baseline (`#1`, `#3` in `DECISION_REGISTER.md`) pending final playtest sign-off |
+| `CC-04` | Day 4–7 recipe intake timeline, placeholder icons & final balance target | **P2** | Coordinator, Artists, `RunController`, `GameUI` | `WAITING FOR COORDINATOR` | Deferred to M5-B+ content intake |
+| `TQ-03` | Final `TileSet` vs. `@export` walkability rects on `FloorTiles` | **P2** | World, Artists | `DEFERRED (M5-A1 Grid Implemented)` | M5-A1 updated `WorldMap` walkability zones and `12×9` `FloorTiles` (`108` cells); final artist `TileSet` custom-data policy deferred |
+| `TQ-07` | In-repo acceptance test folder & `GameRoot` simulated clock override | **P2** | `GameRoot`, `KitchenController`, `ServiceController`, `RunController` | `RESOLVED IN IMPLEMENTATION (M0–M4)` | Implemented in `tests/` (`10` headless suites with deterministic clock injection) |
+| `PD-01`–`PD-10` | Provisional gameplay defaults & `EconomyConfig` `TUNING` balance knobs | **P3** | Coordinator, All owners (playtest) | `DEFERRED` | Reviewed during playtesting |
+| `TQ-06` / `CDR-02` | `ARCHITECTURE.md` `PlayerVisual` shorthand note & minor code/doc naming polish | **P3** | World, `GameUI`, Docs | `PARTIAL (Code Cleanups Done; Shorthand Open)` | `WorldMap` `@onready` var names (`kitchen_stations`/`dining_tables`) & `DECISION_REGISTER.md` `v2.1` updated; `ARCHITECTURE.md` line 16 `Player` shorthand note still open |
 
 ---
 

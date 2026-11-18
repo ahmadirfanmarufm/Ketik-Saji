@@ -1,35 +1,36 @@
-# Ketik Saji — Coordinator Decision Review (Milestone 0)
+# Ketik Saji — Coordinator Decision Review (Milestone 0 & M5-A Update)
 
-**Date:** 2026-11-16
-**Baseline status:** Track A1 (Documentation Consistency Audit) PASS | Track A2 (World Foundation Hardening, Godot 4.7.2) PASS | Milestone 0 **PARTIAL** | Track A3 **NOT STARTED**
+**Date:** 2026-11-16 (updated 2026-11-18 for M5-A World Layout & Customer Seating approval and M5-A1 completion)
+**Baseline status:** Milestones 0–4 (`M0`–`M4-C`) PASS in `main` @ `e5898bb` | **M5-A1 World Layout (`12×9`) IMPLEMENTED & VERIFIED (`10` headless suites, `913/913` assertions, plus `640×360` and `480×270` GUI viewport checks); M5-A2 Customer Seating (`ChairVisual`, `SeatAnchor`, customer seating changes) PENDING IMPLEMENTATION**
 **Authority order respected:** Coordinator explicit decisions > `docs/SHARED_BASELINE.md` > `docs/ARCHITECTURE.md` > `docs/DECISION_REGISTER.md` > `docs/systems/*.md` > `docs/WORLD_LAYOUT_AND_VIEWPORT.md` > `docs/IMPLEMENTATION_PLAN.md` / `docs/ACCEPTANCE_TESTS.md` > `CLAUDE.md` / `docs/CODING_STANDARDS.md` > this review.
 
-This document reconciles the seven pre-A3 review items against existing canonical documentation. Nothing here overrides `docs/ARCHITECTURE.md` or `docs/DECISION_REGISTER.md`, and **no unapproved decisions are marked approved**.
+This document reconciles the pre-A3 review items and the 2026-11-18 **M5-A World Layout & Customer Seating** coordinator approvals against canonical documentation. Historical Milestone 0 context is preserved below alongside the signed-off decisions.
 
 ---
 
 ## Decision Summary Table
 
 Status vocabulary used below:
-- **ALREADY ESTABLISHED:** Settled by an existing `CONFIRMED` decision or `TECHNICAL FREEZE` contract; remaining work is implementation or non-functional notation alignment.
-- **PARTIALLY ESTABLISHED:** Core architectural boundary or direction is settled, while specific technical/layout/content details remain open.
-- **UNRESOLVED (OWNERSHIP CONFLICT):** Existing canonical contract conflicts with current team task assignment and requires explicit agreement before implementation.
+- **APPROVED & IMPLEMENTED:** Explicitly approved by the coordinator and implemented/verified in the repository.
+- **APPROVED (IMPLEMENTATION PENDING):** Explicitly approved by the coordinator as a design decision; runtime implementation and verification remain pending.
+- **ALREADY ESTABLISHED / PARTIALLY ESTABLISHED / UNRESOLVED (Historical M0 labels):** Historical Milestone 0 pre-A3 status preserved inside each section body for context.
 
 | Decision ID | Subject | Current Status | Blocks Track A3 (Core Enums & `.tres` Schemas)? | Required Approvers (if action needed) |
 |---|---|---|---|---|
-| `CDR-01` | World hierarchy reconciliation | **ALREADY ESTABLISHED** (Implementation pending) | **No** (blocks Milestone 0 canonical World scene & controller wiring) | None for canonical tree (already frozen in `docs/ARCHITECTURE.md` §1); Coordinator + World + controller owners only if requesting a tree amendment |
-| `CDR-02` | `Player` scene representation | **ALREADY ESTABLISHED** (Shorthand clarification & UI anchor detail only) | **No** (blocks Milestone 0/1 doc alignment & held-item indicator hook) | None architecturally (`Player` is visual-only); World owner + Movement programmer + `GameUI` owner for anchor detail |
-| `CDR-03` | `WorldMap` / `WorldGrid` vs. Movement authority | **PARTIALLY ESTABLISHED** (Spatial-only boundary settled; query helper surface open) | **No** (blocks Movement integration & Milestone 1 routing) | Coordinator, World owner, Movement programmer, `KitchenController` owner |
-| `CDR-04` | Movement vs. `KitchenController` ownership | **UNRESOLVED (OWNERSHIP CONFLICT)** | **No** for A3 enums/schemas; **Yes** before controller skeletons / Milestone 1 routing | Coordinator, Movement programmer, `KitchenController` owner |
-| `CDR-05` | Viewport and `World` framing (`VIS-01`, `VIS-02`) | **PARTIALLY ESTABLISHED** (Direction & single-viewport rule settled; dimensions/offset open) | **No** (blocks Milestone 0 left HUD band & framing fit test) | Coordinator, World owner, `GameUI` owner, Movement programmer |
-| `CDR-06` | Canonical object IDs, fixture footprints, pickup spots, and `OnlineStation` placement | **PARTIALLY ESTABLISHED** (Contracts & starter kit settled; IDs, footprints & coordinates open) | **Partial** (`UtilityDef` footprint field schema vs. scene metadata); data/placement blocks Milestone 0 authoring | Coordinator, World owner, `KitchenController` owner, `ServiceController` owner, `RunController` owner |
-| `CDR-07` | `WorldGrid` occupancy vs. floor walkability policy | **PARTIALLY ESTABLISHED** (A2 permissive `occupy()` + strict `is_free()` implemented; placement restriction policy open) | **No** (blocks perimeter/non-walkable placement validation rule) | Coordinator, World owner, Movement programmer |
+| `CDR-01` | World hierarchy reconciliation (+ passive `Decorations`) | **APPROVED & IMPLEMENTED (CONFIRMED 2026-11-16 in M0 & 2026-11-18 in M5-A1)** | **No** | Approved by Coordinator (`CC-05` Option A: canonical 11 containers + visual-only `Decorations`; M5-A1 passive counter & wall verified) |
+| `CDR-02` | `Player` scene representation & start cell `(6,3)` | **APPROVED & IMPLEMENTED (CONFIRMED 2026-11-16 in M0 & 2026-11-18 in M5-A1)** | **No** | Approved by Coordinator (`Player` visual-only with `VisualAnchor`; M5-A1 start cell `(6,3)` implemented & verified) |
+| `CDR-03` | `WorldMap` / `WorldGrid` vs. Movement authority | **APPROVED & IMPLEMENTED (CONFIRMED 2026-11-16; implemented in M0)** | **No** | Approved by Coordinator (`TA-02`: stateless `WorldMap` Manhattan + cardinal tie-break queries) |
+| `CDR-04` | Movement vs. `KitchenController` ownership | **APPROVED & IMPLEMENTED (CONFIRMED 2026-11-16 — Option 1 / `CC-01` Option A; implemented in M0/M1)** | **No** | Approved by Coordinator (`KitchenController` sole owner of `player_tile` & click routing) |
+| `CDR-05` | Viewport, `12×9` world layout, right-side queue, and `World`/HUD framing (`VIS-01`–`VIS-03`) | **APPROVED & IMPLEMENTED (M0 Candidate B technical default; CONFIRMED & VERIFIED 2026-11-18 in M5-A1)** | **No** | Approved by Coordinator (`12×9` `32×32` px grid, col 9 queue with 4 anchors, cols 10–11 road; `World` `(144,36)` & `LeftHUDRegion` `112` px verified at `640×360` and `480×270`) |
+| `CDR-06` | Canonical object IDs, `5` utility + `6` table `PlacementSlots`, pickup spots `(7,5)..(7,7)`, and `OnlineStation` `(6,4)` | **APPROVED & IMPLEMENTED (A3 footprint confirmed 2026-11-16; M5-A1 `12×9` layout & 11 slots CONFIRMED & VERIFIED 2026-11-18)** | **No** | Approved by Coordinator (preserve starter IDs, `5` utility slots, `6` table slots, passive long counter & col 8 wall, pickups at `(7,5)..(7,7)`) |
+| `CDR-07` | `WorldGrid` occupancy vs. floor walkability & non-walkable pickup cells | **APPROVED & IMPLEMENTED (CONFIRMED 2026-11-16 in M0 & 2026-11-18 in M5-A1)** | **No** | Approved by Coordinator (`occupy()` walkability-agnostic, `is_free()` required for teleport, pickup cells `(7,5)..(7,7)` non-walkable) |
+| `CDR-08` | M5-A2 dining-table `ChairVisual` / `SeatAnchor` south-side seating & temporary tabletop art rule (`VIS-04`) | **APPROVED (CONFIRMED 2026-11-18 — M5-A2 Implementation Pending)** | **No** | Approved by Coordinator (south-side visual-only `ChairVisual` + `SeatAnchor`, extended table hitbox, shared starter/dynamic table structure, chair sprite not used as tabletop) |
 
 ---
 
 ## CDR-01 — World Hierarchy Reconciliation
 
-- **Current status:** **ALREADY ESTABLISHED (Implementation Pending)**
+- **Current status:** **APPROVED & IMPLEMENTED (2026-11-16 M0 & 2026-11-18 M5-A1)** *(Historical 2026-11-16 M0 pre-implementation status: ALREADY ESTABLISHED — Implementation Pending)*
 - **Evidence from canonical documentation:**
   - `docs/ARCHITECTURE.md` §1 freezes the canonical `GameRoot -> World` scene tree: `FloorTiles`, `DineInWaitingAnchors`, `Player`, `KitchenStations`, `KitchenWorkTables` (staging + chopping hitboxes), `DiningTables`, `OnlineStation [Area2D]`, `DriverPickupSpots` (3 authored markers), `DriverOverflowAnchors`, `DriverObjects`, and `PlacementSlots`.
   - `docs/DECISION_REGISTER.md` (`TECH-01`, `INT-03`, `C-03`) reinforces those separate runtime containers; `docs/PROGRESS.md` explicitly states that `docs/ARCHITECTURE.md` stays canonical and `scenes/world/restaurant_world.tscn` is a temporary Milestone 0 blockout.
@@ -43,17 +44,17 @@ Status vocabulary used below:
 - **Required approvers:** None required to follow `docs/ARCHITECTURE.md` §1; Coordinator, World owner, `KitchenController` owner, `ServiceController` owner, and `RunController` owner only if anyone proposes altering the frozen tree.
 
 ### Sign-off (`CDR-01` — leave blank unless amending canonical tree)
-- **Approved option:**
-- **Rejected alternatives:**
-- **Approver:**
-- **Date:**
-- **Notes:**
+- **Approved option:** Keep the canonical `docs/ARCHITECTURE.md` §1 scene tree plus `Decorations` as a strictly passive visual-only container (`CC-05` Option A); in M5-A1, place the passive long counter (`row 4, cols 0..5`) and interior wall (`col 8`) as non-interactive visuals without adding new top-level `World` containers.
+- **Rejected alternatives:** Making the long counter a gameplay staging surface; adding extra top-level scene containers.
+- **Approver:** Coordinator
+- **Date:** 2026-11-16 (M0 directive in `DECISION_REGISTER.md`; updated 2026-11-18 for M5-A1)
+- **Notes:** Canonical 12-child `RestaurantWorld` hierarchy implemented in M0 (`tests/test_world_hierarchy.gd`); passive long counter (`row 4, cols 0..5`) and interior wall (`col 8, rows 0..4 & 8`) implemented and verified in M5-A1.
 
 ---
 
 ## CDR-02 — `Player` Scene Representation
 
-- **Current status:** **ALREADY ESTABLISHED (Shorthand Clarification & Visual Anchor Detail Only)**
+- **Current status:** **APPROVED & IMPLEMENTED (2026-11-16 M0 & 2026-11-18 M5-A1)** *(Historical 2026-11-16 M0 status: ALREADY ESTABLISHED — Shorthand Clarification & Visual Anchor Detail Only)*
 - **Evidence from canonical documentation:**
   - `docs/ARCHITECTURE.md` §1 uses shorthand `Player [Node2D / Sprite2D]`; `docs/ARCHITECTURE.md` §2 prohibits world/visual scenes from owning gameplay state (`player Vector2i tile` belongs to the controller layer, not the sprite node).
   - `docs/systems/04_UI_FEEDBACK_LOCALIZATION.md` §3 requires rendering a held-item icon above the player.
@@ -67,17 +68,17 @@ Status vocabulary used below:
 - **Required approvers:** None architecturally; World owner, Movement programmer, and `GameUI` owner for held-item anchor usage.
 
 ### Sign-off (`CDR-02` — leave blank unless altering Player authority)
-- **Approved option:**
-- **Rejected alternatives:**
-- **Approver:**
-- **Date:**
-- **Notes:**
+- **Approved option:** `Player` (`scenes/player/player.tscn`) stays visual-only with `VisualAnchor` for held-item display; for M5-A1, the player starting cell moves from `(6,4)` (now occupied by `online_station`) to **`(6,3)`**.
+- **Rejected alternatives:** Moving `player_tile` state onto the `Player` node; keeping start cell `(6,4)`.
+- **Approver:** Coordinator
+- **Date:** 2026-11-16 (M0 visual-only `Player` directive in `DECISION_REGISTER.md`; updated 2026-11-18 for M5-A1 start cell)
+- **Notes:** Visual-only `Player` with `VisualAnchor` preserved since M0; `KitchenController.DEFAULT_START_TILE = Vector2i(6, 3)` and `RestaurantWorld/Player` position `(208, 112)` are implemented and verified in M5-A1.
 
 ---
 
 ## CDR-03 — `WorldMap` / `WorldGrid` vs. Movement Authority
 
-- **Current status:** **PARTIALLY ESTABLISHED**
+- **Current status:** **APPROVED & IMPLEMENTED (2026-11-16 M0)** *(Historical 2026-11-16 M0 pre-directive status: PARTIALLY ESTABLISHED)*
 - **Evidence from canonical documentation:**
   - `docs/ARCHITECTURE.md` §2 & §7 and `docs/DECISION_REGISTER.md` (`A-02`, `TECH-01`) establish that `World` nodes/scripts are passive spatial/visual assemblies holding no gameplay truth (no `player_tile`, no target selection, no click routing).
   - `docs/ARCHITECTURE.md` §7 defines the deterministic movement rule: floor click teleports to accessible floor tile; interactable click selects the nearest legal cardinal neighbor in stable tie order (multi-tile objects use footprint, not sprite center).
@@ -93,17 +94,17 @@ Status vocabulary used below:
 - **Required approvers:** Coordinator, World owner, Movement programmer, `KitchenController` owner.
 
 ### Approval (`CDR-03`)
-- **Approved option:**
-- **Rejected alternatives:**
-- **Approver:**
-- **Date:**
-- **Notes:**
+- **Approved option:** Stateless read-only spatial queries on `WorldMap` (`get_target_footprint`, `get_free_cardinal_neighbors`, `find_nearest_free_neighbor`) using shortest Manhattan distance and fixed `CARDINAL_OFFSETS` tie-break (`UP`, `RIGHT`, `DOWN`, `LEFT`).
+- **Rejected alternatives:** Storing `player_tile` or click-routing state in `WorldMap`.
+- **Approver:** Coordinator
+- **Date:** 2026-11-16 (`DECISION_REGISTER.md` directive)
+- **Notes:** Implemented in M0 and verified across M0–M5-A1.
 
 ---
 
 ## CDR-04 — Movement vs. `KitchenController` Ownership
 
-- **Current status:** **UNRESOLVED (OWNERSHIP CONFLICT)**
+- **Current status:** **APPROVED & IMPLEMENTED (2026-11-16 — Option 1 / `CC-01` Option A)** *(Historical 2026-11-16 M0 pre-directive status: UNRESOLVED — OWNERSHIP CONFLICT)*
 - **Evidence from canonical documentation:**
   - `docs/ARCHITECTURE.md` §2, §5, §7 and `docs/systems/01_INTERACTION_KITCHEN.md` §1, §2, §6 (`TECH-01`, `A-02`, `B-01`) freeze **one** world click router and assign `player Vector2i tile`, `selected clickable target`, `typed accepted prefix`, `on_floor_clicked(tile)`, `on_interactable_clicked(target_id)`, `player_tile_changed(tile)`, and `selected_interactable_changed(target_id)` to **`KitchenController`**.
   - `docs/CODING_STANDARDS.md` §4 & §13 prohibit introducing competing managers or silently changing frozen `docs/ARCHITECTURE.md` public APIs without coordinator review.
@@ -118,40 +119,40 @@ Status vocabulary used below:
 - **Required approvers:** Coordinator, Movement programmer, `KitchenController` owner.
 
 ### Approval (`CDR-04`)
-- **Approved option:**
-- **Rejected alternatives:**
-- **Approver:**
-- **Date:**
-- **Notes:**
+- **Approved option:** Option 1 (`CC-01` Option A) — `KitchenController` remains sole owner of `player_tile`, `selected_target_id`, `accepted_prefix`, `on_floor_clicked`, and `on_interactable_clicked`, with `PlayerVisual` acting strictly as an internal visual helper.
+- **Rejected alternatives:** Option 2 (separate `MovementController`).
+- **Approver:** Coordinator
+- **Date:** 2026-11-16 (`DECISION_REGISTER.md` directive)
+- **Notes:** Implemented in M0/M1 and preserved through M5-A1.
 
 ---
 
 ## CDR-05 — Viewport and `World` Framing (`VIS-01`, `VIS-02`)
 
-- **Current status:** **PARTIALLY ESTABLISHED**
-- **Evidence from canonical documentation:**
-  - `docs/DECISION_REGISTER.md` (`VIS-01`, `VIS-02`) and `docs/WORLD_LAYOUT_AND_VIEWPORT.md` **confirm**: persistent left vertical UI band (`ui_safe_rect`) + adjacent in-world dine-in waiting lane + restaurant playfield on the right (`world_visible_rect`); single 2D viewport (`World: Node2D` + `UI: CanvasLayer`, no `SubViewport`); UI blocks world click-through; planning/results panels may overlap the world; 32 px art; prior `10×9` size superseded.
-  - The same documents explicitly mark **`640×360` logical / `1280×720` display** as an unverified **fit-test candidate**, the ~18% UI band width as illustrative only, and the choice between **World transform/scale offset vs. single `Camera2D`** (`docs/WORLD_LAYOUT_AND_VIEWPORT.md` §2, `docs/ARCHITECTURE.md` §1) as a pending implementation choice requiring Milestone 0 fit verification (§3).
-- **Current implementation state:**
-  - `project.godot` uses `640×360` viewport / `1280×720` window override, `canvas_items` stretch, and Nearest texture filter (`3`). `GameRoot/World` sits temporarily at `(0, 0)` (no approved offset; `(160, 36)` explicitly unapproved). No `LeftHUDRegion`, `ui_safe_rect`, or `Camera2D` exists yet. At `(0, 0)`, columns `0..1` (`waiting_lane_rect`, `x = 0..64`) would sit under a left HUD strip until offset or framed.
-- **Remaining question / implementation dependency:**
-  - Still open: (1) Milestone 0 blockout fit validation of `640×360` under worst-case rings, 3 pickup spots + overflow, and longest Indonesian ghost prompt (`docs/WORLD_LAYOUT_AND_VIEWPORT.md` §3); (2) chosen `ui_safe_rect` width and `world_visible_rect` bounds; (3) explicit selection of **World transform offset** vs. **single `Camera2D`**.
-- **Recommended next action:**
-  - Block out `LeftHUDRegion` (`ui_safe_rect`) and test framing in Milestone 0 (technical preference: `World` position offset inside `world_visible_rect`, since `WorldMap.global_to_cell`/`cell_to_global` already honor `World`'s transform and no scrolling is planned), then confirm resolution/offset after visual check.
-- **Required approvers:** Coordinator, World owner, `GameUI` owner, Movement programmer.
+- **Current status:** **APPROVED & IMPLEMENTED (M0 Candidate B technical default; CONFIRMED & VERIFIED 2026-11-18 in M5-A1)** *(Historical 2026-11-16 M0 status: PARTIALLY ESTABLISHED)*
+- **Evidence from canonical documentation (historical M0 context + M5-A update):**
+  - `docs/DECISION_REGISTER.md` (`VIS-01`, `VIS-02`) and `docs/WORLD_LAYOUT_AND_VIEWPORT.md` **confirm**: persistent left vertical UI band (`ui_safe_rect`) + playable restaurant world (`12×9` in M5-A, with right-side column-9 dine-in queue and columns 10–11 road/overflow) in **one** 2D viewport (`World: Node2D` + `UI: CanvasLayer`, no `SubViewport`); UI blocks world click-through; planning/results panels may overlap the world; 32 px art; prior `10×9` and `13×9` sketches superseded.
+  - During the initial M0 fit-test stage, `docs/WORLD_LAYOUT_AND_VIEWPORT.md` v2.1 marked `640×360` logical / `1280×720` display as an unverified fit-test candidate, the ~18% UI band width as illustrative, and the choice between **World transform/scale offset vs. single `Camera2D`** (`docs/WORLD_LAYOUT_AND_VIEWPORT.md` §2, `docs/ARCHITECTURE.md` §1) as a pending Milestone 0 fit-test decision.
+  - The coordinator subsequently confirmed the **single-viewport `World` transform offset approach (`CC-02` Option A, no `Camera2D`)** and directed evaluating `World` offset and `LeftHUDRegion` width together for M5-A1; that approach has now been **implemented and verified in M5-A1**.
+- **Implementation state (historical M0 vs. verified M5-A1):**
+  - *Initial M0 pre-implementation snapshot (2026-11-16):* `GameRoot/World` started temporarily at `(0, 0)` with no `LeftHUDRegion` (`ui_safe_rect`) built yet and no `Camera2D`.
+  - *Current verified state (M5-A1):* `project.godot` uses `640×360` viewport / `1280×720` window override (`canvas_items` stretch, Nearest texture filter `3`). `GameRoot/World.position` is `(144, 36)`, `GameUI.ui_safe_rect` (`LeftHUDRegion`) is `Rect2(0, 0, 112, 360)`, `world_visible_rect` is `Rect2(112, 0, 528, 360)` (`Rect2(112, 0, 368, 270)` at `480×270`), and no `Camera2D` or `SubViewport` is used.
+- **Resolution of prior M0 fit-test questions:**
+  - All prior M0 open items (`640×360` + `480×270` fit validation, `ui_safe_rect` / `world_visible_rect` bounds, and selecting `World` transform offset over `Camera2D`) were resolved via `CC-02` Option A and verified in M5-A1 (only M5-A2 customer seating offsets/hitboxes remain open under `CDR-08`).
+- **Required approvers:** Coordinator (confirmed `CC-02` Option A & M5-A1 framing).
 
 ### Approval (`CDR-05`)
-- **Approved option:**
-- **Rejected alternatives:**
-- **Approver:**
-- **Date:**
-- **Notes:**
+- **Approved option:** Single 2D viewport (`640×360` logical / `1280×720` display with `480×270` responsive fit check) using a `World` node transform offset (`CC-02` Option A, no `Camera2D`); for **M5-A1 (2026-11-18)**, world grid is **`12×9` (`32×32` px)**, dine-in queue moves to **column 9 on the right** (`4` waiting anchors), driver overflow moves to **columns 10–11**, and `World` offset + `LeftHUDRegion` (`ui_safe_rect`) width were evaluated together against viewport bounds and HUD click blocking.
+- **Rejected alternatives:** Separate `SubViewport` or `Camera2D`; keeping the old `13×9` left-side waiting lane.
+- **Approver:** Coordinator
+- **Date:** 2026-11-18 (M5-A coordinator approval; M0 used 2026-11-16 `VIS-02` `TECHNICAL DEFAULT` Candidate B)
+- **Notes:** Evaluated, implemented, and verified in M5-A1 without assuming an arbitrary offset: `GameRoot/World.position = Vector2(144, 36)`, `LeftHUDRegion` / `ui_safe_rect = Rect2(0, 0, 112, 360)`, and `world_visible_rect = Rect2(112, 0, 528, 360)` (`Rect2(112, 0, 368, 270)` at `480×270`) passed all `10` headless test suites (`913/913` assertions) and `640×360` / `480×270` GUI viewport checks.
 
 ---
 
 ## CDR-06 — Canonical Object IDs, Fixture Footprints, Pickup Spots, and `OnlineStation` Placement
 
-- **Current status:** **PARTIALLY ESTABLISHED**
+- **Current status:** **APPROVED & IMPLEMENTED (A3 footprint confirmed 2026-11-16; M5-A1 `12×9` layout & 11 slots CONFIRMED & VERIFIED 2026-11-18)** *(Historical 2026-11-16 M0 status: PARTIALLY ESTABLISHED)*
 - **Evidence from canonical documentation:**
   - **Already established (`docs/ARCHITECTURE.md` §1–§2, §7; `docs/SHARED_BASELINE.md`; `docs/DECISION_REGISTER.md` `INT-03`, `C-03`, `D-01`; `docs/CONTENT_AND_TUNING.md`):**
     - Stable `StringName` IDs (`slot_id`, `table_id`, `spot_id`, `storage_unit_id`, `work_table_id`, `driver_id`) independent of pixel positions or display names.
@@ -171,17 +172,17 @@ Status vocabulary used below:
 - **Required approvers:** Coordinator, World owner, `KitchenController` owner, `ServiceController` owner, `RunController` owner.
 
 ### Approval (`CDR-06`)
-- **Approved option:**
-- **Rejected alternatives:**
-- **Approver:**
-- **Date:**
-- **Notes:**
+- **Approved option:** Preserve canonical starter IDs (`washer`, `stove`, `rice_cooker`, `storage_box`, `plate_rack`, `trash`, `work_table` + `work_table_stage`/`work_table_chop`, `online_station`, `dining_table_01..02`, `pickup_spot_01..03`, `dine_in_wait_01..04`, `driver_overflow`) and dynamic instance IDs (`<utility>_01+`, `dining_table_03+`). For **M5-A1 (2026-11-18)**: expand `PlacementSlots` to **`5` utility slots** (`slot_utility_01..05` at `(5,0),(6,0),(2,2),(4,2),(5,2)`) and **`6` dining-table slots** (`slot_table_01..06` at `(0,5),(2,5),(4,5),(5,5),(0,7),(5,7)`), place `online_station` at `(6,4)`, place `pickup_spot_01..03` at `(7,5)..(7,7)`, and keep the row-4 long counter (`cols 0..5`) and col-8 wall (`rows 0..4 & 8`) passive.
+- **Rejected alternatives:** Making the long counter an interactive staging surface; keeping only 2 utility and 2 table slots.
+- **Approver:** Coordinator
+- **Date:** 2026-11-18 (M5-A1 coordinator approval; `UtilityDef.footprint = Vector2i(1, 1)` confirmed 2026-11-16 in `TQ-01` and initial M0–M4 IDs/slots authored on the provisional `13×9` grid)
+- **Notes:** Implemented and verified in M5-A1 across all `10` headless test suites (`913/913` assertions) and `640×360` / `480×270` GUI viewport checks. Every starter target (`12`), `PlacementSlot` (`11`), and `DriverPickupSpot` (`3`) is verified to retain `>= 1` `is_free()` cardinal neighbor both initially and when all `11` slots are simultaneously occupied.
 
 ---
 
 ## CDR-07 — `WorldGrid` Occupancy vs. Floor Walkability Policy
 
-- **Current status:** **PARTIALLY ESTABLISHED**
+- **Current status:** **APPROVED & IMPLEMENTED (2026-11-16 M0 & 2026-11-18 M5-A1)** *(Historical 2026-11-16 M0 pre-directive status: PARTIALLY ESTABLISHED)*
 - **Evidence from canonical documentation:**
   - `docs/ARCHITECTURE.md` §7 establishes that floor clicks teleport only to accessible floor cells, and interactables resolve to a legal walkable cardinal neighbor.
   - `docs/CONTENT_AND_TUNING.md` requires validating on import/map setup that every clickable target has at least one legal cardinal neighbor.
@@ -195,11 +196,29 @@ Status vocabulary used below:
 - **Required approvers:** Coordinator, World owner, Movement programmer.
 
 ### Approval (`CDR-07`)
-- **Approved option:**
-- **Rejected alternatives:**
-- **Approver:**
-- **Date:**
-- **Notes:**
+- **Approved option:** Keep `WorldGrid.occupy()` walkability-agnostic while requiring `is_free()` (`is_walkable and not is_occupied`) for player floor teleport and cardinal neighbor resolution; for **M5-A1 (2026-11-18)**, pickup cells `(7,5)`, `(7,6)`, and `(7,7)`, the passive long counter `(0,4)..(5,4)`, wall cells `(8,0)..(8,4)` & `(8,8)`, queue column `9`, and road columns `10..11` are **non-walkable**, while doorway `(8,5)..(8,7)` and passage `(7,4)` are walkable.
+- **Rejected alternatives:** Making pickup cells walkable to the player; requiring `occupy()` cells to be walkable.
+- **Approver:** Coordinator
+- **Date:** 2026-11-16 (M0 `DECISION_REGISTER.md` directive; updated 2026-11-18 for M5-A1 walkability zones & non-walkable pickup cells)
+- **Notes:** Implemented and verified in M5-A1 (`WorldMap._configure_walkable_zones()` and headless assertions in `tests/test_world_hierarchy.gd` and `tests/test_fixture_m4c.gd`). Non-walkable pickup cells prevent player/driver tile overlap while preserving cardinal neighbor access from column `6`, `(7,4)`, `(7,8)`, and doorway `(8,5)..(8,7)`.
+
+---
+
+## CDR-08 — M5-A2 Customer Seating & Dining-Table Art Direction (`VIS-04`)
+
+- **Current status:** **APPROVED (CONFIRMED 2026-11-18 — M5-A2 Implementation Pending)**
+- **Approved coordinator rules:**
+  - Each dining table (`dining_table_01`, `dining_table_02`, and dynamically purchased `dining_table_03+` via M4-C) owns a child `ChairVisual` (`Sprite2D`) and a child `SeatAnchor` (`Marker2D`) on the **south side** of the table.
+  - The chair is **visual-only** (not registered in `WorldRegistry` or `WorldGrid`), and the dining table remains the sole authoritative gameplay target for `saji` and `bersihkan`, with an extended/additional hitbox over the chair region so clicking the chair/customer selects the table.
+  - `WorldMap._resolve_customer_visual_position()` resolves seated/eating customers to the table's `SeatAnchor`; `ServiceController` remains sole owner of customer queues, table occupancy, serving, eating, timeouts, cleaning, and day reset (no seating manager or duplicate state).
+  - **Art rule:** Do **not** use the existing chair sprite (`Rect2(416, 160, 32, 32)` in `Warung-Tileset.png`) as the dining-table tabletop sprite. Use a clearly identified temporary tabletop placeholder until a dedicated dining-table sprite is confirmed.
+
+### Approval (`CDR-08`)
+- **Approved option:** Shared dining-table scene/builder with south-side `ChairVisual` + `SeatAnchor`, visual-only chair with extended table hitbox coverage, and temporary tabletop placeholder until dedicated table art is supplied.
+- **Rejected alternatives:** Separate registered chair targets; new seating manager; reusing the chair sprite as the tabletop.
+- **Approver:** Coordinator
+- **Date:** 2026-11-18
+- **Notes:** M5-A1 world layout checkpoint has passed (`10` headless suites, `913/913` assertions, plus `640×360` and `480×270` GUI viewport checks). M5-A2 implementation and verification remain pending (`ChairVisual`, `SeatAnchor`, extended table hitbox, and temporary tabletop placeholder have not yet been implemented).
 
 ---
 

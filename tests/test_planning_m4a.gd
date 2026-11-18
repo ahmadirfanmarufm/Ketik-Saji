@@ -175,7 +175,7 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 	# While modal is open, world clicks, popup clicks, and gameplay typing/Escape are blocked.
 	var tile_before := kitchen.get_player_tile()
 	_send_left_click(ui, popup_rect.get_center())
-	_send_left_click(ui, Vector2(320, 180))
+	_send_left_click(ui, Vector2(320, 148))
 	_type_word(ui, "buka")
 	_send_key(ui, 0, KEY_BACKSPACE)
 	_send_key(ui, 0, KEY_ESCAPE)
@@ -286,7 +286,7 @@ func _test_typed_buka_command_and_guards() -> void:
 	var ui := game_root.get_node("UI") as GameUI
 
 	# 1. Selecting a station in PLANNING keeps station commands and buka rejected.
-	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(192, 52))
 	_check("stove selected in PLANNING", kitchen.get_selected_target_id() == &"stove")
 	_send_key(ui, "g".unicode_at(0), KEY_G)
 	_send_key(ui, "b".unicode_at(0), KEY_B)
@@ -298,7 +298,7 @@ func _test_typed_buka_command_and_guards() -> void:
 	)
 
 	# 2. Clicking floor clears selected station, enabling buka prefix typing, Backspace, and Escape.
-	_send_left_click(ui, Vector2(320, 180))
+	_send_left_click(ui, Vector2(320, 148))
 	_check(
 		"floor click in PLANNING clears target and exposes buka command",
 		kitchen.get_selected_target_id() == &""
@@ -369,7 +369,7 @@ func _test_typed_buka_command_and_guards() -> void:
 		not kitchen.accept_typed_character("b")
 		and game_root.is_serving()
 	)
-	_send_left_click(ui, Vector2(512, 84))
+	_send_left_click(ui, Vector2(352, 180))
 	_check(
 		"online_station terima remains functional in SERVING",
 		kitchen.get_selected_target_id() == &"online_station"

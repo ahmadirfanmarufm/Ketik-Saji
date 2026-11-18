@@ -82,7 +82,7 @@ func _test_scene_binding_and_starter_kit() -> void:
 
 	_check(
 		"no duplicate World nodes on startup",
-		world.registry.get_ids().size() == 24
+		world.registry.get_ids().size() == 31
 		and world.kitchen_stations.get_child_count() == 6
 		and world.dining_tables.get_child_count() == 2
 	)
@@ -110,7 +110,7 @@ func _test_scene_binding_and_starter_kit() -> void:
 	run.start_new_run()
 	_check(
 		"repeated start_new_run does not duplicate nodes or plates",
-		world.registry.get_ids().size() == 24 and kitchen.get_plate_count() == 4
+		world.registry.get_ids().size() == 31 and kitchen.get_plate_count() == 4
 	)
 
 	game_root.free()
@@ -127,62 +127,64 @@ func _test_kitchen_click_routing_and_movement() -> void:
 	var world := game_root.get_node("World") as WorldMap
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
 
-	_check("initial player_tile is (6, 4)", kitchen.get_player_tile() == Vector2i(6, 4))
+	_check("initial player_tile is (6, 3)", kitchen.get_player_tile() == Vector2i(6, 3))
 	_check("initial selected_target_id empty", kitchen.get_selected_target_id() == &"")
 
-	# Floor click on valid walkable free cell (5, 4) teleports only.
-	_check("floor click (5, 4) succeeds", kitchen.on_floor_clicked(Vector2i(5, 4)))
+	# Floor click on valid walkable free cell (5, 3) teleports only.
+	_check("floor click (5, 3) succeeds", kitchen.on_floor_clicked(Vector2i(5, 3)))
 	_check(
-		"player_tile and visual moved to (5, 4)",
-		kitchen.get_player_tile() == Vector2i(5, 4)
-		and world.global_to_cell(world.player.global_position) == Vector2i(5, 4)
+		"player_tile and visual moved to (5, 3)",
+		kitchen.get_player_tile() == Vector2i(5, 3)
+		and world.global_to_cell(world.player.global_position) == Vector2i(5, 3)
 		and kitchen.get_selected_target_id() == &""
 	)
 
-	# Floor click on occupied cell (4, 0) or non-walkable lane (0, 0) is rejected safely.
+	# Floor click on occupied cell (4, 0) or non-walkable lane/counter/wall is rejected safely.
 	_check("floor click on occupied (4, 0) rejected", not kitchen.on_floor_clicked(Vector2i(4, 0)))
 	_check(
-		"floor click on non-walkable (0, 0) rejected",
-		not kitchen.on_floor_clicked(Vector2i(0, 0))
+		"floor click on non-walkable lane (9, 0), counter (0, 4), and wall (8, 0) rejected",
+		not kitchen.on_floor_clicked(Vector2i(9, 0))
+		and not kitchen.on_floor_clicked(Vector2i(0, 4))
+		and not kitchen.on_floor_clicked(Vector2i(8, 0))
 	)
-	_check("failed floor click preserves tile (5, 4)", kitchen.get_player_tile() == Vector2i(5, 4))
+	_check("failed floor click preserves tile (5, 3)", kitchen.get_player_tile() == Vector2i(5, 3))
 
-	# Remote interactable click on DiningTable01 at (4, 6) from (5, 5):
-	# UP(4, 5) and RIGHT(5, 6) tie at Manhattan distance 1 -> UP(4, 5) wins and selects table.
-	_check("move to (5, 5)", kitchen.on_floor_clicked(Vector2i(5, 5)))
+	# Remote interactable click on DiningTable01 at (2, 7) from (3, 6):
+	# UP(2, 6) and RIGHT(3, 7) tie at Manhattan distance 1 -> UP(2, 6) wins and selects table.
+	_check("move to (3, 6)", kitchen.on_floor_clicked(Vector2i(3, 6)))
 	_check(
-		"click dining_table_01 from (5, 5) teleports to (4, 5) and selects",
+		"click dining_table_01 from (3, 6) teleports to (2, 6) and selects",
 		kitchen.on_interactable_clicked(&"dining_table_01")
-		and kitchen.get_player_tile() == Vector2i(4, 5)
+		and kitchen.get_player_tile() == Vector2i(2, 6)
 		and kitchen.get_selected_target_id() == &"dining_table_01"
 	)
 
-	# Clicking an already-adjacent target or split work_table_chop from (6, 3):
+	# Clicking an already-adjacent target or split work_table_chop at (3, 2) from (3, 1):
 	_check(
 		"floor click clears selection",
-		kitchen.on_floor_clicked(Vector2i(6, 3))
+		kitchen.on_floor_clicked(Vector2i(3, 1))
 		and kitchen.get_selected_target_id() == &""
 	)
 	_check(
-		"click work_table_chop when already adjacent at (6, 3) stays at (6, 3) and selects",
+		"click work_table_chop when already adjacent at (3, 1) stays at (3, 1) and selects",
 		kitchen.on_interactable_clicked(&"work_table_chop")
-		and kitchen.get_player_tile() == Vector2i(6, 3)
+		and kitchen.get_player_tile() == Vector2i(3, 1)
 		and kitchen.get_selected_target_id() == &"work_table_chop"
 	)
 
-	# Clicking work_table_stage on same physical table stays at (6, 3) and switches target.
+	# Clicking work_table_stage on same physical table stays at (3, 1) and switches target.
 	_check(
 		"click work_table_stage switches target on same fixture",
 		kitchen.on_interactable_clicked(&"work_table_stage")
-		and kitchen.get_player_tile() == Vector2i(6, 3)
+		and kitchen.get_player_tile() == Vector2i(3, 1)
 		and kitchen.get_selected_target_id() == &"work_table_stage"
 	)
 
-	# Clicking online_station at (11, 1) teleports to its sole free neighbor (10, 1).
+	# Clicking online_station at (6, 4) from (3, 1) teleports to its nearest free neighbor (6, 3).
 	_check(
-		"click online_station teleports to (10, 1)",
+		"click online_station teleports to (6, 3)",
 		kitchen.on_interactable_clicked(&"online_station")
-		and kitchen.get_player_tile() == Vector2i(10, 1)
+		and kitchen.get_player_tile() == Vector2i(6, 3)
 		and kitchen.get_selected_target_id() == &"online_station"
 	)
 
@@ -197,7 +199,7 @@ func _test_kitchen_click_routing_and_movement() -> void:
 	)
 	_check(
 		"failed interactable click preserves state",
-		kitchen.get_player_tile() == Vector2i(10, 1)
+		kitchen.get_player_tile() == Vector2i(6, 3)
 		and kitchen.get_selected_target_id() == &"online_station"
 	)
 
@@ -523,7 +525,7 @@ func _test_settlement_keys_and_phase_guards() -> void:
 	)
 
 	# Phase guards in RESULTS:
-	_check("floor click rejected in RESULTS", not kitchen.on_floor_clicked(Vector2i(5, 4)))
+	_check("floor click rejected in RESULTS", not kitchen.on_floor_clicked(Vector2i(5, 3)))
 	_check(
 		"interactable click rejected in RESULTS",
 		not kitchen.on_interactable_clicked(&"stove")

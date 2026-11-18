@@ -12,7 +12,7 @@ One Godot 4/GDScript developer, 72-hour jam; straightforward 2D scenes, idempote
 res://scenes/main/game_root.tscn  GameRoot [Node2D; scripts/core/game_root.gd]
 ├── World [Node2D; world/map assembly]
 │   ├── FloorTiles [TileMapLayer / floor click routing]
-│   ├── DineInWaitingAnchors [Node2D; visible outside-diner lane near UI boundary]
+│   ├── DineInWaitingAnchors [Node2D; visible outside-diner queue anchors (M5-A: col 9 on right)]
 │   ├── Player [Node2D / Sprite2D]
 │   ├── KitchenStations [Node2D; fridge, box, stove, cooker, washer, rack, trash]
 │   ├── KitchenWorkTables [Node2D; staging and chopping hitboxes on same fixture]
@@ -32,9 +32,9 @@ World nodes have stable IDs, collision/hitbox metadata and sprites, **not** thei
 
 **Suggested paths:** `scripts/core/game_root.gd`, `scripts/core/shared_types.gd`, `scripts/kitchen/{kitchen_controller,food_item_state,food_component_state,ingredient_def,recipe_def}.gd`, `scripts/service/service_controller.gd`, `scripts/economy/{run_controller,economy_config,utility_def}.gd`, `scripts/ui/game_ui.gd`; scenes in `scenes/world/`, UI in `scenes/ui/`, static definitions in `data/ingredients/`, `data/recipes/`, `data/utilities/`. These are simple path targets; creating more layers should require a concrete dependency.
 
-### Screen composition boundary (v2.1 layout update)
+### Screen composition boundary (v2.2 M5-A layout update)
 
-Use **one ordinary Godot 2D viewport** with the `World` as `Node2D` and UI as `CanvasLayer`. Reserve a non-interactive-to-world **left UI safe region**; show the playable restaurant on the **right**, with the visible dine-in waiting lane along the left edge of that world. Keep the separate C-owned online driver pickup spots and overflow queue within the world view. The current art sketch is approximate, so viewport, tile count, margins, and exact station positions are scene/layout data, **not frozen gameplay constants**. A simple `World` origin/scale offset or a single `Camera2D` arrangement is sufficient (pick one), with UI `Control` anchors in viewport coordinates. Avoid adding a `SubViewport` / second world renderer merely to separate the UI.
+Use **one ordinary Godot 2D viewport** with the `World` as `Node2D` and UI as `CanvasLayer`. Reserve a non-interactive-to-world **left UI safe region** (`LeftHUDRegion` / `ui_safe_rect`); show the playable **`12×9` (`32×32` px) restaurant world** on the **right**, with the interior kitchen/dining in columns `0..7` (non-walkable driver pickup spots at `(7,5)..(7,7)`), interior wall + doorway in column `8`, **dine-in waiting queue (`4` anchors) in column 9**, and road/driver overflow in columns `10..11`. Evaluate the `World` origin offset and `LeftHUDRegion` width together against the viewport and HUD click boundary. Avoid adding a `SubViewport` / second world renderer merely to separate the UI.
 
 **Input must respect the split:** pointer clicks inside the persistent UI band must never become floor teleports; click-through on modal planning panels must be blocked. The world hit-test still uses world/tile coordinates, regardless of on-screen offset/zoom. UI marker positions and station dialog bubbles must convert world anchors to canvas positions, and clamp or flip inside the *visible world-safe region* when possible. All mouse travel between screen regions remains intentional; do not automate interactions. See `docs/WORLD_LAYOUT_AND_VIEWPORT.md` for layout proposal and checks.
 

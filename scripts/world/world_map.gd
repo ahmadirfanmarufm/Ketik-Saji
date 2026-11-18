@@ -23,6 +23,9 @@ const TILE_LANE_MID_RIGHT: Vector2i = Vector2i(2, 1)
 const TILE_LANE_BOT_LEFT: Vector2i = Vector2i(0, 2)
 const TILE_LANE_BOT_MID: Vector2i = Vector2i(1, 2)
 const TILE_LANE_BOT_RIGHT: Vector2i = Vector2i(2, 2)
+const TILE_SINGLE_LANE_TOP: Vector2i = Vector2i(3, 0)
+const TILE_SINGLE_LANE_MID: Vector2i = Vector2i(3, 1)
+const TILE_SINGLE_LANE_BOT: Vector2i = Vector2i(3, 2)
 const TILE_KITCHEN_FLOOR: Vector2i = Vector2i(8, 4)
 const TILE_DINING_FLOOR: Vector2i = Vector2i(5, 4)
 
@@ -38,6 +41,8 @@ const REGION_WORK_TABLE: Rect2 = Rect2(544, 96, 32, 32)
 const REGION_TRASH: Rect2 = Rect2(608, 96, 32, 32)
 const REGION_DINING_TABLE: Rect2 = Rect2(416, 160, 32, 32)
 const REGION_ONLINE_STATION: Rect2 = Rect2(480, 128, 32, 64)
+const REGION_LONG_COUNTER: Rect2 = Rect2(416, 32, 96, 32)
+const REGION_INTERIOR_WALL: Rect2 = Rect2(160, 64, 32, 32)
 
 const DRIVER_HITBOX_SIZE: Vector2 = Vector2(28, 28)
 const DRIVER_OVERFLOW_STEP: Vector2 = Vector2(0, -24)
@@ -59,16 +64,21 @@ const COLOR_ANCHOR := Color(1.0, 0.9, 0.2)
 const COLOR_LABEL := Color(1, 1, 1)
 const LABEL_FONT_SIZE: int = 8
 
-## Provisional values from docs/WORLD_LAYOUT_AND_VIEWPORT.md (13x9 cells, 32px tiles).
-@export var grid_size: Vector2i = Vector2i(13, 9)
+## Approved M5-A1 values from docs/WORLD_LAYOUT_AND_VIEWPORT.md (12x9 cells, 32px tiles).
+@export var grid_size: Vector2i = Vector2i(12, 9)
 @export var tile_size: Vector2i = Vector2i(32, 32)
 
-## Zone blocks in cell coordinates. Kitchen and dining cells are walkable floor;
-## the waiting lane and online area are not walkable for the Player.
-@export var waiting_lane_rect: Rect2i = Rect2i(0, 0, 2, 9)
-@export var kitchen_rect: Rect2i = Rect2i(2, 0, 9, 4)
-@export var dining_rect: Rect2i = Rect2i(2, 4, 9, 5)
-@export var online_rect: Rect2i = Rect2i(11, 0, 2, 9)
+## Zone blocks in cell coordinates. Kitchen, dining, and doorway cells are walkable floor;
+## the long counter, pickup spots, interior wall, waiting lane, and road are not walkable.
+@export var waiting_lane_rect: Rect2i = Rect2i(9, 0, 1, 9)
+@export var kitchen_rect: Rect2i = Rect2i(0, 0, 8, 4)
+@export var dining_rect: Rect2i = Rect2i(0, 4, 8, 5)
+@export var online_rect: Rect2i = Rect2i(10, 0, 2, 9)
+@export var long_counter_rect: Rect2i = Rect2i(0, 4, 6, 1)
+@export var pickup_lane_rect: Rect2i = Rect2i(7, 5, 1, 3)
+@export var wall_top_rect: Rect2i = Rect2i(8, 0, 1, 5)
+@export var doorway_rect: Rect2i = Rect2i(8, 5, 1, 3)
+@export var wall_bottom_rect: Rect2i = Rect2i(8, 8, 1, 1)
 
 ## Temporary visuals; disabled by default once real tileset/sprite art is active.
 @export var show_blockout: bool = false
@@ -114,6 +124,13 @@ func _enter_tree() -> void:
 	if grid.is_valid():
 		grid.set_walkable_rect(kitchen_rect, true)
 		grid.set_walkable_rect(dining_rect, true)
+		grid.set_walkable_rect(doorway_rect, true)
+		grid.set_walkable_rect(long_counter_rect, false)
+		grid.set_walkable_rect(pickup_lane_rect, false)
+		grid.set_walkable_rect(wall_top_rect, false)
+		grid.set_walkable_rect(wall_bottom_rect, false)
+		grid.set_walkable_rect(waiting_lane_rect, false)
+		grid.set_walkable_rect(online_rect, false)
 	registry = WorldRegistry.new()
 
 
@@ -1015,7 +1032,7 @@ func _sync_overflow_driver_visual(
 	recipe_names: Dictionary
 ) -> void:
 	var overflow_anchor := registry.get_object(&"driver_overflow")
-	var base_pos := overflow_anchor.position if overflow_anchor != null else Vector2(400, 240)
+	var base_pos := overflow_anchor.position if overflow_anchor != null else Vector2(368, 240)
 	var target_pos := base_pos + DRIVER_OVERFLOW_STEP * float(queue_index)
 
 	if registry.has_object(driver_id):
@@ -1213,13 +1230,13 @@ func _resolve_customer_visual_position(view: Dictionary) -> Vector2:
 		if anchor_node != null:
 			var local_base := dine_in_waiting_anchors.to_local(anchor_node.global_position)
 			return local_base + CUSTOMER_OVERFLOW_STEP * float(overflow)
-		return Vector2(48, 80) + CUSTOMER_OVERFLOW_STEP * float(queue_idx)
+		return Vector2(304, 80) + CUSTOMER_OVERFLOW_STEP * float(queue_idx)
 
 	var table_id := StringName(view.get("assigned_table_id", &""))
 	var table_node := registry.get_object(table_id)
 	if table_node != null:
 		return dine_in_waiting_anchors.to_local(table_node.global_position) + Vector2(0, -12)
-	return Vector2(144, 196)
+	return Vector2(80, 228)
 
 
 func _update_customer_visual_badge(
@@ -1507,9 +1524,11 @@ func _populate_floor_tiles() -> void:
 	if not floor_layer.get_used_cells().is_empty():
 		return
 
-	_fill_bordered_lane(waiting_lane_rect)
 	_fill_flat_zone(kitchen_rect, TILE_KITCHEN_FLOOR)
 	_fill_flat_zone(dining_rect, TILE_DINING_FLOOR)
+	_fill_flat_zone(Rect2i(8, 0, 1, 4), TILE_KITCHEN_FLOOR)
+	_fill_flat_zone(Rect2i(8, 4, 1, 5), TILE_DINING_FLOOR)
+	_fill_bordered_lane(waiting_lane_rect)
 	_fill_bordered_lane(online_rect)
 
 
@@ -1527,7 +1546,14 @@ func _fill_bordered_lane(rect: Rect2i) -> void:
 			var is_top := (y == rect.position.y)
 			var is_bot := (y == rect.end.y - 1)
 			var coords := TILE_LANE_FILL
-			if is_top and is_left:
+			if is_left and is_right:
+				if is_top:
+					coords = TILE_SINGLE_LANE_TOP
+				elif is_bot:
+					coords = TILE_SINGLE_LANE_BOT
+				else:
+					coords = TILE_SINGLE_LANE_MID
+			elif is_top and is_left:
 				coords = TILE_LANE_TOP_LEFT
 			elif is_top and is_right:
 				coords = TILE_LANE_TOP_RIGHT

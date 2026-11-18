@@ -316,52 +316,52 @@ func _test_mouse_input_and_world_offset() -> void:
 	_send_left_click(ui, Vector2(50, 180))
 	_check(
 		"HUD click at (50, 180) blocked from World",
-		kitchen.get_player_tile() == Vector2i(6, 4)
+		kitchen.get_player_tile() == Vector2i(6, 3)
 		and kitchen.get_selected_target_id() == &""
 	)
 
-	# 2. Floor click at cell (5, 4) -> local (176, 144) + offset (144, 36) = canvas (320, 180).
-	_send_left_click(ui, Vector2(320, 180))
+	# 2. Floor click at cell (5, 3) -> local (176, 112) + offset (144, 36) = canvas (320, 148).
+	_send_left_click(ui, Vector2(320, 148))
 	_check(
-		"floor click at canvas (320, 180) moves player to cell (5, 4)",
-		kitchen.get_player_tile() == Vector2i(5, 4)
+		"floor click at canvas (320, 148) moves player to cell (5, 3)",
+		kitchen.get_player_tile() == Vector2i(5, 3)
 		and kitchen.get_selected_target_id() == &""
 	)
 
-	# 3. Fixture click on storage_box at local (80, 16) + offset (144, 36) = canvas (224, 52).
-	# From (5, 4), RIGHT (3, 0) and DOWN (2, 1) tie at distance 6 -> RIGHT (3, 0) wins.
-	_send_left_click(ui, Vector2(224, 52))
+	# 3. Fixture click on storage_box at (3, 0) -> local (112, 16) + (144, 36) = canvas (256, 52).
+	# Sole free neighbor of (3, 0) is DOWN (3, 1).
+	_send_left_click(ui, Vector2(256, 52))
 	_check(
-		"click storage_box at (224, 52) selects storage_box and moves to (3, 0)",
+		"click storage_box at (256, 52) selects storage_box and moves to (3, 1)",
 		kitchen.get_selected_target_id() == &"storage_box"
-		and kitchen.get_player_tile() == Vector2i(3, 0)
+		and kitchen.get_player_tile() == Vector2i(3, 1)
 	)
 	ui.shop_cancel_button.pressed.emit()
 
-	# 4. WorkTable split targets:
-	# WorkTable is at local (208, 80) -> canvas (352, 116).
-	# StagingTarget is at local (201, 80) -> canvas (345, 116).
-	# ChoppingTarget is at local (215, 80) -> canvas (359, 116).
-	_send_left_click(ui, Vector2(345, 116))
+	# 4. WorkTable split targets at (3, 2):
+	# WorkTable is at local (112, 80) -> canvas (256, 116).
+	# StagingTarget is at local (107, 80) -> canvas (251, 116).
+	# ChoppingTarget is at local (122, 80) -> canvas (266, 116).
+	_send_left_click(ui, Vector2(251, 116))
 	_check(
-		"click StagingTarget at (345, 116) selects work_table_stage (not work_table)",
+		"click StagingTarget at (251, 116) selects work_table_stage (not work_table)",
 		kitchen.get_selected_target_id() == &"work_table_stage"
 	)
-	_send_left_click(ui, Vector2(359, 116))
+	_send_left_click(ui, Vector2(266, 116))
 	_check(
-		"click ChoppingTarget at (359, 116) selects work_table_chop (not work_table)",
+		"click ChoppingTarget at (266, 116) selects work_table_chop (not work_table)",
 		kitchen.get_selected_target_id() == &"work_table_chop"
 	)
 
 	# 5. InteractionDialogue pass-through via Viewport.push_input():
-	# Move to (5, 6) at canvas (320, 244), then click dining_table_01 at (4, 6) -> (288, 244).
-	# Player stays at (5, 6), and InteractionDialogue appears above table over cell (4, 5).
-	_send_left_click(ui, Vector2(320, 244))
-	_send_left_click(ui, Vector2(288, 244))
+	# Move to (3, 7) at canvas (256, 276), then click dining_table_01 at (2, 7) -> (224, 276).
+	# Player stays at (3, 7), and InteractionDialogue appears above table over cell (2, 6).
+	_send_left_click(ui, Vector2(256, 276))
+	_send_left_click(ui, Vector2(224, 276))
 	_check(
-		"click dining_table_01 from (5, 6) selects table and shows dialogue above it",
+		"click dining_table_01 from (3, 7) selects table and shows dialogue above it",
 		kitchen.get_selected_target_id() == &"dining_table_01"
-		and kitchen.get_player_tile() == Vector2i(5, 6)
+		and kitchen.get_player_tile() == Vector2i(3, 7)
 		and ui.interaction_dialogue.visible
 	)
 	var dlg_rect := ui.interaction_dialogue.get_global_rect()
@@ -383,12 +383,16 @@ func _test_mouse_input_and_world_offset() -> void:
 	)
 
 	# 6. Clicks outside the World grid (e.g. left margin (120, 100) or bottom-right (600, 340))
-	# are safely rejected without moving player.
+	# or on passive long counter (0, 4) -> (160, 180) and wall (8, 0) -> (416, 52)
+	# are safely rejected without moving player or selecting a target.
 	_send_left_click(ui, Vector2(120, 100))
 	_send_left_click(ui, Vector2(600, 340))
+	_send_left_click(ui, Vector2(160, 180))
+	_send_left_click(ui, Vector2(416, 52))
 	_check(
-		"clicks outside World grid rejected without moving player",
+		"clicks outside World grid or on passive counter/wall rejected without moving player",
 		kitchen.get_player_tile() == expected_floor_cell
+		and kitchen.get_selected_target_id() == &""
 	)
 
 	# 7. Result panel blocks world clicks when visible in RESULTS.
@@ -418,7 +422,7 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 	var ui := game_root.get_node("UI") as GameUI
 
 	# Select stove in PLANNING: keyboard input must be ignored outside SERVING.
-	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(192, 52))
 	_check("stove selected in PLANNING", kitchen.get_selected_target_id() == &"stove")
 	_send_key(ui, "g".unicode_at(0), KEY_G)
 	_check(
@@ -428,7 +432,7 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 
 	# Start SERVING and select stove ("goreng").
 	game_root.start_service_requested()
-	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(192, 52))
 	_check(
 		"stove selected in SERVING with allowed command goreng",
 		kitchen.get_selected_target_id() == &"stove"
@@ -530,10 +534,10 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 		and not ui.remaining_prompt_label.visible
 	)
 
-	# 5, 7, 8, 9. Select rice_cooker at (480, 52) ("masak, nasi"):
+	# 5, 7, 8, 9. Select rice_cooker at (224, 52) ("masak, nasi"):
 	# Test uppercase input ("M", "A"), live preview ("Ketik: [ma]", "Ketik berikutnya: sak"),
 	# Backspace editing, and target-switch prefix reset.
-	_send_left_click(ui, Vector2(480, 52))
+	_send_left_click(ui, Vector2(224, 52))
 	_check(
 		"rice_cooker selected with masak, nasi and idle instruction",
 		kitchen.get_selected_target_id() == &"rice_cooker"
@@ -560,7 +564,7 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 	)
 
 	# 7. Switching targets clears incompatible typing state.
-	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(192, 52))
 	_check(
 		"switching target from rice_cooker to stove clears active prefix and preview",
 		kitchen.get_selected_target_id() == &"stove"
@@ -583,8 +587,8 @@ func _test_dialogue_display_and_clamping() -> void:
 	var ui := game_root.get_node("UI") as GameUI
 	game_root.start_service_requested()
 
-	# Click top-left station storage_box at (224, 52):
-	_send_left_click(ui, Vector2(224, 52))
+	# Click top-row station storage_box at (256, 52):
+	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_check(
 		"dialogue shows Kotak Bahan and 6 ingredient commands",
@@ -623,8 +627,8 @@ func _test_dialogue_display_and_clamping() -> void:
 		and box_rect.end.y <= ui.world_visible_rect.end.y
 	)
 
-	# Select stove at (288, 52) ("goreng") and verify dialogue shrinks from wide storage_box width:
-	_send_left_click(ui, Vector2(288, 52))
+	# Select stove at (192, 52) ("goreng") and verify dialogue shrinks from wide storage_box width:
+	_send_left_click(ui, Vector2(192, 52))
 	var stove_rect := ui.interaction_dialogue.get_rect()
 	_check(
 		"dialogue shrinks horizontally when switching from storage_box to stove",
@@ -635,8 +639,8 @@ func _test_dialogue_display_and_clamping() -> void:
 		and stove_rect.end.y <= ui.world_visible_rect.end.y
 	)
 
-	# Click right-edge station online_station at (512, 84):
-	_send_left_click(ui, Vector2(512, 84))
+	# Click online_station at (352, 180):
+	_send_left_click(ui, Vector2(352, 180))
 	var online_rect := ui.interaction_dialogue.get_rect()
 	_check(
 		"dialogue follows online_station and stays within right viewport bound",
@@ -677,7 +681,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	var ui := game_root.get_node("UI") as GameUI
 
 	# In PLANNING, clicking plate_rack selects it without taking a plate.
-	_send_left_click(ui, Vector2(416, 52))
+	_send_left_click(ui, Vector2(288, 52))
 	_check(
 		"PLANNING click on plate_rack does not take plate",
 		kitchen.get_selected_target_id() == &"plate_rack"
@@ -695,7 +699,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	_check("entered SERVING for M1 kitchen loop", game_root.is_serving())
 
 	# Empty storage retrieval fails cleanly.
-	_send_left_click(ui, Vector2(224, 52))
+	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "ayam")
 	_check(
@@ -732,7 +736,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Invalid processing: RAW beras cannot masak at rice_cooker or goreng at stove.
-	_send_left_click(ui, Vector2(480, 52))
+	_send_left_click(ui, Vector2(224, 52))
 	_type_word(ui, "masak")
 	_check(
 		"RAW beras cannot masak at rice_cooker",
@@ -740,7 +744,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and kitchen.get_cooker_output_view(&"rice_cooker").is_empty()
 		and ui.context_message_label.text == "Nggak bisa sekarang"
 	)
-	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
 	_check(
 		"RAW beras cannot goreng at stove",
@@ -749,7 +753,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Wash beras at washer: RAW -> WASHED.
-	_send_left_click(ui, Vector2(352, 52))
+	_send_left_click(ui, Vector2(160, 52))
 	_type_word(ui, "cuci")
 	_check(
 		"washer cuci transitions RAW beras to WASHED",
@@ -758,7 +762,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Cook washed beras at rice_cooker: deposits COOKED_RICE in cooker output, frees hand.
-	_send_left_click(ui, Vector2(480, 52))
+	_send_left_click(ui, Vector2(224, 52))
 	_type_word(ui, "masak")
 	var cooker_view := kitchen.get_cooker_output_view(&"rice_cooker")
 	var cooker_node := world.registry.get_object(&"rice_cooker")
@@ -778,7 +782,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	var rack_node := world.registry.get_object(&"plate_rack")
 	var rack_label := rack_node.get_node_or_null("PlateCountLabel") as Label
 	_check("PlateRack label initially 4", rack_label != null and rack_label.text == "4")
-	_send_left_click(ui, Vector2(416, 52))
+	_send_left_click(ui, Vector2(288, 52))
 	_check(
 		"first plate_rack click takes 1 plate and updates count to 3",
 		kitchen.get_held_item_view().get("plate_id", &"") != &""
@@ -787,22 +791,22 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and held_vis.visible
 		and held_vis.get_node_or_null("PlateIndicator") != null
 	)
-	_send_left_click(ui, Vector2(416, 52))
+	_send_left_click(ui, Vector2(288, 52))
 	_check(
 		"second plate_rack click with empty plate returns it to rack (4)",
 		kitchen.get_held_item_view().is_empty()
 		and int(kitchen.get_plate_rack_view(&"plate_rack")["clean_count"]) == 4
 		and rack_label.text == "4"
 	)
-	_send_left_click(ui, Vector2(416, 52))
+	_send_left_click(ui, Vector2(288, 52))
 	_check(
 		"take plate again for nasi_telor assembly (3 remaining)",
 		kitchen.get_held_item_view().get("plate_id", &"") != &""
 		and int(kitchen.get_plate_rack_view(&"plate_rack")["clean_count"]) == 3
 	)
 
-	# Stage clean plate on WorkTable via StagingTarget (345, 116).
-	_send_left_click(ui, Vector2(345, 116))
+	# Stage clean plate on WorkTable via StagingTarget (251, 116).
+	_send_left_click(ui, Vector2(251, 116))
 	var staged_plate := kitchen.get_work_table_view(&"work_table")
 	var table_node := world.registry.get_object(&"work_table")
 	var staged_vis := table_node.get_node_or_null("StagedVisual") as Node2D
@@ -818,7 +822,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Retrieve cooked rice from rice_cooker using `nasi`.
-	_send_left_click(ui, Vector2(480, 52))
+	_send_left_click(ui, Vector2(224, 52))
 	_type_word(ui, "nasi")
 	_check(
 		"rice_cooker nasi retrieves COOKED_RICE and clears cooker output",
@@ -829,7 +833,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Clicking StagingTarget merges COOKED_RICE onto staged plate.
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(251, 116))
 	_check(
 		"COOKED_RICE merges onto staged plate without completing recipe yet",
 		kitchen.get_held_item_view().is_empty()
@@ -839,7 +843,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Retrieve telur from storage_box, verify raw egg texture, attempt invalid chop, fry on stove.
-	_send_left_click(ui, Vector2(224, 52))
+	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "telur")
 	var raw_egg_spr := held_vis.get_node_or_null("PartSprite_0") as Sprite2D
@@ -851,8 +855,8 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and raw_egg_spr.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
 	)
 
-	# Clicking ChoppingTarget (359, 116) does NOT stage telur; invalid potong preserves RAW telur.
-	_send_left_click(ui, Vector2(359, 116))
+	# Clicking ChoppingTarget (266, 116) does NOT stage telur; invalid potong preserves RAW telur.
+	_send_left_click(ui, Vector2(266, 116))
 	_type_word(ui, "potong")
 	_check(
 		"ChoppingTarget does not auto-stage held telur and rejects invalid potong",
@@ -862,7 +866,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Fry telur at stove (`goreng`), verify cooked egg.png texture.
-	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
 	var cooked_egg_spr := held_vis.get_node_or_null("PartSprite_0") as Sprite2D
 	_check(
@@ -881,7 +885,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Merge cooked telur onto staged plate -> completes nasi_telor!
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(251, 116))
 	var assembled := kitchen.get_work_table_view(&"work_table")
 	_check(
 		"merging cooked telur onto plated rice assembles exact nasi_telor",
@@ -894,7 +898,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Pick up completed nasi_telor into hand.
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(251, 116))
 	var final_dish := kitchen.get_held_item_view()
 	_check(
 		"picking up assembled nasi_telor moves exact dish to hand and clears WorkTable",
@@ -930,17 +934,17 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	game_root.start_service_requested()
 
 	# 1. Chopping sayur at work_table_chop + frying at stove -> CHOPPED_AND_COOKED.
-	_send_left_click(ui, Vector2(224, 52))
+	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "sayur")
-	_send_left_click(ui, Vector2(359, 116))
+	_send_left_click(ui, Vector2(266, 116))
 	_type_word(ui, "potong")
 	_check(
 		"sayur chop at work_table_chop transitions RAW -> CHOPPED without staging",
 		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.CHOPPED
 		and kitchen.get_work_table_view(&"work_table").is_empty()
 	)
-	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
 	_check(
 		"CHOPPED sayur transitions to CHOPPED_AND_COOKED at stove",
@@ -949,20 +953,20 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Trash loose item clears hand.
-	_send_left_click(ui, Vector2(224, 148))
+	_send_left_click(ui, Vector2(384, 52))
 	_check("trash discards loose held item", kitchen.get_held_item_view().is_empty())
 
 	# 2. Loose + loose merge rejection without ingredient loss:
-	_send_left_click(ui, Vector2(224, 52))
+	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "telur")
-	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
-	_send_left_click(ui, Vector2(345, 116))
-	_send_left_click(ui, Vector2(224, 52))
+	_send_left_click(ui, Vector2(251, 116))
+	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "beras")
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(251, 116))
 	_check(
 		"loose + loose merge rejected without losing staged or held ingredient",
 		not kitchen.get_work_table_view(&"work_table").is_empty()
@@ -973,16 +977,16 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Wash & cook held beras; verify cooker_full rejects 2nd masak; clear work_table loose telur.
-	_send_left_click(ui, Vector2(352, 52))
+	_send_left_click(ui, Vector2(160, 52))
 	_type_word(ui, "cuci")
-	_send_left_click(ui, Vector2(480, 52))
-	_type_word(ui, "masak")
 	_send_left_click(ui, Vector2(224, 52))
+	_type_word(ui, "masak")
+	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "beras")
-	_send_left_click(ui, Vector2(352, 52))
+	_send_left_click(ui, Vector2(160, 52))
 	_type_word(ui, "cuci")
-	_send_left_click(ui, Vector2(480, 52))
+	_send_left_click(ui, Vector2(224, 52))
 	_type_word(ui, "masak")
 	_check(
 		"second masak when cooker occupied rejects with cooker_full and preserves held rice",
@@ -992,8 +996,8 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Trash second rice, pick up staged cooked telur, verify read-only views cannot mutate state.
-	_send_left_click(ui, Vector2(224, 148))
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(384, 52))
+	_send_left_click(ui, Vector2(251, 116))
 	var ro_held := kitchen.get_held_item_view()
 	ro_held["parts"][0]["state"] = SharedTypes.PrepState.RAW
 	ro_held["plate_id"] = &"fake_plate"
@@ -1004,9 +1008,9 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Trash cooked telur, then assemble nasi_telor in REVERSE order (telur first, then rice).
-	_send_left_click(ui, Vector2(224, 148))
-	_send_left_click(ui, Vector2(416, 52))
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(384, 52))
+	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(251, 116))
 	var ro_table := kitchen.get_work_table_view(&"work_table")
 	ro_table["matched_recipe_id"] = &"fake_recipe"
 	_check(
@@ -1015,20 +1019,20 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Prepare cooked telur and merge FIRST onto staged plate.
-	_send_left_click(ui, Vector2(224, 52))
+	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "telur")
 	# Attempt invalid merge of RAW telur onto staged plate (must reject without losing telur).
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(251, 116))
 	_check(
 		"invalid merge of RAW telur onto staged plate rejected without resource loss",
 		not kitchen.get_held_item_view().is_empty()
 		and (kitchen.get_work_table_view(&"work_table")["parts"] as Array).is_empty()
 		and ui.context_message_label.text == "Tidak bisa digabung"
 	)
-	_send_left_click(ui, Vector2(288, 52))
+	_send_left_click(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(251, 116))
 	_check(
 		"cooked telur merged first onto plate",
 		kitchen.get_held_item_view().is_empty()
@@ -1036,18 +1040,18 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Retrieve cooked rice with `nasi` and merge SECOND -> exact nasi_telor!
-	_send_left_click(ui, Vector2(480, 52))
+	_send_left_click(ui, Vector2(224, 52))
 	_type_word(ui, "nasi")
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(251, 116))
 	_check(
 		"reverse plating order (telur then rice) also assembles exact nasi_telor",
 		kitchen.get_work_table_view(&"work_table").get("matched_recipe_id", &"") == &"nasi_telor"
 	)
 
 	# Pick up plated nasi_telor and trash it -> food discarded, same plate_id survives clean.
-	_send_left_click(ui, Vector2(345, 116))
+	_send_left_click(ui, Vector2(251, 116))
 	var plate_id_before: StringName = kitchen.get_held_item_view().get("plate_id", &"")
-	_send_left_click(ui, Vector2(224, 148))
+	_send_left_click(ui, Vector2(384, 52))
 	_check(
 		"trashing plated dish discards food and preserves exact reusable plate_id",
 		kitchen.get_held_item_view().get("plate_id", &"") == plate_id_before
@@ -1057,10 +1061,10 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Return clean plate, drain all 4 plates from PlateRack, verify empty PlateRack rejection.
-	_send_left_click(ui, Vector2(416, 52))
+	_send_left_click(ui, Vector2(288, 52))
 	for i in range(4):
-		_send_left_click(ui, Vector2(416, 52))
-		_send_left_click(ui, Vector2(345, 116))
+		_send_left_click(ui, Vector2(288, 52))
+		_send_left_click(ui, Vector2(251, 116))
 		if i < 3:
 			# Stage holds 1 item; move the first 3 plates to WASHER_DIRTY to drain rack.
 			var p_view := kitchen.get_work_table_view(&"work_table")
@@ -1076,7 +1080,7 @@ func _test_m1_edge_cases_and_readonly() -> void:
 		int(kitchen.get_plate_rack_view(&"plate_rack")["clean_count"]) == 0
 		and washer_spr.region_rect == WorldMap.REGION_WASHER_FILLED
 	)
-	_send_left_click(ui, Vector2(416, 52))
+	_send_left_click(ui, Vector2(288, 52))
 	_check(
 		"empty PlateRack click emits no_plates and keeps hand empty",
 		kitchen.get_held_item_view().is_empty()
@@ -1084,7 +1088,7 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Washer cuci washes 1 dirty plate into held clean plate and updates count.
-	_send_left_click(ui, Vector2(352, 52))
+	_send_left_click(ui, Vector2(160, 52))
 	_type_word(ui, "cuci")
 	_check(
 		"washer cuci washes 1 dirty plate into held clean plate",
@@ -1129,16 +1133,16 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 	_type_word(ui, "buka")
 
 	# 1. WorkTable center & left area reliably select work_table_stage; cutting board selects chop.
-	var center := Vector2(352, 116)
+	var center := Vector2(256, 116)
 	var stage_ok := true
 	for dx in [-12, -7, -2, 0, 4]:
-		_send_left_click(ui, Vector2(320, 180))
+		_send_left_click(ui, Vector2(320, 148))
 		_send_left_click(ui, center + Vector2(dx, 0))
 		if kitchen.get_selected_target_id() != &"work_table_stage":
 			stage_ok = false
 	var chop_ok := true
 	for dx in [6, 7, 10, 14]:
-		_send_left_click(ui, Vector2(320, 180))
+		_send_left_click(ui, Vector2(320, 148))
 		_send_left_click(ui, center + Vector2(dx, 0))
 		if kitchen.get_selected_target_id() != &"work_table_chop":
 			chop_ok = false
@@ -1146,7 +1150,7 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 	_check("WorkTable chopping board zone selects work_table_chop cleanly", chop_ok)
 
 	# Stage plate via center click, ensure clicking plate center never enters chop mode.
-	_send_left_click(ui, Vector2(416, 52))
+	_send_left_click(ui, Vector2(288, 52))
 	_send_left_click(ui, center)
 	var staged_vis := world.registry.get_object(&"work_table").get_node_or_null(
 		"StagedVisual"
@@ -1159,7 +1163,7 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 		and staged_vis != null
 		and staged_vis.position.is_equal_approx(Vector2(-5, -4))
 	)
-	_send_left_click(ui, Vector2(224, 52))
+	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "sayur")
 	_send_left_click(ui, center + Vector2(10, 0))
@@ -1171,26 +1175,26 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 	)
 
 	# 2. Smooth Player movement: authoritative tile immediate, visual animates and redirects safely.
-	_send_left_click(ui, Vector2(320, 180))
+	_send_left_click(ui, Vector2(320, 148))
 	await process_frame
 	for _i in range(40):
 		if not player_vis.is_moving_visually():
 			break
 		await process_frame
 	var start_pos := player_vis.get_visual_global_position()
-	_send_left_click(ui, Vector2(480, 116))
+	_send_left_click(ui, Vector2(384, 116))
 	var expected_cell := kitchen.get_player_tile()
 	var mid_pos := player_vis.get_visual_global_position()
 	_check(
 		"player logical tile updates immediately while visual interpolates from previous tile",
-		expected_cell == Vector2i(10, 2)
-		and world.global_to_cell(world.player.global_position) == Vector2i(10, 2)
+		expected_cell == Vector2i(7, 2)
+		and world.global_to_cell(world.player.global_position) == Vector2i(7, 2)
 		and player_vis.is_moving_visually()
 		and mid_pos.distance_to(start_pos) < mid_pos.distance_to(world.cell_to_global(expected_cell))
 	)
 	# Interrupt mid-flight with a second destination -> single tween redirects without drift.
 	await process_frame
-	_send_left_click(ui, Vector2(224, 180))
+	_send_left_click(ui, Vector2(160, 148))
 	var next_cell := kitchen.get_player_tile()
 	for _i in range(50):
 		if not player_vis.is_moving_visually():
@@ -1198,7 +1202,7 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 		await process_frame
 	_check(
 		"interrupted player movement settles cleanly at final authoritative destination",
-		next_cell == Vector2i(2, 4)
+		next_cell == Vector2i(0, 3)
 		and not player_vis.is_moving_visually()
 		and player_vis.get_visual_global_position().is_equal_approx(world.cell_to_global(next_cell))
 	)

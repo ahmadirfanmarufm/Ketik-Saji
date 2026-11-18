@@ -27,7 +27,7 @@ var _occupant_by_cell: Dictionary[Vector2i, StringName] = {}
 var _cells_by_occupant: Dictionary[StringName, Array] = {}
 
 
-func _init(grid_size: Vector2i = Vector2i(13, 9), cell_size: Vector2i = Vector2i(32, 32)) -> void:
+func _init(grid_size: Vector2i = Vector2i(12, 9), cell_size: Vector2i = Vector2i(32, 32)) -> void:
 	var valid_grid := grid_size.x > 0 and grid_size.y > 0
 	var valid_tile := cell_size.x > 0 and cell_size.y > 0
 	if not valid_grid:

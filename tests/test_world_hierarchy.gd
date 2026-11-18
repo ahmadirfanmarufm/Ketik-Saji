@@ -49,9 +49,49 @@ const WAITING_ANCHOR_IDS: Array[StringName] = [
 const SLOT_IDS: Array[StringName] = [
 	&"slot_utility_01",
 	&"slot_utility_02",
+	&"slot_utility_03",
+	&"slot_utility_04",
+	&"slot_utility_05",
 	&"slot_table_01",
 	&"slot_table_02",
+	&"slot_table_03",
+	&"slot_table_04",
+	&"slot_table_05",
+	&"slot_table_06",
 ]
+
+const EXPECTED_FIXTURE_CELLS: Dictionary[StringName, Vector2i] = {
+	&"washer": Vector2i(0, 0),
+	&"stove": Vector2i(1, 0),
+	&"rice_cooker": Vector2i(2, 0),
+	&"storage_box": Vector2i(3, 0),
+	&"plate_rack": Vector2i(4, 0),
+	&"trash": Vector2i(7, 0),
+	&"work_table": Vector2i(3, 2),
+	&"online_station": Vector2i(6, 4),
+	&"dining_table_01": Vector2i(2, 7),
+	&"dining_table_02": Vector2i(4, 7),
+}
+
+const EXPECTED_SLOT_CELLS: Dictionary[StringName, Vector2i] = {
+	&"slot_utility_01": Vector2i(5, 0),
+	&"slot_utility_02": Vector2i(6, 0),
+	&"slot_utility_03": Vector2i(2, 2),
+	&"slot_utility_04": Vector2i(4, 2),
+	&"slot_utility_05": Vector2i(5, 2),
+	&"slot_table_01": Vector2i(0, 5),
+	&"slot_table_02": Vector2i(2, 5),
+	&"slot_table_03": Vector2i(4, 5),
+	&"slot_table_04": Vector2i(5, 5),
+	&"slot_table_05": Vector2i(0, 7),
+	&"slot_table_06": Vector2i(5, 7),
+}
+
+const EXPECTED_PICKUP_CELLS: Dictionary[StringName, Vector2i] = {
+	&"pickup_spot_01": Vector2i(7, 5),
+	&"pickup_spot_02": Vector2i(7, 6),
+	&"pickup_spot_03": Vector2i(7, 7),
+}
 
 var _fails: int = 0
 
@@ -91,6 +131,7 @@ func _run_all() -> void:
 	_test_visual_only_nodes(world)
 	_test_art_integration_and_driver_visuals(world)
 	_test_interactable_neighbors_and_queries(world)
+	_test_m5a1_all_slots_occupied_reachability(world)
 	await _test_multi_tile_and_negative_queries(world)
 
 	game_root.free()
@@ -114,6 +155,13 @@ func _test_canonical_containers(world: WorldMap) -> void:
 
 
 func _test_starter_fixtures_and_unique_ids(world: WorldMap) -> void:
+	_check(
+		"M5-A1 world dimensions 12x9 with 32x32 tiles",
+		world.grid_size == Vector2i(12, 9)
+		and world.tile_size == Vector2i(32, 32)
+		and world.grid.size == Vector2i(12, 9)
+		and world.grid.tile_size == Vector2i(32, 32)
+	)
 	_check("KitchenStations count == 6", world.kitchen_stations.get_child_count() == 6)
 	_check("KitchenWorkTables count == 1", world.kitchen_work_tables.get_child_count() == 1)
 	_check("DiningTables count == 2", world.dining_tables.get_child_count() == 2)
@@ -123,13 +171,24 @@ func _test_starter_fixtures_and_unique_ids(world: WorldMap) -> void:
 		world.driver_overflow_anchors.get_child_count() == 1
 	)
 	_check("DriverObjects starts empty", world.driver_objects.get_child_count() == 0)
+	_check("PlacementSlots count == 11", world.placement_slots.get_child_count() == 11)
 
 	var ids := world.registry.get_ids()
-	_check("24 unique scene IDs registered", ids.size() == 24)
+	_check("31 unique scene IDs registered", ids.size() == 31)
 
 	for id in INTERACTABLE_IDS + PICKUP_SPOT_IDS + WAITING_ANCHOR_IDS + SLOT_IDS:
 		_check("registered ID " + String(id), world.registry.has_object(id))
 	_check("registered driver_overflow", world.registry.has_object(&"driver_overflow"))
+
+	for fixture_id: StringName in EXPECTED_FIXTURE_CELLS:
+		var node := world.registry.get_object(fixture_id)
+		var expected_cell: Vector2i = EXPECTED_FIXTURE_CELLS[fixture_id]
+		_check(
+			"starter fixture cell " + String(fixture_id) + " == " + str(expected_cell),
+			node != null
+			and world.global_to_cell(node.global_position) == expected_cell
+			and world.grid.get_occupant(expected_cell) == fixture_id
+		)
 
 
 func _test_work_table_split_targets(world: WorldMap) -> void:
@@ -153,7 +212,7 @@ func _test_work_table_split_targets(world: WorldMap) -> void:
 		and chop_node.get_meta(WorldMap.PARENT_WORLD_ID_META, &"") == &"work_table"
 	)
 
-	var expected_cell := Vector2i(6, 2)
+	var expected_cell := Vector2i(3, 2)
 	_check(
 		"WorkTable owns grid footprint once",
 		world.grid.get_occupant(expected_cell) == &"work_table"
@@ -197,6 +256,10 @@ func _test_placement_slots_and_markers(world: WorldMap) -> void:
 		_check("slot allowed_fixture_kinds non-empty " + String(slot_id), not allowed.is_empty())
 		_check("slot footprint_size positive " + String(slot_id), fp_size.x > 0 and fp_size.y > 0)
 		_check(
+			"slot cell matches approved M5-A1 position " + String(slot_id),
+			cell == EXPECTED_SLOT_CELLS[slot_id]
+		)
+		_check(
 			"empty slot does not occupy walkable floor " + String(slot_id),
 			world.grid.is_free(cell) and world.get_target_footprint(slot_id).is_empty()
 		)
@@ -209,9 +272,34 @@ func _test_placement_slots_and_markers(world: WorldMap) -> void:
 		for n in world.grid.get_cardinal_neighbors(spot_cell):
 			if world.grid.is_free(n):
 				has_free_neighbor = true
+		_check(
+			"pickup spot cell matches M5-A1 and is non-walkable " + String(spot_id),
+			spot_cell == EXPECTED_PICKUP_CELLS[spot_id]
+			and not world.grid.is_walkable(spot_cell)
+		)
 		_check("pickup spot has free cardinal neighbor " + String(spot_id), has_free_neighbor)
 		_check("pickup spot is Marker2D not fixture " + String(spot_id),
 			spot is Marker2D and not world.grid.is_occupied(spot_cell))
+
+	for wait_id in WAITING_ANCHOR_IDS:
+		var wait_node := world.registry.get_object(wait_id)
+		var wait_cell := world.global_to_cell(wait_node.global_position)
+		_check(
+			"waiting anchor on right-side column 9 and non-walkable " + String(wait_id),
+			wait_node is Marker2D
+			and wait_cell.x == 9
+			and not world.grid.is_walkable(wait_cell)
+		)
+
+	var overflow_node := world.registry.get_object(&"driver_overflow")
+	var overflow_cell := world.global_to_cell(overflow_node.global_position)
+	_check(
+		"driver_overflow in right-side road (cols 10..11) and non-walkable",
+		overflow_node is Marker2D
+		and overflow_cell.x >= 10
+		and overflow_cell.x <= 11
+		and not world.grid.is_walkable(overflow_cell)
+	)
 
 
 func _test_visual_only_nodes(world: WorldMap) -> void:
@@ -220,21 +308,49 @@ func _test_visual_only_nodes(world: WorldMap) -> void:
 		world.registry.find_id(world.player) == &""
 		and not world.registry.has_object(&"player")
 	)
+	var all_decor_passive := world.decorations.get_child_count() == 8
+	for child in world.decorations.get_children():
+		if not (child is Sprite2D) or (child is Area2D) or child.has_meta(WorldMap.WORLD_ID_META):
+			all_decor_passive = false
+		if world.registry.find_id(child as Node2D) != &"":
+			all_decor_passive = false
 	_check(
-		"Decorations not registered in WorldRegistry",
+		"Decorations contains passive counter/wall sprites not registered in WorldRegistry",
 		world.registry.find_id(world.decorations) == &""
-		and world.decorations.get_child_count() == 0
+		and all_decor_passive
 	)
-	_check("Player cell (6, 4) remains free", world.grid.is_free(Vector2i(6, 4)))
+	var counter_non_walkable := true
+	for cx in range(0, 6):
+		var c := Vector2i(cx, 4)
+		if world.grid.is_walkable(c) or world.grid.is_occupied(c):
+			counter_non_walkable = false
+	var wall_non_walkable := true
+	for wy in [0, 1, 2, 3, 4, 8]:
+		var wc := Vector2i(8, wy)
+		if world.grid.is_walkable(wc) or world.grid.is_occupied(wc):
+			wall_non_walkable = false
+	var doorway_and_passage_free := world.grid.is_free(Vector2i(7, 4))
+	for dy in [5, 6, 7]:
+		if not world.grid.is_free(Vector2i(8, dy)):
+			doorway_and_passage_free = false
+	_check(
+		"passive long counter and interior wall are non-walkable while doorway/passage are free",
+		counter_non_walkable and wall_non_walkable and doorway_and_passage_free
+	)
+	_check(
+		"Player starts at cell (6, 3) which remains free",
+		world.global_to_cell(world.player.global_position) == Vector2i(6, 3)
+		and world.grid.is_free(Vector2i(6, 3))
+	)
 
 
 func _test_art_integration_and_driver_visuals(world: WorldMap) -> void:
 	_check(
-		"FloorTiles has TileSet and 117 populated cells with nearest filter",
+		"FloorTiles has TileSet and 108 populated cells with nearest filter",
 		world.floor_layer.tile_set != null
 		and world.floor_layer.tile_set.tile_size == Vector2i(32, 32)
 		and world.floor_layer.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
-		and world.floor_layer.get_used_cells().size() == 117
+		and world.floor_layer.get_used_cells().size() == 108
 		and world.floor_layer.get_cell_atlas_coords(Vector2i(5, 2)) == WorldMap.TILE_KITCHEN_FLOOR
 		and world.floor_layer.get_cell_atlas_coords(Vector2i(5, 6)) == WorldMap.TILE_DINING_FLOOR
 	)
@@ -303,10 +419,14 @@ func _test_art_integration_and_driver_visuals(world: WorldMap) -> void:
 	])
 	var spot_drv := world.registry.get_object(&"drv_test_01")
 	_check(
-		"in-spot driver registered as Area2D at pickup_spot_01 with free neighbor (10, 2)",
+		"in-spot driver registered as Area2D at pickup_spot_01 with free neighbors",
 		spot_drv is Area2D
-		and spot_drv.position == Vector2(368, 80)
-		and world.get_free_cardinal_neighbors(&"drv_test_01") == [Vector2i(10, 2)]
+		and spot_drv.position == Vector2(240, 176)
+		and world.get_free_cardinal_neighbors(&"drv_test_01") == [
+			Vector2i(7, 4),
+			Vector2i(8, 5),
+			Vector2i(6, 5),
+		]
 		and not world.registry.has_object(&"drv_test_02")
 		and world.driver_objects.get_child_count() == 2
 	)
@@ -315,63 +435,121 @@ func _test_art_integration_and_driver_visuals(world: WorldMap) -> void:
 		"clearing driver visuals cleans DriverObjects and WorldRegistry",
 		world.driver_objects.get_child_count() == 0
 		and not world.registry.has_object(&"drv_test_01")
-		and not world.grid.is_occupied(Vector2i(11, 2))
+		and not world.grid.is_occupied(Vector2i(7, 5))
 	)
 
 
 func _test_interactable_neighbors_and_queries(world: WorldMap) -> void:
 	for target_id in INTERACTABLE_IDS:
 		var free_neighbors := world.get_free_cardinal_neighbors(target_id)
-		var nearest := world.find_nearest_free_neighbor(target_id, Vector2i(6, 4))
+		var nearest := world.find_nearest_free_neighbor(target_id, Vector2i(6, 3))
 		_check(
 			"interactable has free cardinal neighbor " + String(target_id),
 			not free_neighbors.is_empty() and free_neighbors.has(nearest)
 		)
 
-	# OnlineStation at (11, 1) is in non-walkable online_rect; only (10, 1) is walkable & free.
+	# OnlineStation at (6, 4) has UP(6,3), RIGHT(7,4), DOWN(6,5); LEFT(5,4) is non-walkable counter.
 	_check(
-		"online_station neighbor is (10, 1)",
-		world.get_free_cardinal_neighbors(&"online_station") == [Vector2i(10, 1)]
-		and world.find_nearest_free_neighbor(&"online_station", Vector2i(6, 4))
-			== Vector2i(10, 1)
+		"online_station neighbors are (6,3), (7,4), (6,5) and nearest from (6,3) is (6,3)",
+		world.get_free_cardinal_neighbors(&"online_station") == [
+			Vector2i(6, 3),
+			Vector2i(7, 4),
+			Vector2i(6, 5),
+		]
+		and world.find_nearest_free_neighbor(&"online_station", Vector2i(6, 3))
+			== Vector2i(6, 3)
 	)
 
-	# DiningTable01 at (4, 6) has 4 free neighbors: UP(4,5), RIGHT(5,6), DOWN(4,7), LEFT(3,6).
+	# DiningTable01 at (2, 7) has 4 free neighbors: UP(2,6), RIGHT(3,7), DOWN(2,8), LEFT(1,7).
 	var dt1_neighbors := world.get_free_cardinal_neighbors(&"dining_table_01")
 	_check(
 		"dining_table_01 cardinal neighbor order UP/RIGHT/DOWN/LEFT",
 		dt1_neighbors == [
-			Vector2i(4, 5),
-			Vector2i(5, 6),
-			Vector2i(4, 7),
-			Vector2i(3, 6),
+			Vector2i(2, 6),
+			Vector2i(3, 7),
+			Vector2i(2, 8),
+			Vector2i(1, 7),
 		]
 	)
-	# Tie-break checks around DiningTable01 (4, 6):
-	# From (5, 5), UP(4, 5) and RIGHT(5, 6) both have Manhattan distance 1 -> UP(4, 5) wins.
+	# Tie-break checks around DiningTable01 (2, 7):
+	# From (3, 6), UP(2, 6) and RIGHT(3, 7) both have Manhattan distance 1 -> UP(2, 6) wins.
 	_check(
-		"tie-break UP beats RIGHT from (5, 5)",
-		world.find_nearest_free_neighbor(&"dining_table_01", Vector2i(5, 5))
-			== Vector2i(4, 5)
+		"tie-break UP beats RIGHT from (3, 6)",
+		world.find_nearest_free_neighbor(&"dining_table_01", Vector2i(3, 6))
+			== Vector2i(2, 6)
 	)
-	# From (5, 7), RIGHT(5, 6) and DOWN(4, 7) both have distance 1 -> RIGHT(5, 6) wins.
+	# From (3, 8), RIGHT(3, 7) and DOWN(2, 8) both have distance 1 -> RIGHT(3, 7) wins.
 	_check(
-		"tie-break RIGHT beats DOWN from (5, 7)",
-		world.find_nearest_free_neighbor(&"dining_table_01", Vector2i(5, 7))
-			== Vector2i(5, 6)
+		"tie-break RIGHT beats DOWN from (3, 8)",
+		world.find_nearest_free_neighbor(&"dining_table_01", Vector2i(3, 8))
+			== Vector2i(3, 7)
 	)
-	# From (3, 7), DOWN(4, 7) and LEFT(3, 6) both have distance 1 -> DOWN(4, 7) wins.
+	# From (1, 8), DOWN(2, 8) and LEFT(1, 7) both have distance 1 -> DOWN(2, 8) wins.
 	_check(
-		"tie-break DOWN beats LEFT from (3, 7)",
-		world.find_nearest_free_neighbor(&"dining_table_01", Vector2i(3, 7))
-			== Vector2i(4, 7)
+		"tie-break DOWN beats LEFT from (1, 8)",
+		world.find_nearest_free_neighbor(&"dining_table_01", Vector2i(1, 8))
+			== Vector2i(2, 8)
 	)
-	# From (2, 6), LEFT(3, 6) has unique shortest distance 1 -> LEFT(3, 6) wins.
+	# From (0, 7), LEFT(1, 7) has unique shortest distance 1 -> LEFT(1, 7) wins.
 	_check(
-		"shortest Manhattan distance wins from (2, 6)",
-		world.find_nearest_free_neighbor(&"dining_table_01", Vector2i(2, 6))
-			== Vector2i(3, 6)
+		"shortest Manhattan distance wins from (0, 7)",
+		world.find_nearest_free_neighbor(&"dining_table_01", Vector2i(0, 7))
+			== Vector2i(1, 7)
 	)
+
+
+func _test_m5a1_all_slots_occupied_reachability(world: WorldMap) -> void:
+	var temp_ids: Array[StringName] = []
+	for slot_id in SLOT_IDS:
+		var slot_cell: Vector2i = EXPECTED_SLOT_CELLS[slot_id]
+		var temp_id := StringName("temp_" + String(slot_id))
+		var dummy := Node2D.new()
+		world.add_child(dummy)
+		if world.register_object(temp_id, dummy, [slot_cell]):
+			temp_ids.append(temp_id)
+
+	_check("all 11 placement slots occupied simultaneously", temp_ids.size() == 11)
+
+	var all_starters_reachable := true
+	for target_id in INTERACTABLE_IDS:
+		if world.get_free_cardinal_neighbors(target_id).is_empty():
+			all_starters_reachable = false
+
+	var all_placed_reachable := true
+	for placed_id in temp_ids:
+		if world.get_free_cardinal_neighbors(placed_id).is_empty():
+			all_placed_reachable = false
+
+	var all_pickups_reachable := true
+	for spot_id in PICKUP_SPOT_IDS:
+		var spot_cell: Vector2i = EXPECTED_PICKUP_CELLS[spot_id]
+		var has_free := false
+		for n in world.grid.get_cardinal_neighbors(spot_cell):
+			if world.grid.is_free(n):
+				has_free = true
+				break
+		if not has_free:
+			all_pickups_reachable = false
+
+	_check(
+		"all 12 starter interactables remain cardinally reachable when all 11 slots occupied",
+		all_starters_reachable
+	)
+	_check(
+		"all 11 placed slot fixtures remain cardinally reachable when all 11 slots occupied",
+		all_placed_reachable
+	)
+	_check(
+		"all 3 pickup spots retain free cardinal neighbors when all 11 slots occupied",
+		all_pickups_reachable
+	)
+
+	for placed_id in temp_ids:
+		var node := world.registry.get_object(placed_id)
+		world.unregister_object(placed_id)
+		if node != null:
+			world.remove_child(node)
+			node.free()
 
 
 func _test_multi_tile_and_negative_queries(world: WorldMap) -> void:
@@ -380,7 +558,7 @@ func _test_multi_tile_and_negative_queries(world: WorldMap) -> void:
 	_check("unknown target_id footprint empty", world.get_target_footprint(&"no_such").is_empty())
 	_check(
 		"unknown target_id nearest returns INVALID_CELL",
-		world.find_nearest_free_neighbor(&"no_such", Vector2i(6, 4)) == WorldMap.INVALID_CELL
+		world.find_nearest_free_neighbor(&"no_such", Vector2i(6, 3)) == WorldMap.INVALID_CELL
 	)
 	_check(
 		"out-of-bounds from_cell returns INVALID_CELL",
@@ -400,7 +578,7 @@ func _test_multi_tile_and_negative_queries(world: WorldMap) -> void:
 	_check(
 		"broken parent_world_id returns empty footprint and INVALID_CELL",
 		world.get_target_footprint(&"bad_child").is_empty()
-		and world.find_nearest_free_neighbor(&"bad_child", Vector2i(6, 4))
+		and world.find_nearest_free_neighbor(&"bad_child", Vector2i(6, 3))
 			== WorldMap.INVALID_CELL
 	)
 	bad_child.queue_free()
@@ -414,17 +592,17 @@ func _test_multi_tile_and_negative_queries(world: WorldMap) -> void:
 	# Multi-tile 2x1 fixture registration and neighbor query.
 	var wide_fixture := Node2D.new()
 	world.add_child(wide_fixture)
-	var cells: Array[Vector2i] = [Vector2i(5, 4), Vector2i(6, 4)]
+	var cells: Array[Vector2i] = [Vector2i(5, 3), Vector2i(6, 3)]
 	_check("register 2x1 wide_fixture", world.register_object(&"wide_fix", wide_fixture, cells))
 	_check("wide_fixture footprint matches", world.get_target_footprint(&"wide_fix") == cells)
 	_check(
-		"wide_fixture nearest from (6, 3) is (6, 3)",
-		world.find_nearest_free_neighbor(&"wide_fix", Vector2i(6, 3)) == Vector2i(6, 3)
+		"wide_fixture nearest from (6, 2) is (6, 2)",
+		world.find_nearest_free_neighbor(&"wide_fix", Vector2i(6, 2)) == Vector2i(6, 2)
 	)
 	wide_fixture.queue_free()
 	await process_frame
 	await process_frame
 	_check(
 		"wide_fixture cells released after queue_free",
-		world.grid.is_free(Vector2i(5, 4)) and world.grid.is_free(Vector2i(6, 4))
+		world.grid.is_free(Vector2i(5, 3)) and world.grid.is_free(Vector2i(6, 3))
 	)

@@ -1069,7 +1069,7 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 		"clicking in-spot driver Area2D selects driver_id and exposes saji command",
 		kitchen.get_selected_target_id() == d1_id
 		and kitchen.get_allowed_commands_for_selected_target() == ["saji"]
-		and kitchen.get_player_tile() == Vector2i(10, 2)
+		and kitchen.get_player_tile() == Vector2i(7, 4)
 	)
 
 	# Test live `drivers_changed` signal while another active driver is selected:

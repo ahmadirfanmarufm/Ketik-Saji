@@ -14,7 +14,7 @@ signal command_executed(command: StringName, target_id: StringName)
 signal action_feedback(code: StringName)
 signal kitchen_state_changed()
 
-const DEFAULT_START_TILE: Vector2i = Vector2i(6, 4)
+const DEFAULT_START_TILE: Vector2i = Vector2i(6, 3)
 const BOX_SLOT_COUNT: int = 3
 const BOX_SLOT_CAPACITY: int = 5
 const FRIDGE_SLOT_COUNT: int = 2

@@ -119,8 +119,15 @@ const FIXTURE_BENEFIT_LABELS: Dictionary[StringName, String] = {
 const SLOT_DISPLAY_LABELS: Dictionary[StringName, String] = {
 	&"slot_utility_01": "Slot Dapur 1",
 	&"slot_utility_02": "Slot Dapur 2",
+	&"slot_utility_03": "Slot Dapur 3",
+	&"slot_utility_04": "Slot Dapur 4",
+	&"slot_utility_05": "Slot Dapur 5",
 	&"slot_table_01": "Slot Meja 1",
 	&"slot_table_02": "Slot Meja 2",
+	&"slot_table_03": "Slot Meja 3",
+	&"slot_table_04": "Slot Meja 4",
+	&"slot_table_05": "Slot Meja 5",
+	&"slot_table_06": "Slot Meja 6",
 }
 
 @export var ui_safe_rect: Rect2 = Rect2(0.0, 0.0, 112.0, 360.0)
@@ -2684,6 +2691,7 @@ func _build_fixture_shop_ui() -> void:
 			child.free()
 
 	if _world_map != null and is_instance_valid(_world_map) and fixture_slots_row != null:
+		fixture_slots_row.add_theme_constant_override("separation", 2)
 		for slot_id in _world_map.get_placement_slot_ids():
 			var btn := Button.new()
 			btn.name = "SlotBtn_%s" % slot_id
@@ -2691,7 +2699,7 @@ func _build_fixture_shop_ui() -> void:
 			btn.focus_mode = Control.FOCUS_ALL
 			btn.mouse_filter = Control.MOUSE_FILTER_STOP
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.custom_minimum_size = Vector2(40, 22)
+			btn.custom_minimum_size = Vector2(20, 22)
 			btn.add_theme_font_size_override("font_size", 10)
 			btn.clip_text = true
 			var captured_slot := slot_id

@@ -97,8 +97,8 @@ func _test_starter_fixtures_and_ui_information() -> void:
 		run.get_daily_electricity_estimate() == 2000
 	)
 	_check(
-		"m4c_placement_slots_count_4",
-		world.get_placement_slot_ids().size() == 4
+		"m4c_placement_slots_count_11",
+		world.get_placement_slot_ids().size() == 11
 	)
 
 	_check(
@@ -307,8 +307,8 @@ func _test_additional_stove_placement_and_cooking() -> void:
 	)
 	_check(
 		"m4c_stove_01_cell_occupied_by_stove_01",
-		world.grid.get_occupant(Vector2i(3, 2)) == &"stove_01"
-		and not world.grid.is_free(Vector2i(3, 2))
+		world.grid.get_occupant(Vector2i(5, 0)) == &"stove_01"
+		and not world.grid.is_free(Vector2i(5, 0))
 	)
 	_check(
 		"m4c_stove_01_registered_in_kitchen_controller",
@@ -712,4 +712,38 @@ func _test_fixture_shop_responsive_layout() -> void:
 	root.content_scale_size = Vector2i(640, 360)
 	root.size = Vector2i(640, 360)
 	game_root.free()
+	await process_frame
+
+	# Verify all 5 utility slots and 6 table slots (8 total tables) can be purchased and placed
+	var g_all := packed.instantiate() as GameRoot
+	root.add_child(g_all)
+	await process_frame
+	await physics_frame
+
+	var r_all := g_all.get_run_controller() as RunController
+	var s_all := g_all.get_service_controller() as ServiceController
+	var w_all := g_all.get_node("World") as WorldMap
+	r_all._cash = 1000000
+
+	var all_util_bought := true
+	for u_idx in range(1, 6):
+		var s_id := StringName("slot_utility_%02d" % u_idx)
+		if not r_all.request_fixture_purchase(&"stove", s_id):
+			all_util_bought = false
+
+	var all_tables_bought := true
+	for t_idx in range(1, 7):
+		var s_id := StringName("slot_table_%02d" % t_idx)
+		if not r_all.request_fixture_purchase(&"dining_table", s_id):
+			all_tables_bought = false
+
+	_check("m4c_all_5_utility_slots_purchased", all_util_bought)
+	_check(
+		"m4c_all_6_table_slots_purchased_yielding_8_tables",
+		all_tables_bought
+		and s_all.get_registered_table_ids().size() == 8
+		and w_all.dining_tables.get_child_count() == 8
+	)
+
+	g_all.free()
 	await process_frame
