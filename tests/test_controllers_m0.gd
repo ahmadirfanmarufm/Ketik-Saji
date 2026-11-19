@@ -31,6 +31,7 @@ const EXPECTED_SETTLEMENT_KEYS: Array[String] = [
 	"failed_online_count",
 	"penalty_debt_before",
 	"penalty_debt_after",
+	"forecast_next_day_potential",
 	"forecast_next_day",
 	"day7_outcome",
 ]
@@ -451,11 +452,16 @@ func _test_settlement_keys_and_phase_guards() -> void:
 	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
 
-	# Phase guards while in PLANNING:
+	# Phase guards while in PLANNING: non-storage target rejects typing, and storage allows only beli.
+	_check("select stove in PLANNING", kitchen.on_interactable_clicked(&"stove"))
+	_check(
+		"accept_typed_character rejected on non-storage target in PLANNING without mutating prefix",
+		not kitchen.accept_typed_character("g") and kitchen.get_command_prefix() == ""
+	)
 	_check("select target in PLANNING", kitchen.on_interactable_clicked(&"storage_box"))
 	_check(
-		"accept_typed_character rejected in PLANNING without mutating prefix",
-		not kitchen.accept_typed_character("b") and kitchen.get_command_prefix() == ""
+		"SERVING-only ingredient rejected on storage_box in PLANNING",
+		not kitchen.accept_typed_character("a") and kitchen.get_command_prefix() == ""
 	)
 	_check(
 		"credit_order_once rejected in PLANNING",
@@ -506,11 +512,11 @@ func _test_settlement_keys_and_phase_guards() -> void:
 	_check("service closed to RESULTS", game_root.get_phase() == SharedTypes.Phase.RESULTS)
 
 	var settlement := run.get_day_settlement_view(1)
-	var has_all_18 := settlement.size() == EXPECTED_SETTLEMENT_KEYS.size()
+	var has_all_keys := settlement.size() == EXPECTED_SETTLEMENT_KEYS.size()
 	for key in EXPECTED_SETTLEMENT_KEYS:
 		if not settlement.has(key):
-			has_all_18 = false
-	_check("DaySettlementView contains all 18 documented keys", has_all_18)
+			has_all_keys = false
+	_check("DaySettlementView contains all documented keys", has_all_keys)
 	_check(
 		"DaySettlementView finance values match ledger",
 		int(settlement.get("begin_cash", -1)) == 100000

@@ -85,7 +85,8 @@ func _test_planning_hud_presentation_and_stubs() -> void:
 		"Planning HUD shows exact required fields from RunController",
 		ui.phase_label.text == "persiapan sebelum buka"
 		and ui.day_label.text == "Hari 1/7"
-		and ui.cash_label.text == "Kas: Rp%d" % int(rv["cash"])
+		and ui.cash_label.text == "Kas: %s" % GameUI.format_rupiah(int(rv["cash"]))
+		and ui.goal_target_label.text == "Target: %s" % GameUI.format_rupiah(int(rv["day_7_target"]))
 		and ui.goal_label.text == "Target Hari 7: 14%"
 		and is_equal_approx(
 			ui.goal_progress_bar.value,
@@ -117,7 +118,7 @@ func _test_planning_hud_presentation_and_stubs() -> void:
 	_check("buy 1 telur updates cash", run.request_ingredient_purchase(&"telur", 1, &"storage_box"))
 	_check(
 		"HUD cash and target progress reflect authoritative RunController state",
-		ui.cash_label.text == "Kas: Rp97000"
+		ui.cash_label.text == "Kas: Rp 97k"
 		and ui.goal_label.text == "Target Hari 7: 14%"
 		and is_equal_approx(ui.goal_progress_bar.value, 97000.0 / 700000.0)
 	)
@@ -144,7 +145,9 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 		"Day 2 PLANNING starts with forecast 8 for active nasi_telor while nasi_ayam is unlocked",
 		game_root.get_day_index() == 2
 		and ui.day_label.text == "Hari 2/7"
+		and ui.potential_demand_label.text == "Potensi Tamu: 10"
 		and ui.forecast_quota_label.text == "Target Tamu: 8"
+		and int(run.get_run_view().get("potential_demand", 0)) == 10
 		and run.get_run_view()["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_ayam"]
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
@@ -156,9 +159,11 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 	var telor_btn := ui.get_edit_menu_recipe_button(&"nasi_telor")
 	var ayam_btn := ui.get_edit_menu_recipe_button(&"nasi_ayam")
 	var komplit_btn := ui.get_edit_menu_recipe_button(&"nasi_komplit")
+	var telor_preview_btn := ui.get_edit_menu_preview_button(&"nasi_telor")
+	var ayam_preview_btn := ui.get_edit_menu_preview_button(&"nasi_ayam")
 	var popup_rect := ui.edit_menu_popup.get_global_rect()
 	_check(
-		"Edit Menu popup opens centered in world area with active selection highlighted",
+		"Edit Menu popup opens centered in world area with checkmark toggles and colon price format",
 		ui.is_edit_menu_open()
 		and ui.is_modal_blocking()
 		and ui.world_visible_rect.encloses(popup_rect)
@@ -167,18 +172,20 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 		and komplit_btn == null
 		and telor_btn.button_pressed
 		and not ayam_btn.button_pressed
-		and telor_btn.text.contains("Nasi Telor")
-		and telor_btn.text.contains("[Aktif]")
-		and not ayam_btn.text.contains("[Aktif]")
+		and telor_preview_btn != null
+		and ayam_preview_btn != null
+		and telor_preview_btn.text == "Nasi Telor: Rp 20k"
+		and ayam_preview_btn.text == "Nasi Ayam: Rp 28k"
+		and not telor_btn.text.contains("[Aktif]")
+		and not telor_preview_btn.text.contains("[Aktif]")
 	)
 
-	# While modal is open, world clicks, popup clicks, and gameplay typing/Escape are blocked.
+	# While modal is open, world clicks, popup clicks, and gameplay typing are blocked.
 	var tile_before := kitchen.get_player_tile()
 	_send_left_click(ui, popup_rect.get_center())
 	_send_left_click(ui, Vector2(320, 148))
 	_type_word(ui, "buka")
 	_send_key(ui, 0, KEY_BACKSPACE)
-	_send_key(ui, 0, KEY_ESCAPE)
 	_check(
 		"Edit Menu modal blocks world/popup clicks and buka typing",
 		kitchen.get_player_tile() == tile_before
@@ -187,12 +194,13 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 		and game_root.get_phase() == SharedTypes.Phase.PLANNING
 	)
 
-	# Toggle on nasi_ayam temporarily -> RunController unchanged until confirmation (8 -> 10).
+	# Toggle on nasi_ayam temporarily -> RunController unchanged until confirmation (10->14 / 8->11).
 	ayam_btn.button_pressed = true
 	_check(
 		"temporary toggle adds nasi_ayam in UI without mutating RunController before confirmation",
 		run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 		and ui.get_pending_menu_selection() == [&"nasi_telor", &"nasi_ayam"]
+		and ui.edit_menu_forecast_label.text == "Potensi Tamu: 14 | Target Tamu: 11"
 	)
 
 	var state_changes := { "count": 0 }
@@ -201,16 +209,18 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 	# Attempt duplicate second submit in same sequence -> rejected cleanly.
 	var second_submit := ui.submit_edit_menu([&"nasi_telor"])
 	_check(
-		"confirm adds nasi_ayam in RunController, refreshes forecast to 10, blocks double-submit",
+		"confirm adds nasi_ayam in RunController, refreshes forecast to 11, blocks double-submit",
 		not ui.is_edit_menu_open()
 		and not ui.is_modal_blocking()
 		and not second_submit
 		and state_changes["count"] == 1
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor", &"nasi_ayam"]
-		and ui.forecast_quota_label.text == "Target Tamu: 10"
+		and int(run.get_run_view().get("potential_demand", 0)) == 14
+		and ui.potential_demand_label.text == "Potensi Tamu: 14"
+		and ui.forecast_quota_label.text == "Target Tamu: 11"
 	)
 
-	# Re-open Edit Menu, deselect nasi_ayam, and confirm -> forecast drops back from 10 to 8.
+	# Re-open Edit Menu, deselect nasi_ayam, and confirm -> forecast drops back from 11 to 8.
 	ui.edit_menu_button.pressed.emit()
 	ui.get_edit_menu_recipe_button(&"nasi_ayam").button_pressed = false
 	ui.edit_menu_confirm_button.pressed.emit()
@@ -218,6 +228,8 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 		"deselecting recipe and confirming refreshes forecast back to 8",
 		not ui.is_edit_menu_open()
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
+		and int(run.get_run_view().get("potential_demand", 0)) == 10
+		and ui.potential_demand_label.text == "Potensi Tamu: 10"
 		and ui.forecast_quota_label.text == "Target Tamu: 8"
 	)
 
@@ -307,9 +319,12 @@ func _test_typed_buka_command_and_guards() -> void:
 
 	_send_key(ui, "x".unicode_at(0), KEY_X)
 	_check(
-		"invalid character rejected before prefix without starting service",
+		"invalid character rejected before prefix without error text or starting service",
 		kitchen.get_command_prefix() == ""
-		and ui.context_message_label.text == "Huruf tidak cocok"
+		and ui.get_feedback_code() == &"invalid_key"
+		and not ui.context_message_label.visible
+		and ui.context_message_label.text == ""
+		and not ui.interaction_dialogue.visible
 		and game_root.get_phase() == SharedTypes.Phase.PLANNING
 	)
 
@@ -371,7 +386,13 @@ func _test_typed_buka_command_and_guards() -> void:
 	)
 	_send_left_click(ui, Vector2(352, 180))
 	_check(
-		"online_station terima remains functional in SERVING",
+		"online_station waits at t=0 then exposes terima once periodic offer opens at t=10s",
+		kitchen.get_selected_target_id() == &"online_station"
+		and kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
+	game_root._process(10.0)
+	_check(
+		"online_station terima remains functional in SERVING once offer opens",
 		kitchen.get_selected_target_id() == &"online_station"
 		and kitchen.get_allowed_commands_for_selected_target() == ["terima"]
 	)

@@ -138,6 +138,10 @@ func has_fixture_instance(instance_id: StringName) -> bool:
 	return _fixture_instances.has(instance_id)
 
 
+func can_purchase_ingredients_for_storage(storage_unit_id: StringName) -> bool:
+	return _can_attempt_ingredient_purchase(storage_unit_id)
+
+
 func get_fixture_instance(instance_id: StringName) -> Dictionary:
 	if not _fixture_instances.has(instance_id):
 		return {}
@@ -173,7 +177,7 @@ func start_new_run() -> void:
 
 
 func select_daily_menu(recipe_ids: Array[StringName]) -> bool:
-	if not _is_planning_phase():
+	if _is_game_paused() or not _is_planning_phase():
 		return false
 	if recipe_ids.is_empty():
 		return false
@@ -304,7 +308,7 @@ func can_purchase_fixture(utility_id: StringName, slot_id: StringName) -> Dictio
 	if not has_access:
 		return { "ok": false, "reason": &"no_cardinal_access" }
 
-	if not _is_planning_phase():
+	if _is_game_paused() or not _is_planning_phase():
 		return { "ok": false, "reason": &"not_planning" }
 	if _cash < def.purchase_price:
 		return { "ok": false, "reason": &"insufficient_cash" }
@@ -620,7 +624,7 @@ func request_ingredient_purchase(
 
 
 func finalize_plan() -> bool:
-	if not _run_started or economy_config == null or not _is_planning_phase():
+	if not _run_started or economy_config == null or _is_game_paused() or not _is_planning_phase():
 		return false
 	if _selected_recipe_ids.is_empty():
 		return false
@@ -638,9 +642,11 @@ func finalize_plan() -> bool:
 	if table_ids.is_empty():
 		return false
 
+	var demand := _compute_demand_for_day_and_menu(_day_index, _selected_recipe_ids)
 	_frozen_service_plan = {
 		"day_index": _day_index,
-		"day_queue_initial": _compute_planned_dine_in_quota(),
+		"potential_demand": int(demand["potential_demand"]),
+		"day_queue_initial": int(demand["planned_dinein_quota"]),
 		"selected_recipe_ids": _selected_recipe_ids.duplicate(),
 		"dine_in_price_by_recipe": prices,
 		"installed_table_ids": table_ids,
@@ -763,6 +769,7 @@ func settle_day_once(report: Dictionary) -> Dictionary:
 			_day_7_outcome = SharedTypes.DayOutcome.LOST
 
 	var finance := _compute_day_ledger_totals(report_day)
+	var next_demand := _compute_demand_for_day_and_menu(report_day + 1, _selected_recipe_ids)
 	var settlement := {
 		"day_index": report_day,
 		"begin_cash": _begin_day_cash,
@@ -780,7 +787,8 @@ func settle_day_once(report: Dictionary) -> Dictionary:
 		"failed_online_count": int(report.get("failed_online_count", 0)),
 		"penalty_debt_before": debt_before,
 		"penalty_debt_after": _demand_penalty_debt,
-		"forecast_next_day": _compute_planned_dine_in_quota_for_day(report_day + 1),
+		"forecast_next_day_potential": int(next_demand["potential_demand"]),
+		"forecast_next_day": int(next_demand["planned_dinein_quota"]),
 		"day7_outcome": _day_7_outcome,
 	}
 	_settled_days[report_day] = settlement
@@ -807,6 +815,7 @@ func advance_to_next_planning() -> int:
 
 
 func get_run_view() -> Dictionary:
+	var demand := _compute_demand_for_day_and_menu(_day_index, _selected_recipe_ids)
 	return {
 		"day_index": _day_index,
 		"cash": _cash,
@@ -816,8 +825,14 @@ func get_run_view() -> Dictionary:
 		"selected_recipe_ids": _selected_recipe_ids.duplicate(),
 		"installed_fixtures": _fixture_instances.duplicate(true),
 		"demand_penalty_debt": _demand_penalty_debt,
-		"planned_dinein_quota": _compute_planned_dine_in_quota(),
+		"potential_demand": int(demand["potential_demand"]),
+		"planned_dinein_quota": int(demand["planned_dinein_quota"]),
 	}
+
+
+## Returns read-only Potential Demand and Planned Dine-in Quota for a candidate menu.
+func preview_demand_for_menu(recipe_ids: Array[StringName]) -> Dictionary:
+	return _compute_demand_for_day_and_menu(_day_index, recipe_ids)
 
 
 func get_day_settlement_view(day_index: int) -> Dictionary:
@@ -897,17 +912,51 @@ func _compute_planned_dine_in_quota() -> int:
 
 
 func _compute_planned_dine_in_quota_for_day(day: int) -> int:
+	return int(_compute_demand_for_day_and_menu(day, _selected_recipe_ids)["planned_dinein_quota"])
+
+
+func _compute_demand_for_day_and_menu(day: int, recipe_ids: Array[StringName]) -> Dictionary:
 	if economy_config == null:
-		return 0
-	var base := (
+		return {
+			"base_potential": 0,
+			"menu_bonus": 0,
+			"potential_demand": 0,
+			"planned_dinein_quota": 0,
+		}
+	var unlocked_for_day := economy_config.get_unlocked_recipe_ids(day)
+	var active_count := 0
+	var seen: Dictionary[StringName, bool] = {}
+	for recipe_id in recipe_ids:
+		if recipe_id == &"" or seen.has(recipe_id):
+			continue
+		if not unlocked_for_day.has(recipe_id):
+			continue
+		seen[recipe_id] = true
+		active_count += 1
+	if active_count <= 0:
+		return {
+			"base_potential": 0,
+			"menu_bonus": 0,
+			"potential_demand": 0,
+			"planned_dinein_quota": 0,
+		}
+
+	var base_quota := (
 		economy_config.day_1_base_dinein_quota
 		+ maxi(0, day - 1) * economy_config.arrival_increment_per_day
 	)
-	var bonus := (
-		maxi(0, _selected_recipe_ids.size() - 1)
-		* economy_config.extra_arrivals_per_extra_selected_menu
-	)
-	return maxi(0, base + bonus - _demand_penalty_debt)
+	var conv_pct := clampi(economy_config.potential_demand_conversion_percent, 1, 100)
+	var base_potential := ceili(float(base_quota) * 100.0 / float(conv_pct))
+	var menu_bonus := economy_config.get_menu_demand_bonus(active_count)
+	var potential_demand := maxi(0, base_potential + menu_bonus)
+	var gross_planned_quota := (potential_demand * conv_pct) / 100
+	var planned_quota := maxi(0, gross_planned_quota - _demand_penalty_debt)
+	return {
+		"base_potential": base_potential,
+		"menu_bonus": menu_bonus,
+		"potential_demand": potential_demand,
+		"planned_dinein_quota": planned_quota,
+	}
 
 
 func _compute_daily_electricity_charge() -> int:
@@ -1014,10 +1063,20 @@ func _is_planning_or_serving_phase() -> bool:
 	return _is_planning_phase() or _is_serving_phase()
 
 
+func _is_game_paused() -> bool:
+	if (
+		_game_root != null
+		and is_instance_valid(_game_root)
+		and _game_root.has_method(&"is_paused")
+	):
+		return bool(_game_root.is_paused())
+	return false
+
+
 func _can_attempt_ingredient_purchase(storage_unit_id: StringName) -> bool:
 	if not _run_started or economy_config == null or _kitchen_controller == null:
 		return false
-	if not _is_planning_or_serving_phase():
+	if _is_game_paused() or not _is_planning_or_serving_phase():
 		return false
 	if storage_unit_id == &"" or not _fixture_instances.has(storage_unit_id):
 		return false

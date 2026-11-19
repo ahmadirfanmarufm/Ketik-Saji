@@ -133,6 +133,7 @@ func _run_all() -> void:
 	_test_art_integration_and_driver_visuals(world)
 	_test_interactable_neighbors_and_queries(world)
 	_test_m5a1_all_slots_occupied_reachability(world)
+	_test_f1a_unified_road_and_backdrop(game_root, world)
 	await _test_multi_tile_and_negative_queries(world)
 
 	game_root.free()
@@ -661,4 +662,73 @@ func _test_multi_tile_and_negative_queries(world: WorldMap) -> void:
 	_check(
 		"wide_fixture cells released after queue_free",
 		world.grid.is_free(Vector2i(5, 3)) and world.grid.is_free(Vector2i(6, 3))
+	)
+
+
+func _test_f1a_unified_road_and_backdrop(game_root: Node, world: WorldMap) -> void:
+	var road_connected := true
+	for y in range(world.grid_size.y):
+		var exp_c9 := WorldMap.TILE_LANE_MID_LEFT
+		var exp_c10 := WorldMap.TILE_LANE_FILL
+		var exp_c11 := WorldMap.TILE_LANE_MID_RIGHT
+		if y == 0:
+			exp_c9 = WorldMap.TILE_LANE_TOP_LEFT
+			exp_c10 = WorldMap.TILE_LANE_TOP_MID
+			exp_c11 = WorldMap.TILE_LANE_TOP_RIGHT
+		elif y == world.grid_size.y - 1:
+			exp_c9 = WorldMap.TILE_LANE_BOT_LEFT
+			exp_c10 = WorldMap.TILE_LANE_BOT_MID
+			exp_c11 = WorldMap.TILE_LANE_BOT_RIGHT
+		if (
+			world.floor_layer.get_cell_atlas_coords(Vector2i(9, y)) != exp_c9
+			or world.floor_layer.get_cell_atlas_coords(Vector2i(10, y)) != exp_c10
+			or world.floor_layer.get_cell_atlas_coords(Vector2i(11, y)) != exp_c11
+		):
+			road_connected = false
+		for x in [9, 10, 11]:
+			if world.grid.is_walkable(Vector2i(x, y)):
+				road_connected = false
+	_check(
+		"F1-A cols 9..11 form one connected 3-tile road while remaining non-walkable",
+		road_connected
+	)
+
+	# Verify programmatic _populate_floor_tiles() fallback matches authored tile_map_data.
+	world.floor_layer.clear()
+	world._populate_floor_tiles()
+	_check(
+		"F1-A _populate_floor_tiles() fallback builds connected 108-cell road",
+		world.floor_layer.get_used_cells().size() == 108
+		and world.floor_layer.get_cell_atlas_coords(Vector2i(9, 4)) == WorldMap.TILE_LANE_MID_LEFT
+		and world.floor_layer.get_cell_atlas_coords(Vector2i(10, 4)) == WorldMap.TILE_LANE_FILL
+		and world.floor_layer.get_cell_atlas_coords(Vector2i(11, 4)) == WorldMap.TILE_LANE_MID_RIGHT
+	)
+
+	var backdrop := game_root.get_node_or_null("WorldBackdrop") as Node2D
+	var passive_only := backdrop != null
+	var wall_sprites_ok := false
+	if backdrop != null:
+		var wall_count := 0
+		for child in backdrop.get_children():
+			if child is Area2D or child is CollisionObject2D or child is Control:
+				passive_only = false
+			if child is Node2D and world.registry.find_id(child as Node2D) != &"":
+				passive_only = false
+			if child is Sprite2D:
+				var spr := child as Sprite2D
+				if (
+					spr.texture != null
+					and spr.texture.resource_path == "res://assets/art/tiles/Warung-Tileset.png"
+					and spr.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
+				):
+					wall_count += 1
+		wall_sprites_ok = (wall_count == 4)
+	_check(
+		"F1-A WorldBackdrop is passive, draws behind World, and uses Warung-Tileset rear wall",
+		backdrop != null
+		and passive_only
+		and wall_sprites_ok
+		and backdrop.z_index < world.z_index
+		and backdrop.get_index() < world.get_index()
+		and world.registry.find_id(backdrop) == &""
 	)

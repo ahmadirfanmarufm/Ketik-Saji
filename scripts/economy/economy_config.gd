@@ -10,7 +10,8 @@ extends Resource
 @export var day_7_cash_target: int = 700000
 @export var day_1_base_dinein_quota: int = 4
 @export var arrival_increment_per_day: int = 4
-@export var extra_arrivals_per_extra_selected_menu: int = 2
+@export var menu_demand_bonus_curve: Array[int] = [0, 4, 7, 8, 9]
+@export var potential_demand_conversion_percent: int = 80
 @export var online_sale_percent: int = 70
 @export var fixture_resale_percent: int = 50
 @export var plates_per_rack: int = 4
@@ -25,6 +26,11 @@ extends Resource
 @export var diner_eat_seconds: float = 20.0
 @export var online_deadline_seconds: float = 60.0
 @export var service_delivery_seconds: float = 100.0
+
+@export_group("Periodic Online Offer Timings (Seconds)")
+@export var online_offer_initial_delay_seconds: float = 10.0
+@export var online_offer_interval_seconds: float = 15.0
+@export var online_offer_active_duration_seconds: float = 15.0
 
 
 ## Returns the RecipeEconomyEntry for `recipe_id`, or null if absent.
@@ -47,6 +53,14 @@ func get_unlocked_recipe_ids(day_index: int) -> Array[StringName]:
 		if entry != null and entry.recipe_id != &"" and entry.unlock_day <= day_index:
 			result.append(entry.recipe_id)
 	return result
+
+
+## Returns cumulative diminishing Potential Demand bonus for `active_recipe_count`.
+func get_menu_demand_bonus(active_recipe_count: int) -> int:
+	if active_recipe_count <= 1 or menu_demand_bonus_curve.is_empty():
+		return 0
+	var idx := mini(active_recipe_count - 1, menu_demand_bonus_curve.size() - 1)
+	return maxi(0, int(menu_demand_bonus_curve[idx]))
 
 
 ## Validates static data integrity and referential IDs across catalogs.
@@ -106,8 +120,27 @@ func _validate_balance_fields(errors: PackedStringArray) -> void:
 		errors.append("EconomyConfig: day_7_cash_target must be > 0.")
 	if day_1_base_dinein_quota < 0 or arrival_increment_per_day < 0:
 		errors.append("EconomyConfig: dine-in quota values must be >= 0.")
-	if extra_arrivals_per_extra_selected_menu < 0:
-		errors.append("EconomyConfig: extra_arrivals_per_extra_selected_menu must be >= 0.")
+	if potential_demand_conversion_percent <= 0 or potential_demand_conversion_percent > 100:
+		errors.append("EconomyConfig: potential_demand_conversion_percent must be in (0, 100].")
+	if menu_demand_bonus_curve.is_empty():
+		errors.append("EconomyConfig: menu_demand_bonus_curve must not be empty.")
+	else:
+		if int(menu_demand_bonus_curve[0]) != 0:
+			errors.append("EconomyConfig: menu_demand_bonus_curve[0] (1 recipe) must be 0.")
+		for i in range(1, menu_demand_bonus_curve.size()):
+			var prev_val := int(menu_demand_bonus_curve[i - 1])
+			var curr_val := int(menu_demand_bonus_curve[i])
+			if curr_val < prev_val:
+				errors.append("EconomyConfig: menu_demand_bonus_curve must be non-decreasing.")
+				break
+			if i >= 2:
+				var prev_inc := prev_val - int(menu_demand_bonus_curve[i - 2])
+				var curr_inc := curr_val - prev_val
+				if curr_inc > prev_inc:
+					errors.append(
+						"EconomyConfig: menu_demand_bonus_curve increments must diminish."
+					)
+					break
 	if online_sale_percent <= 0 or online_sale_percent >= 100:
 		errors.append("EconomyConfig: online_sale_percent must be in (0, 100).")
 	if fixture_resale_percent < 0 or fixture_resale_percent >= 100:
@@ -124,6 +157,12 @@ func _validate_balance_fields(errors: PackedStringArray) -> void:
 		or service_delivery_seconds <= 0.0
 	):
 		errors.append("EconomyConfig: all timing durations must be > 0.")
+	if (
+		online_offer_initial_delay_seconds <= 0.0
+		or online_offer_interval_seconds <= 0.0
+		or online_offer_active_duration_seconds <= 0.0
+	):
+		errors.append("EconomyConfig: all periodic online offer timings must be > 0.")
 
 
 func _validate_prices(

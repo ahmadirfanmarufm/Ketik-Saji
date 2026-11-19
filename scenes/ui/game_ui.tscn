@@ -1,8 +1,10 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/game_ui.gd" id="1_game_ui"]
+[ext_resource type="Script" path="res://scripts/ui/tutorial_guidance_overlay.gd" id="2_guidance"]
 
 [node name="UI" type="CanvasLayer"]
+process_mode = 3
 script = ExtResource("1_game_ui")
 
 [node name="UIRoot" type="Control" parent="."]
@@ -17,23 +19,26 @@ mouse_filter = 2
 [node name="LeftHUDRegion" type="PanelContainer" parent="UIRoot"]
 clip_contents = true
 layout_mode = 0
-offset_right = 112.0
+offset_right = 136.0
 offset_bottom = 360.0
 mouse_filter = 0
 
 [node name="HUDColumn" type="VBoxContainer" parent="UIRoot/LeftHUDRegion"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 2
 
 [node name="DayLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 12
 text = "Hari 1/7"
 clip_text = true
 
 [node name="PhaseLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 11
 text = "persiapan sebelum buka"
 autowrap_mode = 3
 clip_text = true
@@ -41,17 +46,27 @@ clip_text = true
 [node name="CashLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
 layout_mode = 2
 mouse_filter = 2
-text = "Kas: Rp100000"
+theme_override_font_sizes/font_size = 12
+text = "Kas: Rp 100k"
+clip_text = true
+
+[node name="GoalTargetLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Target: Rp 700k"
 clip_text = true
 
 [node name="GoalLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 11
 text = "Target Hari 7: 14%"
 autowrap_mode = 3
 clip_text = true
 
 [node name="GoalProgressBar" type="ProgressBar" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
 mouse_filter = 2
 max_value = 1.0
@@ -61,50 +76,71 @@ show_percentage = false
 [node name="PlanningBox" type="VBoxContainer" parent="UIRoot/LeftHUDRegion/HUDColumn"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="PotentialDemandLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Potensi Tamu: 5"
+clip_text = true
 
 [node name="ForecastQuotaLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 11
 text = "Target Tamu: 4"
 clip_text = true
 
 [node name="EditMenuButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
+custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 focus_mode = 2
 mouse_filter = 0
+theme_override_font_sizes/font_size = 11
 text = "Edit Menu"
 clip_text = true
 
 [node name="FixtureShopButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
+visible = false
+custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 focus_mode = 2
 mouse_filter = 0
+disabled = true
+theme_override_font_sizes/font_size = 11
 text = "Beli Alat"
 clip_text = true
 
 [node name="StartHintLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 11
 text = "Ketik: buka"
 clip_text = true
 
 [node name="StubActionsRow" type="HBoxContainer" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 4
 
 [node name="MenuStubButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/StubActionsRow"]
+custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 size_flags_horizontal = 3
 focus_mode = 2
 mouse_filter = 0
+theme_override_font_sizes/font_size = 11
 text = "Menu"
 clip_text = true
 
 [node name="ExitStubButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/StubActionsRow"]
+custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 size_flags_horizontal = 3
 focus_mode = 2
 mouse_filter = 0
+theme_override_font_sizes/font_size = 11
 text = "Exit"
 clip_text = true
 
@@ -112,18 +148,42 @@ clip_text = true
 visible = false
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 2
 
 [node name="ServiceElapsedLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/ServiceBox"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 11
 text = "Waktu: 0.0 dtk"
 clip_text = true
 
 [node name="UnspawnedQuotaLabel" type="Label" parent="UIRoot/LeftHUDRegion/HUDColumn/ServiceBox"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 11
 text = "Antrean Datang: 4"
 clip_text = true
+
+[node name="PauseButton" type="Button" parent="UIRoot/LeftHUDRegion/HUDColumn"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+theme_override_font_sizes/font_size = 11
+text = "Pause"
+clip_text = true
+
+[node name="TutorialGuidanceOverlay" type="Control" parent="UIRoot"]
+visible = false
+z_index = 8
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_guidance")
 
 [node name="InteractionDialogue" type="PanelContainer" parent="UIRoot"]
 visible = false
@@ -133,7 +193,7 @@ offset_left = 144.0
 offset_top = 8.0
 offset_right = 144.0
 offset_bottom = 8.0
-mouse_filter = 2
+mouse_filter = 0
 
 [node name="DialogueColumn" type="VBoxContainer" parent="UIRoot/InteractionDialogue"]
 layout_mode = 2
@@ -152,7 +212,7 @@ mouse_filter = 2
 [node name="AllowedCommandsLabel" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
 visible = false
 layout_mode = 2
-mouse_filter = 2
+mouse_filter = 0
 
 [node name="PrefixPromptLabel" type="Label" parent="UIRoot/InteractionDialogue/DialogueColumn"]
 visible = false
@@ -202,6 +262,14 @@ mouse_filter = 2
 theme_override_font_sizes/font_size = 11
 autowrap_mode = 3
 
+[node name="ResultNarrativeLabel" type="Label" parent="UIRoot/DayResultSidePanel/ResultColumn"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+autowrap_mode = 3
+
 [node name="ResultFooter" type="VBoxContainer" parent="UIRoot/DayResultSidePanel/ResultColumn"]
 layout_mode = 2
 mouse_filter = 2
@@ -232,71 +300,134 @@ mouse_filter = 0
 
 [node name="WorldDimmer" type="ColorRect" parent="UIRoot/EditMenuOverlay"]
 layout_mode = 0
-offset_left = 112.0
+offset_left = 136.0
 offset_right = 640.0
 offset_bottom = 360.0
 mouse_filter = 0
 color = Color(0.05, 0.07, 0.11, 0.62)
 
 [node name="EditMenuPopup" type="PanelContainer" parent="UIRoot/EditMenuOverlay"]
-custom_minimum_size = Vector2(336, 280)
+clip_contents = true
 layout_mode = 0
-offset_left = 208.0
+offset_left = 158.0
 offset_top = 40.0
-offset_right = 544.0
+offset_right = 618.0
 offset_bottom = 320.0
 mouse_filter = 0
 
 [node name="PopupColumn" type="VBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 4
 
 [node name="PopupTitleLabel" type="Label" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 12
 text = "Edit Menu"
 horizontal_alignment = 1
 
 [node name="PopupHintLabel" type="Label" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
-custom_minimum_size = Vector2(280, 0)
-layout_mode = 2
-mouse_filter = 2
-text = "Pilih menu untuk disajikan hari ini"
-autowrap_mode = 3
-
-[node name="RecipeScroll" type="ScrollContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
-layout_mode = 2
-size_flags_vertical = 3
-mouse_filter = 0
-
-[node name="RecipeList" type="VBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/RecipeScroll"]
+custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Pilih menu untuk disajikan hari ini"
+autowrap_mode = 3
+
+[node name="EditMenuForecastLabel" type="Label" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Potensi Tamu: 5 | Target Tamu: 4"
+clip_text = true
+
+[node name="EditMenuBodyRow" type="HBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="RecipeScroll" type="ScrollContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+size_flags_stretch_ratio = 1.35
+mouse_filter = 0
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="RecipeList" type="VBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow/RecipeScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 3
+
+[node name="RecipeDetailPanel" type="PanelContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow"]
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 0
+
+[node name="DetailColumn" type="VBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow/RecipeDetailPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="RecipeDetailTitleLabel" type="Label" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow/RecipeDetailPanel/DetailColumn"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Detail Resep"
+autowrap_mode = 3
+
+[node name="DetailScroll" type="ScrollContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow/RecipeDetailPanel/DetailColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 0
+horizontal_scroll_mode = 0
+
+[node name="RecipeDetailList" type="VBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow/RecipeDetailPanel/DetailColumn/DetailScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 2
 
 [node name="EditMenuErrorLabel" type="Label" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
 visible = false
-custom_minimum_size = Vector2(280, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 2
+theme_override_font_sizes/font_size = 11
 autowrap_mode = 3
 
 [node name="PopupButtonsRow" type="HBoxContainer" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 4
 
 [node name="EditMenuCancelButton" type="Button" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/PopupButtonsRow"]
+custom_minimum_size = Vector2(0, 24)
 layout_mode = 2
 size_flags_horizontal = 3
 focus_mode = 2
 mouse_filter = 0
+theme_override_font_sizes/font_size = 11
 text = "Batal"
 
 [node name="EditMenuConfirmButton" type="Button" parent="UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/PopupButtonsRow"]
+custom_minimum_size = Vector2(0, 24)
 layout_mode = 2
 size_flags_horizontal = 3
 focus_mode = 2
 mouse_filter = 0
+theme_override_font_sizes/font_size = 11
 text = "Konfirmasi"
 
 [node name="IngredientShopOverlay" type="Control" parent="UIRoot"]
@@ -312,14 +443,14 @@ mouse_filter = 0
 
 [node name="WorldDimmer" type="ColorRect" parent="UIRoot/IngredientShopOverlay"]
 layout_mode = 0
-offset_left = 112.0
+offset_left = 136.0
 offset_right = 640.0
 offset_bottom = 360.0
 mouse_filter = 0
 color = Color(0.05, 0.07, 0.11, 0.62)
 
 [node name="IngredientShopPopup" type="PanelContainer" parent="UIRoot/IngredientShopOverlay"]
-custom_minimum_size = Vector2(456, 324)
+clip_contents = true
 layout_mode = 0
 offset_left = 148.0
 offset_top = 18.0
@@ -330,6 +461,7 @@ mouse_filter = 0
 [node name="ShopColumn" type="VBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 4
 
 [node name="ShopHeaderRow" type="HBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
 layout_mode = 2
@@ -339,42 +471,52 @@ mouse_filter = 2
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
+theme_override_font_sizes/font_size = 12
 text = "Belanja Bahan"
 
 [node name="ShopTargetLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopHeaderRow"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 12
 text = "Kotak Bahan"
 
 [node name="ShopCashLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopHeaderRow"]
+visible = false
 layout_mode = 2
 mouse_filter = 2
-text = "Kas: Rp100000"
+text = "Kas: Rp 100k"
 
 [node name="ShopStatusRow" type="HBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
+visible = false
 layout_mode = 2
 mouse_filter = 2
 
 [node name="ShopCapacityLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopStatusRow"]
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
-text = "Sisa kapasitas: 15"
+text = ""
 
 [node name="ShopDeliveryHintLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopStatusRow"]
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 2
-text = "Tiba langsung"
+theme_override_font_sizes/font_size = 11
+text = "Tiba 100 dtk"
 
 [node name="ShopSlotsRow" type="HBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 4
 
 [node name="ShopPendingLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
-custom_minimum_size = Vector2(420, 0)
+visible = false
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 2
-text = "Tidak ada kiriman tertunda"
+theme_override_font_sizes/font_size = 11
+text = ""
 autowrap_mode = 3
 
 [node name="ShopScroll" type="ScrollContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
@@ -382,28 +524,33 @@ layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 0
 follow_focus = true
+horizontal_scroll_mode = 0
 
 [node name="ShopIngredientList" type="VBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopScroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
+theme_override_constants/separation = 2
 
 [node name="ShopErrorLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
 visible = false
-custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 2
+theme_override_font_sizes/font_size = 11
 autowrap_mode = 3
 
 [node name="ShopFooterRow" type="HBoxContainer" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 4
 
 [node name="ShopTotalLabel" type="Label" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopFooterRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
-text = "Total: Rp0"
+theme_override_font_sizes/font_size = 12
+text = "Total: Rp 0"
 
 [node name="ShopRetrieveButton" type="Button" parent="UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopFooterRow"]
 visible = false
@@ -437,7 +584,7 @@ mouse_filter = 0
 
 [node name="WorldDimmer" type="ColorRect" parent="UIRoot/FixtureShopOverlay"]
 layout_mode = 0
-offset_left = 112.0
+offset_left = 136.0
 offset_right = 640.0
 offset_bottom = 360.0
 mouse_filter = 0
@@ -473,18 +620,21 @@ text = "Belanja Peralatan"
 clip_text = true
 
 [node name="FixtureCashLabel" type="Label" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureHeaderRow"]
+visible = false
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/font_size = 11
-text = "Kas: Rp0"
+text = "Kas: Rp 0"
 
 [node name="FixturePowerLabel" type="Label" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureHeaderRow"]
+visible = false
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/font_size = 11
-text = "Listrik: Rp0/hari"
+text = "Listrik: Rp 0/hari"
 
 [node name="FixtureSlotsRow" type="HBoxContainer" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn"]
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
@@ -523,7 +673,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
 theme_override_font_sizes/font_size = 11
-text = "Pilih slot & alat"
+text = "Harga: -"
 clip_text = true
 
 [node name="FixtureCancelButton" type="Button" parent="UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureFooterRow"]
@@ -541,3 +691,374 @@ focus_mode = 2
 mouse_filter = 0
 theme_override_font_sizes/font_size = 11
 text = "beli"
+
+[node name="PauseOverlay" type="Control" parent="UIRoot"]
+visible = false
+z_index = 40
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+process_mode = 3
+
+[node name="PauseDimmer" type="ColorRect" parent="UIRoot/PauseOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.04, 0.05, 0.09, 0.72)
+
+[node name="PausePopup" type="PanelContainer" parent="UIRoot/PauseOverlay"]
+custom_minimum_size = Vector2(200, 124)
+layout_mode = 0
+offset_left = 220.0
+offset_top = 118.0
+offset_right = 420.0
+offset_bottom = 242.0
+mouse_filter = 0
+
+[node name="PauseColumn" type="VBoxContainer" parent="UIRoot/PauseOverlay/PausePopup"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="PauseTitleLabel" type="Label" parent="UIRoot/PauseOverlay/PausePopup/PauseColumn"]
+layout_mode = 2
+mouse_filter = 2
+text = "Jeda"
+horizontal_alignment = 1
+
+[node name="PauseStatusLabel" type="Label" parent="UIRoot/PauseOverlay/PausePopup/PauseColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Permainan dijeda"
+horizontal_alignment = 1
+
+[node name="PauseResumeButton" type="Button" parent="UIRoot/PauseOverlay/PausePopup/PauseColumn"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+text = "Lanjut"
+
+[node name="PauseExitButton" type="Button" parent="UIRoot/PauseOverlay/PausePopup/PauseColumn"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+text = "Keluar"
+
+[node name="TutorialHelpButton" type="Button" parent="UIRoot"]
+visible = false
+z_index = 12
+layout_mode = 0
+offset_left = 562.0
+offset_top = 4.0
+offset_right = 636.0
+offset_bottom = 24.0
+focus_mode = 0
+mouse_filter = 0
+theme_override_font_sizes/font_size = 10
+text = "? Panduan"
+
+[node name="TutorialBanner" type="PanelContainer" parent="UIRoot"]
+visible = false
+z_index = 12
+clip_contents = true
+layout_mode = 0
+offset_left = 532.0
+offset_top = 28.0
+offset_right = 636.0
+offset_bottom = 176.0
+mouse_filter = 0
+
+[node name="TutorialColumn" type="VBoxContainer" parent="UIRoot/TutorialBanner"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 3
+
+[node name="TutorialTitleLabel" type="Label" parent="UIRoot/TutorialBanner/TutorialColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+text = "Tutorial"
+clip_text = true
+
+[node name="TutorialScroll" type="ScrollContainer" parent="UIRoot/TutorialBanner/TutorialColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 1
+horizontal_scroll_mode = 0
+
+[node name="TutorialBodyLabel" type="Label" parent="UIRoot/TutorialBanner/TutorialColumn/TutorialScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+autowrap_mode = 3
+
+[node name="TutorialButtonsRow" type="HBoxContainer" parent="UIRoot/TutorialBanner/TutorialColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="TutorialSkipButton" type="Button" parent="UIRoot/TutorialBanner/TutorialColumn/TutorialButtonsRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+mouse_filter = 0
+theme_override_font_sizes/font_size = 10
+text = "Lewati"
+
+[node name="TutorialNextButton" type="Button" parent="UIRoot/TutorialBanner/TutorialColumn/TutorialButtonsRow"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+mouse_filter = 0
+theme_override_font_sizes/font_size = 10
+text = "Selesai"
+
+[node name="FeatureTipPanel" type="PanelContainer" parent="UIRoot"]
+visible = false
+z_index = 12
+clip_contents = true
+layout_mode = 0
+offset_left = 532.0
+offset_top = 184.0
+offset_right = 636.0
+offset_bottom = 352.0
+mouse_filter = 0
+
+[node name="TipColumn" type="VBoxContainer" parent="UIRoot/FeatureTipPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 3
+
+[node name="TipTitleLabel" type="Label" parent="UIRoot/FeatureTipPanel/TipColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+text = "Tip"
+clip_text = true
+
+[node name="TipScroll" type="ScrollContainer" parent="UIRoot/FeatureTipPanel/TipColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 1
+horizontal_scroll_mode = 0
+
+[node name="TipBodyLabel" type="Label" parent="UIRoot/FeatureTipPanel/TipColumn/TipScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+autowrap_mode = 3
+
+[node name="TipDismissButton" type="Button" parent="UIRoot/FeatureTipPanel/TipColumn"]
+layout_mode = 2
+focus_mode = 0
+mouse_filter = 0
+theme_override_font_sizes/font_size = 10
+text = "OK"
+
+[node name="TutorialReferenceOverlay" type="Control" parent="UIRoot"]
+visible = false
+z_index = 24
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="WorldDimmer" type="ColorRect" parent="UIRoot/TutorialReferenceOverlay"]
+layout_mode = 0
+offset_left = 136.0
+offset_right = 640.0
+offset_bottom = 360.0
+mouse_filter = 0
+color = Color(0.05, 0.07, 0.11, 0.62)
+
+[node name="ReferencePopup" type="PanelContainer" parent="UIRoot/TutorialReferenceOverlay"]
+clip_contents = true
+layout_mode = 0
+offset_left = 160.0
+offset_top = 28.0
+offset_right = 616.0
+offset_bottom = 332.0
+mouse_filter = 0
+
+[node name="RefColumn" type="VBoxContainer" parent="UIRoot/TutorialReferenceOverlay/ReferencePopup"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="RefTitleLabel" type="Label" parent="UIRoot/TutorialReferenceOverlay/ReferencePopup/RefColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 12
+text = "Panduan Singkat Warung"
+horizontal_alignment = 1
+
+[node name="RefScroll" type="ScrollContainer" parent="UIRoot/TutorialReferenceOverlay/ReferencePopup/RefColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 0
+horizontal_scroll_mode = 0
+
+[node name="RefBodyLabel" type="Label" parent="UIRoot/TutorialReferenceOverlay/ReferencePopup/RefColumn/RefScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+autowrap_mode = 3
+
+[node name="RefFooterRow" type="HBoxContainer" parent="UIRoot/TutorialReferenceOverlay/ReferencePopup/RefColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="RefRestartTutorialButton" type="Button" parent="UIRoot/TutorialReferenceOverlay/ReferencePopup/RefColumn/RefFooterRow"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+mouse_filter = 0
+theme_override_font_sizes/font_size = 11
+text = "Ulangi Tutorial"
+
+[node name="RefCloseButton" type="Button" parent="UIRoot/TutorialReferenceOverlay/ReferencePopup/RefColumn/RefFooterRow"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+mouse_filter = 0
+theme_override_font_sizes/font_size = 11
+text = "Tutup"
+
+[node name="StoryDialogueOverlay" type="Control" parent="UIRoot"]
+visible = false
+z_index = 25
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="WorldDimmer" type="ColorRect" parent="UIRoot/StoryDialogueOverlay"]
+layout_mode = 0
+offset_left = 136.0
+offset_right = 640.0
+offset_bottom = 360.0
+mouse_filter = 0
+color = Color(0.05, 0.07, 0.11, 0.56)
+
+[node name="StoryPopup" type="PanelContainer" parent="UIRoot/StoryDialogueOverlay"]
+clip_contents = true
+layout_mode = 0
+offset_left = 156.0
+offset_top = 204.0
+offset_right = 620.0
+offset_bottom = 346.0
+mouse_filter = 0
+
+[node name="StoryColumn" type="VBoxContainer" parent="UIRoot/StoryDialogueOverlay/StoryPopup"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="StoryTitleLabel" type="Label" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Hari 1: Warisan Terakhir"
+clip_text = true
+
+[node name="StoryContentRow" type="HBoxContainer" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="StoryPortraitFrame" type="PanelContainer" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow"]
+visible = false
+custom_minimum_size = Vector2(36, 48)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="StoryPortraitRect" type="TextureRect" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow/StoryPortraitFrame"]
+texture_filter = 1
+layout_mode = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="StoryTextColumn" type="VBoxContainer" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="StorySpeakerLabel" type="Label" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow/StoryTextColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "Narasi"
+
+[node name="StoryScroll" type="ScrollContainer" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow/StoryTextColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 1
+horizontal_scroll_mode = 0
+
+[node name="StoryBodyLabel" type="Label" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow/StoryTextColumn/StoryScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+autowrap_mode = 3
+
+[node name="StoryFooterRow" type="HBoxContainer" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="StoryProgressLabel" type="Label" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryFooterRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+text = "1/3"
+
+[node name="StorySkipButton" type="Button" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryFooterRow"]
+custom_minimum_size = Vector2(64, 22)
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+theme_override_font_sizes/font_size = 11
+text = "Lewati"
+
+[node name="StoryContinueButton" type="Button" parent="UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryFooterRow"]
+custom_minimum_size = Vector2(72, 22)
+layout_mode = 2
+focus_mode = 2
+mouse_filter = 0
+theme_override_font_sizes/font_size = 11
+text = "Lanjut"

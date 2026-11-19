@@ -46,8 +46,8 @@ C issues unique `customer_id`,`order_id`,`driver_id` per run/day (prefix day + c
 
 ## 3. Online station and **physical drivers**
 
-- The online **station** displays one stable unaccepted preview icon from today's menu, no deadline and no driver. Player physically selects station and types `terima` to accept when allowed. A preview never fails or causes a penalty. On acceptance, C creates one **ONLINE OPEN** order with independent `deadline_at = now+60` and one `driver_id` linked to that order, then draws next preview if still eligible.
-- **Acceptance predicate** (all required, CONFIRMED): `phase == SERVING`, `day_queue_remaining > 2`, `online_orders_open.size() < day_queue_initial` and selected menu nonempty. Concurrent cap is the **initial** dine-in quota, not `3` and not total lifetime online acceptances. Three physical pickup spots are **separate**. No additional cooldown/limit. An accepted order remains active after cutoff until fulfilled or timed out.
+- The online **station** follows a periodic availability lifecycle owned by C (`OnlineOfferState`: `NOT_SERVING`, `WAITING`, `AVAILABLE`, `UNAVAILABLE`) on the monotonic `GameRoot` clock (paused cleanly when paused). When `begin_service` starts, offers wait `online_offer_initial_delay_seconds` (default `10.0s`), then open as `AVAILABLE` for `online_offer_active_duration_seconds` (default `15.0s`) with one active-menu weighted `preview_recipe_id`, no order deadline, and no driver yet. When accepted via `terima` or expired without acceptance, the offer clears (`preview_recipe_id = &""`) and waits `online_offer_interval_seconds` (default `15.0s`) before the next offer. A waiting/expired/unavailable offer never fails or causes a penalty.
+- **Acceptance predicate** (all required): `phase == SERVING`, `offer_state == AVAILABLE` (with valid active `preview_recipe_id`), `day_queue_remaining > 2`, `online_orders_open.size() < day_queue_initial`, and selected menu nonempty with valid positive prices. Concurrent cap is the **initial** dine-in quota, not `3` and not total lifetime online acceptances. Three physical pickup spots are **separate**. An accepted order remains active after cutoff until fulfilled or timed out.
 - On driver creation: occupy lowest stable-ID free of **three** authored pickup markers; if full, add to **outside_driver_fifo**, keep driver sprite/icon/ring in visible side area. Driver deadline starts at acceptance regardless of spot. **Only** a driver with `state=AT_PICKUP_SPOT` can receive food. Overflow drivers are not serveable, even if holding matching food and clicking them. A click on an in-spot driver must select its **actual `driver_id`**, and B's completed `saji` calls C `try_serve_driver(driver_id,held_id)`; **never** serve at acceptance station and never choose order via hidden UI list.
 - `try_serve_driver` validates SERVING, actual driver **AT_PICKUP_SPOT**, own OPEN order with `now < deadline_at`, correct exact plated recipe. C asks B `try_consume_serving_item(..., ONLINE, &"")`: same plate returns clean immediately; C sets COMPLETED once, asks D to credit lower online price once, frees driver/spot and advances earliest still-live overflow driver. There is no eating, diner seat, table dirtying, or washer mutation.
 - If online deadline reaches `now>=deadline_at` at a spot **or outside**, mark FAILED once and remove driver from its spot/FIFO. Promote oldest still-open queued driver into freed spot **without resetting** the 60s deadline. Update E views. Online missed accepted order contributes same single 50/50 missed-order debt class as failed dine-in.
@@ -90,8 +90,10 @@ QueueView: day_queue_initial, day_queue_remaining, outside_dinein_count,
 TableView: table_id, state, customer_id_or_empty, order_id_or_empty
 DriverView: driver_id, order_id, recipe_id, state, spot_id_or_empty,
   seconds_remaining, serveable, world_anchor_id
-OnlineOfferView: preview_recipe_id, acceptance_enabled, disabled_reason,
-  online_open_count, concurrent_limit
+OnlineOfferView: offer_state, offer_state_name, preview_recipe_id,
+  offer_generation_number, acceptance_enabled, disabled_reason,
+  online_open_count, concurrent_limit, offer_seconds_remaining,
+  offer_total_seconds, next_offer_in_seconds, wait_total_seconds
 ```
 
 Godot-specific: driver `Area2D` objects relay a stable ID to **B**'s router; C never duplicates input focus or movement. Purchase/sale of dining fixture happens planning-only through D, with C registering/unregistering table occupancy state; C rejects removal if not safe. `Signals` are redraw notices only (`orders_changed`, `queues_changed`, `tables_changed`, `drivers_changed`, `online_offer_changed`). All state mutation direct and synchronous.

@@ -33,7 +33,8 @@ EconomyConfig.tres (all TUNING unless duration confirmed):
  starting_cash: int; day_7_cash_target: int;
  day_1_base_dinein_quota: int;
  arrival_increment_per_day: int = 4;   # CONFIRMED model, editable knob
- extra_arrivals_per_extra_selected_menu: int;
+ menu_demand_bonus_curve: Array[int] = [0, 4, 7, 8, 9];
+ potential_demand_conversion_percent: int = 80;
  online_sale_percent: int (suggested 70);
  fixture_resale_percent: int (suggested 50);
  plates_per_rack: int (suggested 4);
@@ -75,12 +76,15 @@ On CLOSING B identifies still-PENDING paid shipments and releases B capacity, D 
 
 ## 5. Demand, order pricing, failure debt
 
-D constructs `day_queue_initial` at Start Service from selected menu and day progression. Coordinator-confirmed base growth **+4 extra expected dine-in customers each day**; absolute Day 1 count and selected-menu demand bonus TUNING. Safe default formula:
+D constructs gross `potential_demand` and penalized `day_queue_initial` (`planned_dinein_quota`) deterministically from selected active menu breadth, day progression, and accumulated `demand_penalty_debt` (`1 debt = 1 planned customer reduction`):
 
 ```text
-base_quota = day_1_base_dinein_quota + (day_index - 1) * arrival_increment_per_day
-menu_bonus = max(0, selected_recipe_ids.size() - 1) * extra_arrivals_per_extra_selected_menu
-quota = max(0, base_quota + menu_bonus - demand_penalty_debt)
+base_quota = day_1_base_dinein_quota + max(0, day_index - 1) * arrival_increment_per_day
+base_potential = ceil(base_quota * 100.0 / potential_demand_conversion_percent)
+menu_bonus = menu_demand_bonus_curve[clamp(active_count - 1, 0, len - 1)]
+potential_demand = max(0, base_potential + menu_bonus)
+gross_planned_quota = (potential_demand * potential_demand_conversion_percent) / 100
+planned_dinein_quota = max(0, gross_planned_quota - demand_penalty_debt)
 ```
 
 Table count **does not automatically multiply quota** in initial model (default extra_table_bonus=0), because C already models customer waits/patience/available seats. This preserves genuine downside to expanding menu while not requiring new spawn mechanics. Quota is fixed for day; C first diner t=0, then +20s and price-biased one-dish orders. Positive dine-in prices are provided by D to C. Online order payout is *less* than dine-in, starting sample `floor(dine_in_price * 70 / 100)`; exact percent TUNING. No separate online menu or mandatory online quests.
@@ -104,7 +108,11 @@ At a completed serve, C asks `D.credit_order_once(order_id,recipe_id,kind)`; D l
 | `day_7_cash_target` | Rp700,000 | TUNING |
 | `day_1_base_dinein_quota` | 4 | TUNING |
 | `arrival_increment_per_day` | 4 | CONFIRMED increment, editable |
-| `extra_arrivals_per_extra_selected_menu` | 2 | TUNING |
+| `menu_demand_bonus_curve` | `[0, 4, 7, 8, 9]` | CONFIRMED diminishing-return model (values TUNING) |
+| `potential_demand_conversion_percent` | 80 | TUNING deterministic conversion |
+| `online_offer_initial_delay_seconds` | 10.0 | TUNING periodic online delay |
+| `online_offer_interval_seconds` | 15.0 | TUNING periodic online wait interval |
+| `online_offer_active_duration_seconds` | 15.0 | TUNING periodic online offer window |
 | `online_sale_percent` | 70 | TUNING, must pay less than dine-in |
 | `fixture_resale_percent` | 50 | TUNING, strictly less than buy |
 | `plates_per_rack` | 4 | TUNING |
@@ -118,7 +126,7 @@ Ingredient prices, other recipe prices, fridge/table/stove/rack/box fixture cost
 
 Public methods, signature types and views are frozen in `../ARCHITECTURE.md` §5. B is sole physical stock/delivery authority; C sole order/result/queue authority; D sole cash/menu/demand/fixture ownership; E only shows read-only snapshots. `ServicePlan` includes positive selected prices/quota/installed table IDs, not ingredient counts. `ServiceDayReport` includes unique completed/failed IDs, not cash credits. D informs B/C when fixtures appear/disappear and ensures a single purchase instance ID. No duplicate money singleton, production planning UI model, hidden Day 7 emergency fund, or data generation for pending future recipes.
 
-`RunView` minimum: `{day_index,cash,day_7_target,goal_outcome,unlocked_recipe_ids,selected_recipe_ids,installed_fixtures,demand_penalty_debt,planned_dinein_quota}`. `DaySettlementView` minimum: `{day_index,begin_cash,ingredient_purchase_total,fixture_purchase_total,fixture_sale_total,order_revenue_dinein,order_revenue_online,refund_total,electricity_charge,end_cash,completed_dinein_count,completed_online_count,failed_dinein_count,failed_online_count,penalty_debt_before,penalty_debt_after,forecast_next_day,day7_outcome}`. These are snapshot records from authoritative ledgers and C report; already credited service money must not be counted as another end-day deposit. Consider fixture buy/sale totals absent in service reports as ledger-derived.
+`RunView` minimum: `{day_index,cash,day_7_target,goal_outcome,unlocked_recipe_ids,selected_recipe_ids,installed_fixtures,demand_penalty_debt,potential_demand,planned_dinein_quota}`. `DaySettlementView` minimum: `{day_index,begin_cash,ingredient_purchase_total,fixture_purchase_total,fixture_sale_total,order_revenue_dinein,order_revenue_online,refund_total,electricity_charge,end_cash,completed_dinein_count,completed_online_count,failed_dinein_count,failed_online_count,penalty_debt_before,penalty_debt_after,forecast_next_day_potential,forecast_next_day,day7_outcome}`. These are snapshot records from authoritative ledgers and C report; already credited service money must not be counted as another end-day deposit. Consider fixture buy/sale totals absent in service reports as ledger-derived.
 
 ## 9. Tests: plan → service → Day 7
 

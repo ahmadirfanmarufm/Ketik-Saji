@@ -24,6 +24,7 @@ func _check(label: String, condition: bool) -> void:
 
 
 func _init() -> void:
+	await _test_periodic_online_offer_lifecycle()
 	await _test_offer_preview_weights_cutoff_and_concurrent_cap()
 	await _test_immediate_cutoff_and_lowest_spot_priority()
 	await _test_driver_spots_overflow_fifo_promotion_and_expired_skip()
@@ -41,16 +42,44 @@ func _init() -> void:
 	quit(_fails)
 
 
+func _use_instant_online_test_config(
+	run: RunController,
+	service: ServiceController,
+	kitchen: KitchenController,
+	game_root: GameRoot,
+	initial_delay: float = 0.0,
+	interval: float = 0.05,
+	active_duration: float = 60.0
+) -> void:
+	var base_cfg: EconomyConfig = null
+	if run != null and run.economy_config != null:
+		base_cfg = run.economy_config
+	elif service._economy_config != null:
+		base_cfg = service._economy_config
+	else:
+		base_cfg = load("res://data/economy_config.tres") as EconomyConfig
+	var cfg := base_cfg.duplicate(true) as EconomyConfig
+	cfg.online_offer_initial_delay_seconds = initial_delay
+	cfg.online_offer_interval_seconds = interval
+	cfg.online_offer_active_duration_seconds = active_duration
+	if run != null:
+		run.economy_config = cfg
+	else:
+		service._economy_config = cfg
+	service.bind_systems(kitchen, run, game_root)
+
+
 func _cook_plated_nasi_telor(kitchen: KitchenController) -> void:
-	kitchen.on_interactable_clicked(&"storage_box")
-	for ch in ["b", "e", "r", "a", "s"]:
-		kitchen.accept_typed_character(ch)
-	kitchen.on_interactable_clicked(&"washer")
-	for ch in ["c", "u", "c", "i"]:
-		kitchen.accept_typed_character(ch)
-	kitchen.on_interactable_clicked(&"rice_cooker")
-	for ch in ["m", "a", "s", "a", "k"]:
-		kitchen.accept_typed_character(ch)
+	if kitchen.get_cooker_output_view(&"rice_cooker").is_empty():
+		kitchen.on_interactable_clicked(&"storage_box")
+		for ch in ["b", "e", "r", "a", "s"]:
+			kitchen.accept_typed_character(ch)
+		kitchen.on_interactable_clicked(&"washer")
+		for ch in ["c", "u", "c", "i"]:
+			kitchen.accept_typed_character(ch)
+		kitchen.on_interactable_clicked(&"rice_cooker")
+		for ch in ["m", "a", "s", "a", "k"]:
+			kitchen.accept_typed_character(ch)
 	kitchen.on_interactable_clicked(&"plate_rack")
 	kitchen.on_interactable_clicked(&"work_table_stage")
 	kitchen.on_interactable_clicked(&"rice_cooker")
@@ -77,15 +106,16 @@ func _cook_loose_sayur(kitchen: KitchenController) -> void:
 
 
 func _cook_plated_nasi_ayam(kitchen: KitchenController) -> void:
-	kitchen.on_interactable_clicked(&"storage_box")
-	for ch in ["b", "e", "r", "a", "s"]:
-		kitchen.accept_typed_character(ch)
-	kitchen.on_interactable_clicked(&"washer")
-	for ch in ["c", "u", "c", "i"]:
-		kitchen.accept_typed_character(ch)
-	kitchen.on_interactable_clicked(&"rice_cooker")
-	for ch in ["m", "a", "s", "a", "k"]:
-		kitchen.accept_typed_character(ch)
+	if kitchen.get_cooker_output_view(&"rice_cooker").is_empty():
+		kitchen.on_interactable_clicked(&"storage_box")
+		for ch in ["b", "e", "r", "a", "s"]:
+			kitchen.accept_typed_character(ch)
+		kitchen.on_interactable_clicked(&"washer")
+		for ch in ["c", "u", "c", "i"]:
+			kitchen.accept_typed_character(ch)
+		kitchen.on_interactable_clicked(&"rice_cooker")
+		for ch in ["m", "a", "s", "a", "k"]:
+			kitchen.accept_typed_character(ch)
 	kitchen.on_interactable_clicked(&"plate_rack")
 	kitchen.on_interactable_clicked(&"work_table_stage")
 	kitchen.on_interactable_clicked(&"rice_cooker")
@@ -107,6 +137,171 @@ func _cook_plated_nasi_ayam(kitchen: KitchenController) -> void:
 		kitchen.accept_typed_character(ch)
 	kitchen.on_interactable_clicked(&"work_table_stage")
 	kitchen.on_interactable_clicked(&"work_table_stage")
+
+
+func _test_periodic_online_offer_lifecycle() -> void:
+	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
+	var game_root := packed.instantiate() as GameRoot
+	root.add_child(game_root)
+	await process_frame
+	await physics_frame
+
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var service := game_root.get_service_controller() as ServiceController
+	var run := game_root.get_run_controller() as RunController
+	var ui := game_root.get_node("UI") as GameUI
+	var world := game_root.get_node("World") as WorldMap
+
+	# Move to Day 2 so quota=8 keeps cutoff far past t=75s under default 10s/15s/15s timings.
+	run.request_ingredient_purchase(&"beras", 4, &"storage_box")
+	run.request_ingredient_purchase(&"telur", 4, &"storage_box")
+	game_root.start_service_requested()
+	_serve_day1_four_diners(game_root, kitchen, service)
+	game_root.request_continue_from_results()
+	game_root.start_service_requested()
+
+	var preview_vis := world.get_online_preview_visual()
+	var v0 := service.get_online_offer_view()
+	_click_canvas_target(ui, world, &"online_station")
+	_check(
+		"P5-B Day 2 begin_service starts in WAITING for 10s without premature preview",
+		v0["offer_state_name"] == &"waiting"
+		and StringName(v0["preview_recipe_id"]) == &""
+		and int(v0["offer_generation_number"]) == 0
+		and not bool(v0["acceptance_enabled"])
+		and StringName(v0["disabled_reason"]) == &"offer_waiting"
+		and is_equal_approx(float(v0["next_offer_in_seconds"]), 10.0)
+		and (preview_vis == null or not preview_vis.visible)
+		and kitchen.get_allowed_commands_for_selected_target().is_empty()
+		and ui.target_status_label.text == "Menunggu tawaran (10 dtk)"
+		and not service.try_accept_online_offer()
+	)
+
+	game_root._process(9.9)
+	ui._process(0.016)
+	var v99 := service.get_online_offer_view()
+	_check(
+		"P5-B at t=9.9s remains WAITING (0.1s remaining) and rejects acceptance",
+		v99["offer_state_name"] == &"waiting"
+		and is_equal_approx(float(v99["next_offer_in_seconds"]), 0.1)
+		and not service.try_accept_online_offer()
+	)
+
+	game_root._process(0.1)
+	ui._process(0.016)
+	preview_vis = world.get_online_preview_visual()
+	var v10 := service.get_online_offer_view()
+	_check(
+		"P5-B at t=10.0s opens offer #1 for 15s and exposes terima + preview visual",
+		v10["offer_state_name"] == &"available"
+		and StringName(v10["preview_recipe_id"]) == &"nasi_telor"
+		and int(v10["offer_generation_number"]) == 1
+		and bool(v10["acceptance_enabled"])
+		and StringName(v10["disabled_reason"]) == &""
+		and is_equal_approx(float(v10["offer_seconds_remaining"]), 15.0)
+		and preview_vis != null
+		and preview_vis.visible
+		and kitchen.get_allowed_commands_for_selected_target() == ["terima"]
+	)
+
+	# Type partial prefix "ter" at t=24.0s, then let offer expire at t=25.0s -> silent clear!
+	game_root._process(14.0)
+	_send_ui_key(ui, "t")
+	_send_ui_key(ui, "e")
+	_send_ui_key(ui, "r")
+	_check("partial prefix ter active before periodic expiry", kitchen.get_command_prefix() == "ter")
+	var feedbacks_before := ui.get_feedback_code()
+	game_root._process(1.0)
+	ui._process(0.016)
+	var v25 := service.get_online_offer_view()
+	_check(
+		"P5-B offer expires at t=25.0s -> WAITING 15s, hides preview, clears stale ter silently",
+		v25["offer_state_name"] == &"waiting"
+		and StringName(v25["preview_recipe_id"]) == &""
+		and not bool(v25["acceptance_enabled"])
+		and StringName(v25["disabled_reason"]) == &"offer_waiting"
+		and is_equal_approx(float(v25["next_offer_in_seconds"]), 15.0)
+		and (preview_vis == null or not preview_vis.visible)
+		and kitchen.get_command_prefix() == ""
+		and not ui.is_shaking()
+		and ui.get_feedback_code() == feedbacks_before
+		and not service.try_accept_online_offer()
+	)
+
+	# Advance +14.9s (t=39.9 -> still WAITING), then +0.1s (t=40.0 -> offer #2 AVAILABLE).
+	game_root._process(14.9)
+	_check(
+		"P5-B at t=39.9s remains WAITING before interval ends",
+		service.get_online_offer_view()["offer_state_name"] == &"waiting"
+	)
+	game_root._process(0.1)
+	var v40 := service.get_online_offer_view()
+	_check(
+		"P5-B at t=40.0s opens offer #2 cleanly",
+		v40["offer_state_name"] == &"available"
+		and int(v40["offer_generation_number"]) == 2
+		and bool(v40["acceptance_enabled"])
+	)
+
+	# Accept offer #2 at t=42.0s -> consumed into WAITING for 15s; duplicate accept fails!
+	game_root._process(2.0)
+	_type_word_on_ui(ui, "terima")
+	var v42 := service.get_online_offer_view()
+	_check(
+		"P5-B accepting at t=42.0s consumes offer into WAITING 15s and blocks duplicate",
+		service.get_driver_views().size() == 1
+		and v42["offer_state_name"] == &"waiting"
+		and StringName(v42["preview_recipe_id"]) == &""
+		and is_equal_approx(float(v42["next_offer_in_seconds"]), 15.0)
+		and not service.try_accept_online_offer()
+		and service.get_driver_views().size() == 1
+	)
+	game_root._process(14.9)
+	_check(
+		"P5-B at t=56.9s still waiting after consumption",
+		service.get_online_offer_view()["offer_state_name"] == &"waiting"
+	)
+	game_root._process(0.1)
+	var v57 := service.get_online_offer_view()
+	_check(
+		"P5-B at t=57.0s opens offer #3 cleanly",
+		v57["offer_state_name"] == &"available"
+		and int(v57["offer_generation_number"]) == 3
+	)
+
+	# Pause freezes active offer countdown AND wait countdown accurately.
+	ui.open_pause()
+	game_root._process(20.0)
+	var v_paused_avail := service.get_online_offer_view()
+	_check(
+		"P5-B pause freezes active offer remaining duration at 15.0s",
+		v_paused_avail["offer_state_name"] == &"available"
+		and is_equal_approx(float(v_paused_avail["offer_seconds_remaining"]), 15.0)
+	)
+	ui.close_pause()
+	game_root._process(2.0)
+	_check(
+		"P5-B unpausing resumes exact remaining offer duration (13.0s)",
+		is_equal_approx(float(service.get_online_offer_view()["offer_seconds_remaining"]), 13.0)
+	)
+	_type_word_on_ui(ui, "terima")
+	ui.open_pause()
+	game_root._process(20.0)
+	_check(
+		"P5-B pause freezes WAITING cooldown at 15.0s",
+		service.get_online_offer_view()["offer_state_name"] == &"waiting"
+		and is_equal_approx(float(service.get_online_offer_view()["next_offer_in_seconds"]), 15.0)
+	)
+	ui.close_pause()
+	game_root._process(15.0)
+	_check(
+		"P5-B unpausing and waiting 15.0s opens offer #4 accurately",
+		service.get_online_offer_view()["offer_state_name"] == &"available"
+		and int(service.get_online_offer_view()["offer_generation_number"]) == 4
+	)
+
+	game_root.free()
+	await process_frame
 
 
 func _test_offer_preview_weights_cutoff_and_concurrent_cap() -> void:
@@ -132,10 +327,11 @@ func _test_offer_preview_weights_cutoff_and_concurrent_cap() -> void:
 	var pre1 := s1.get_online_offer_view()
 	var pre2 := s2.get_online_offer_view()
 	_check(
-		"initial preview populated deterministically before begin_service and disabled",
-		StringName(pre1["preview_recipe_id"]) != &""
-		and StringName(pre1["preview_recipe_id"]) == StringName(pre2["preview_recipe_id"])
-		and int(pre1["offer_generation_number"]) == 1
+		"before begin_service online offer is NOT_SERVING without premature preview",
+		StringName(pre1["preview_recipe_id"]) == &""
+		and StringName(pre2["preview_recipe_id"]) == &""
+		and int(pre1["offer_generation_number"]) == 0
+		and StringName(pre1["offer_state_name"]) == &"not_serving"
 		and not bool(pre1["acceptance_enabled"])
 		and StringName(pre1["disabled_reason"]) == &"not_serving"
 	)
@@ -162,9 +358,11 @@ func _test_offer_preview_weights_cutoff_and_concurrent_cap() -> void:
 	)
 	s_bad.free()
 
-	# Weighted offer sample across 60 cycles matches 1 / price bias and determinism:
+	# Weighted offer sample across 60 periodic cycles matches 1 / price bias and determinism:
 	s1.begin_service(0.0)
 	s2.begin_service(0.0)
+	s1.advance_service_time(10.0)
+	s2.advance_service_time(10.0)
 	var counts := {&"nasi_telor": 0, &"nasi_ayam": 0}
 	var seq1: Array[StringName] = []
 	var seq2: Array[StringName] = []
@@ -178,7 +376,7 @@ func _test_offer_preview_weights_cutoff_and_concurrent_cap() -> void:
 		counts[r1] = int(counts.get(r1, 0)) + 1
 		s1.try_accept_online_offer()
 		s2.try_accept_online_offer()
-		var t_next := 60.0 * float(i + 1)
+		var t_next := 10.0 + 15.0 * float(i + 1)
 		s1.advance_service_time(t_next)
 		s2.advance_service_time(t_next)
 	_check(
@@ -200,6 +398,7 @@ func _test_offer_preview_weights_cutoff_and_concurrent_cap() -> void:
 	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
 
+	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 4, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 4, &"storage_box")
 	_check("day 1 starts service", game_root.start_service_requested())
@@ -214,35 +413,44 @@ func _test_offer_preview_weights_cutoff_and_concurrent_cap() -> void:
 
 	# Accepting 4 online orders hits concurrent cap == day_queue_initial (4) while remaining == 3:
 	for i in range(4):
+		if i > 0:
+			game_root._process(0.06)
 		var gen_before := int(service.get_online_offer_view()["offer_generation_number"])
 		_check("accept online order #%d succeeds" % (i + 1), service.try_accept_online_offer())
+		var after_accept := service.get_online_offer_view()
 		_check(
-			"acceptance #%d rotates generation & preserves day_queue_remaining == 3" % (i + 1),
-			int(service.get_online_offer_view()["offer_generation_number"]) == gen_before + 1
+			"acceptance #%d consumes preview & preserves day_queue_remaining == 3" % (i + 1),
+			int(after_accept["offer_generation_number"]) == gen_before
+			and StringName(after_accept["preview_recipe_id"]) == &""
 			and int(service.get_customer_queue_view()["day_queue_remaining"]) == 3
 			and int(service.get_customer_queue_view()["online_open_count"]) == i + 1
 		)
 
 	var cap_offer := service.get_online_offer_view()
 	_check(
-		"5th concurrent accept rejected at cap=4 without rotating preview",
+		"5th concurrent accept rejected at cap=4 with empty unavailable preview",
 		not service.get_online_acceptance_enabled()
 		and StringName(cap_offer["disabled_reason"]) == &"concurrent_cap_reached"
-		and StringName(cap_offer["preview_recipe_id"]) != &""
+		and StringName(cap_offer["preview_recipe_id"]) == &""
 		and not service.try_accept_online_offer()
 		and service.get_online_offer_view() == cap_offer
 	)
 
 	# Serve 1st driver -> concurrent OPEN drops 4 -> 3 while day_queue_remaining stays 3 ->
-	# acceptance re-enables and allows a 5th daily online order (proving no total daily cap)!
+	# periodic cycle resumes and after interval allows a 5th daily online order!
 	_cook_plated_nasi_telor(kitchen)
 	var first_drv_id := StringName(service.get_driver_views()[0]["driver_id"])
 	var held_id := StringName(kitchen.get_held_item_view()["item_id"])
 	_check(
-		"serving 1st driver frees concurrent slot cleanly",
+		"serving 1st driver frees concurrent slot and enters WAITING then AVAILABLE",
 		service.try_serve_driver(first_drv_id, held_id)
 		and int(service.get_customer_queue_view()["online_open_count"]) == 3
-		and service.get_online_acceptance_enabled()
+		and StringName(service.get_online_offer_view()["disabled_reason"]) == &"offer_waiting"
+	)
+	game_root._process(0.06)
+	_check(
+		"after interval freed slot accepts 5th daily online order (no total daily cap)",
+		service.get_online_acceptance_enabled()
 		and service.try_accept_online_offer()
 		and int(service.get_customer_queue_view()["online_open_count"]) == 4
 	)
@@ -251,11 +459,11 @@ func _test_offer_preview_weights_cutoff_and_concurrent_cap() -> void:
 	game_root._process(20.0)
 	var cutoff_offer := service.get_online_offer_view()
 	_check(
-		"at day_queue_remaining <= 2 cutoff disables offers while keeping preview intact",
+		"at day_queue_remaining <= 2 cutoff disables offers and clears active preview",
 		int(service.get_customer_queue_view()["day_queue_remaining"]) == 2
 		and not service.get_online_acceptance_enabled()
 		and StringName(cutoff_offer["disabled_reason"]) == &"cutoff_reached"
-		and StringName(cutoff_offer["preview_recipe_id"]) != &""
+		and StringName(cutoff_offer["preview_recipe_id"]) == &""
 		and not service.try_accept_online_offer()
 		and service.get_online_offer_view() == cutoff_offer
 	)
@@ -291,7 +499,7 @@ func _test_immediate_cutoff_and_lowest_spot_priority() -> void:
 		int(s_q3.get_customer_queue_view()["day_queue_remaining"]) == 2
 		and not s_q3.get_online_acceptance_enabled()
 		and StringName(q3_offer["disabled_reason"]) == &"cutoff_reached"
-		and StringName(q3_offer["preview_recipe_id"]) == &"nasi_telor"
+		and StringName(q3_offer["preview_recipe_id"]) == &""
 		and not s_q3.try_accept_online_offer()
 	)
 	s_q3.free()
@@ -304,12 +512,15 @@ func _test_immediate_cutoff_and_lowest_spot_priority() -> void:
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
 	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
+	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 4, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 4, &"storage_box")
 	game_root.start_service_requested()
 
 	service.try_accept_online_offer()
+	game_root._process(0.06)
 	service.try_accept_online_offer()
+	game_root._process(0.06)
 	service.try_accept_online_offer()
 	var initial_drvs := service.get_driver_views()
 	# Serve spot 1 (D1) and spot 3 (D3), leaving ONLY spot 2 occupied (01 & 03 both free):
@@ -323,7 +534,8 @@ func _test_immediate_cutoff_and_lowest_spot_priority() -> void:
 		StringName(initial_drvs[2]["driver_id"]),
 		StringName(kitchen.get_held_item_view()["item_id"])
 	)
-	# Newly accepted offer must occupy lowest free spot_01 (not spot_03):
+	# Wait past periodic interval so newly accepted offer opens cleanly and occupies spot_01:
+	game_root._process(0.06)
 	_check("accepting new offer while 01 & 03 free succeeds", service.try_accept_online_offer())
 	var after_views := service.get_driver_views()
 	_check(
@@ -347,18 +559,19 @@ func _test_driver_spots_overflow_fifo_promotion_and_expired_skip() -> void:
 	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
 
+	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 4, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 4, &"storage_box")
 	game_root.start_service_requested()
 
-	# Test read-only views for 5 accepted orders spaced across time:
-	# D1..D3 at t=0 (spots 1..3), D4 at t=5 (dl=65, overflow 0),
-	# plus D5? Quota Day 1 initial=4 allows 4 concurrent; let's serve D2 (spot 2) after
-	# promoting/checking D1..D4, AND also test 5+ overflow on a prepared Day 2 service (cap=8).
+	# Test read-only views for 4 accepted orders spaced across time:
+	# D1..D3 at t=0..0.12 (spots 1..3), D4 at t=5 (dl=65, overflow 0)
 	service.try_accept_online_offer()
+	game_root._process(0.06)
 	service.try_accept_online_offer()
+	game_root._process(0.06)
 	service.try_accept_online_offer()
-	game_root._process(5.0)
+	game_root._process(4.88)
 	service.try_accept_online_offer()
 
 	var dviews := service.get_driver_views()
@@ -434,7 +647,7 @@ func _test_driver_spots_overflow_fifo_promotion_and_expired_skip() -> void:
 	k_fifo.receive_stock(&"s_b", &"beras", 4, &"storage_box")
 	k_fifo.receive_stock(&"s_t", &"telur", 4, &"storage_box")
 	s_fifo.register_table(&"dining_table_01")
-	s_fifo.bind_systems(k_fifo, null, null)
+	_use_instant_online_test_config(null, s_fifo, k_fifo, null, 0.0, 0.05, 60.0)
 	s_fifo.prepare_service_day(2, {
 		"day_queue_initial": 8,
 		"selected_recipe_ids": [&"nasi_telor"],
@@ -443,10 +656,13 @@ func _test_driver_spots_overflow_fifo_promotion_and_expired_skip() -> void:
 	})
 	s_fifo.begin_service(0.0)
 
-	# t=0: D1..D3 occupy spots 1..3 (dl=60), D4 enters overflow 0 (dl=60).
+	# t=0..0.18: D1..D3 occupy spots 1..3, D4 enters overflow 0 (dl=60..60.18).
 	s_fifo.try_accept_online_offer()
+	s_fifo.advance_service_time(0.06)
 	s_fifo.try_accept_online_offer()
+	s_fifo.advance_service_time(0.12)
 	s_fifo.try_accept_online_offer()
+	s_fifo.advance_service_time(0.18)
 	s_fifo.try_accept_online_offer()
 	# t=5: D5 enters overflow 1 (dl=65); t=10: D6 enters overflow 2 (dl=70).
 	s_fifo.advance_service_time(5.0)
@@ -454,9 +670,9 @@ func _test_driver_spots_overflow_fifo_promotion_and_expired_skip() -> void:
 	s_fifo.advance_service_time(10.0)
 	s_fifo.try_accept_online_offer()
 
-	# At t=60: spots D1..D3 AND expired overflow D4 (dl=60) are removed;
-	# only still-valid D5 (5s left) & D6 (10s left) promote into pickup_spot_01..02!
-	s_fifo.advance_service_time(60.0)
+	# At t=61: spots D1..D3 AND expired overflow D4 (dl=60.18) are removed;
+	# only still-valid D5 (4s left) & D6 (9s left) promote into pickup_spot_01..02!
+	s_fifo.advance_service_time(61.0)
 	var views_at_60 := s_fifo.get_driver_views()
 	_check(
 		"expired overflow D4 removed; live D5 & D6 promote into spots 1..2 keeping deadlines",
@@ -465,13 +681,14 @@ func _test_driver_spots_overflow_fifo_promotion_and_expired_skip() -> void:
 		and int(s_fifo.get_order_view(&"ord_d2_004")["status"]) == SharedTypes.OrderStatus.FAILED
 		and StringName(views_at_60[0]["driver_id"]) == &"drv_d2_005"
 		and StringName(views_at_60[0]["spot_id_or_empty"]) == &"pickup_spot_01"
-		and is_equal_approx(float(views_at_60[0]["seconds_remaining"]), 5.0)
+		and is_equal_approx(float(views_at_60[0]["seconds_remaining"]), 4.0)
 		and StringName(views_at_60[1]["driver_id"]) == &"drv_d2_006"
 		and StringName(views_at_60[1]["spot_id_or_empty"]) == &"pickup_spot_02"
-		and is_equal_approx(float(views_at_60[1]["seconds_remaining"]), 10.0)
+		and is_equal_approx(float(views_at_60[1]["seconds_remaining"]), 9.0)
 	)
-	# Now accept 2 more at t=60 (dl=120): Spot 3 gets D7(dl=120), overflow gets D8(dl=120):
+	# Now accept 2 more at t=61..61.06 (dl=121): Spot 3 gets D7, overflow gets D8:
 	s_fifo.try_accept_online_offer()
+	s_fifo.advance_service_time(61.06)
 	s_fifo.try_accept_online_offer()
 	# Jump t=60 -> t=72 where D5(dl=65) and D6(dl=70) BOTH expire at once while D7(spot 3)
 	# and D8(overflow) survive -> D8 promotes to lowest spot 1 cleanly:
@@ -539,6 +756,7 @@ func _test_multi_overflow_reindex_and_different_recipe_delivery() -> void:
 	game_root.request_continue_from_results()
 	run.select_daily_menu([&"nasi_telor", &"nasi_ayam"])
 
+	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
 	run.request_ingredient_purchase(&"ayam", 1, &"storage_box")
 	run.request_ingredient_purchase(&"tempe", 1, &"storage_box")
@@ -548,7 +766,9 @@ func _test_multi_overflow_reindex_and_different_recipe_delivery() -> void:
 	# Accept 5 online orders on Day 2 -> 3 at spots, 2 in overflow (queue_index 0 & 1):
 	var got_telor := false
 	var got_ayam := false
-	for _i in range(5):
+	for i in range(5):
+		if i > 0:
+			game_root._process(0.06)
 		var rid := StringName(service.get_online_offer_view()["preview_recipe_id"])
 		if rid == &"nasi_telor":
 			got_telor = true
@@ -622,6 +842,7 @@ func _test_online_delivery_plate_return_payout_and_rejections() -> void:
 	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
 
+	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 2, &"storage_box")
 	run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
@@ -692,6 +913,7 @@ func _test_online_delivery_plate_return_payout_and_rejections() -> void:
 	)
 
 	# 4. Exact 60.0s deadline boundary via public clock advancement (GameRoot._process):
+	game_root._process(0.06)
 	service.try_accept_online_offer()
 	var drv2 := service.get_driver_views()[0]
 	var drv2_id := StringName(drv2["driver_id"])
@@ -727,6 +949,7 @@ func _test_online_delivery_plate_return_payout_and_rejections() -> void:
 	rw.request_ingredient_purchase(&"tempe", 1, &"storage_box")
 	var cw := int(rw.get_run_view()["cash"])
 	g_wrong.start_service_requested()
+	g_wrong._process(10.0)
 	sw.try_accept_online_offer()
 	var wd_id := StringName(sw.get_driver_views()[0]["driver_id"])
 	var wo_id := StringName(sw.get_driver_views()[0]["order_id"])
@@ -760,17 +983,21 @@ func _test_online_expiry_drain_and_full_day_transition() -> void:
 	service.orders_changed.connect(func() -> void: sig_counts["orders"] += 1)
 	service.online_offer_changed.connect(func() -> void: sig_counts["online"] += 1)
 
+	_use_instant_online_test_config(run, service, kitchen, game_root, 10.0, 0.05, 15.0)
 	run.request_ingredient_purchase(&"beras", 5, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 5, &"storage_box")
 	game_root.start_service_requested()
 
-	# Accept 2 online orders at t=10.0 (dl=70.0): serve 1st, let 2nd expire at t=70.0.
+	# Accept 2 online orders at t=10.0..10.06 (dl=70.0..70.06): serve 1st, let 2nd expire at t=70.06.
 	# Also serve all 4 Day 1 diners cleanly so Day 2 keeps quota >= 6 (after 1 online miss):
 	_serve_nasi_telor_table(kitchen, service, &"dining_table_01")
 	game_root._process(10.0)
+	var acc1 := service.try_accept_online_offer()
+	game_root._process(0.06)
+	var acc2 := service.try_accept_online_offer()
 	_check(
 		"accept 2 online orders at t=10 (dl=70)",
-		service.try_accept_online_offer() and service.try_accept_online_offer()
+		acc1 and acc2
 	)
 	var d_serve_id := StringName(service.get_driver_views()[0]["driver_id"])
 	var d_exp_ord_id := StringName(service.get_driver_views()[1]["order_id"])
@@ -824,13 +1051,14 @@ func _test_online_expiry_drain_and_full_day_transition() -> void:
 	_check("start Day 2 service", game_root.start_service_requested())
 	var q_day2 := service.get_customer_queue_view()
 	_check(
-		"Day 2 clears Day 1 online drivers/queues and resets preview state",
+		"Day 2 clears Day 1 online drivers/queues and starts WAITING",
 		game_root.get_phase() == SharedTypes.Phase.SERVING
 		and int(q_day2["online_open_count"]) == 0
 		and int(q_day2["outside_driver_count"]) == 0
 		and service.get_driver_views().is_empty()
-		and int(service.get_online_offer_view()["offer_generation_number"]) == 1
+		and int(service.get_online_offer_view()["offer_generation_number"]) == 0
 	)
+	game_root._process(10.0)
 	_check(
 		"Day 2 accept online creates ord_d2_* / drv_d2_* IDs",
 		service.try_accept_online_offer()
@@ -943,6 +1171,7 @@ func _test_credit_order_failure_diagnostic_online() -> void:
 	failing_run.request_ingredient_purchase(&"beras", 1, &"storage_box")
 	failing_run.request_ingredient_purchase(&"telur", 1, &"storage_box")
 	game_root.start_service_requested()
+	game_root._process(10.0)
 	service.try_accept_online_offer()
 	var drv_view := service.get_driver_views()[0]
 	var drv_id := StringName(drv_view["driver_id"])
@@ -975,10 +1204,21 @@ func _click_canvas_target(ui: GameUI, world: WorldMap, target_id: StringName) ->
 	var node := world.registry.get_object(target_id)
 	if node == null:
 		return
+	var canvas_pos := world.get_canvas_transform() * node.global_position
+	if ui.interaction_dialogue != null and ui.interaction_dialogue.visible:
+		if ui.interaction_dialogue.get_global_rect().has_point(canvas_pos):
+			var clear_pos := Vector2(352, 276)
+			if ui.interaction_dialogue.get_global_rect().has_point(clear_pos):
+				clear_pos = Vector2(160, 148)
+			var clear_ev := InputEventMouseButton.new()
+			clear_ev.pressed = true
+			clear_ev.button_index = MOUSE_BUTTON_LEFT
+			clear_ev.position = clear_pos
+			ui._unhandled_input(clear_ev)
 	var ev := InputEventMouseButton.new()
 	ev.pressed = true
 	ev.button_index = MOUSE_BUTTON_LEFT
-	ev.position = world.get_canvas_transform() * node.global_position
+	ev.position = canvas_pos
 	ui._unhandled_input(ev)
 
 
@@ -1007,6 +1247,7 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 	)
 
 	# 2. Prepare ingredients + enter SERVING -> stage empty plate to verify zero side-effects:
+	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 4, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 4, &"storage_box")
 	run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
@@ -1017,7 +1258,7 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 	kitchen.on_interactable_clicked(&"work_table_stage")
 	var staged_before := kitchen.get_work_table_view(&"work_table")
 
-	# Click online_station -> type `terima` -> accepts generation 1 once (1 -> 2):
+	# Click online_station -> type `terima` -> accepts generation 1 & enters WAITING:
 	_click_canvas_target(ui, world, &"online_station")
 	_type_chars_on_kitchen(kitchen, "terima")
 	var drvs_after_1 := service.get_driver_views()
@@ -1025,14 +1266,15 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 		"typed terima accepts 1st offer, creates 1 driver, keeps staged items untouched",
 		not feedbacks.is_empty() and feedbacks[-1] == &"online_accepted"
 		and drvs_after_1.size() == 1
-		and int(service.get_online_offer_view()["offer_generation_number"]) == 2
+		and StringName(service.get_online_offer_view()["preview_recipe_id"]) == &""
 		and int(service.get_customer_queue_view()["day_queue_remaining"]) == 3
 		and kitchen.get_work_table_view(&"work_table") == staged_before
 		and int(run.get_run_view()["cash"]) == cash_start
 	)
 
-	# Repeated `terima` accepts offers #2..#4 up to concurrent cap = 4:
+	# Repeated `terima` after periodic interval accepts offers #2..#4 up to concurrent cap = 4:
 	for _i in range(3):
+		game_root._process(0.06)
 		_type_chars_on_kitchen(kitchen, "terima")
 	_check(
 		"4th concurrent terima reaches cap=4 (3 in-spot + 1 overflow)",
@@ -1040,9 +1282,14 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 		and int(service.get_customer_queue_view()["outside_driver_count"]) == 1
 	)
 
-	# 5th `terima` at concurrent cap rejects safely without mutating held/staged/plates/cash:
+	# 5th `terima` at concurrent cap: command is hidden and backend rejects without mutating state:
 	var gen_at_cap := int(service.get_online_offer_view()["offer_generation_number"])
+	_check(
+		"online_station hides terima at concurrent cap=4",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_chars_on_kitchen(kitchen, "terima")
+	kitchen._perform_typed_command(&"terima")
 	_check(
 		"terima at concurrent cap rejects without rotating preview or mutating state",
 		feedbacks[-1] == &"invalid_action"
@@ -1061,33 +1308,27 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 		and feedbacks[-1] == &"unknown_target"
 	)
 
-	# 4. Select spot-1 driver via real WorldMap/GameUI Area2D click; verify saji & prefix:
+	# 4. Select spot-1 driver with empty hand: selects driver_id and hides saji until dish held:
 	var d1_id := StringName(service.get_driver_views()[0]["driver_id"])
 	var d2_id := StringName(service.get_driver_views()[1]["driver_id"])
 	_click_canvas_target(ui, world, d1_id)
 	_check(
-		"clicking in-spot driver Area2D selects driver_id and exposes saji command",
+		"clicking in-spot driver Area2D with empty hand selects driver_id and hides saji",
 		kitchen.get_selected_target_id() == d1_id
-		and kitchen.get_allowed_commands_for_selected_target() == ["saji"]
+		and kitchen.get_allowed_commands_for_selected_target().is_empty()
 		and kitchen.get_player_tile() == Vector2i(7, 4)
 	)
 
-	# Test live `drivers_changed` signal while another active driver is selected:
+	# Loose/unplated cooked sayur hides saji on driver and backend rejects wrong_order cleanly:
 	game_root._process(1.0)
-	_click_canvas_target(ui, world, &"online_station")
-	# Free one concurrent slot at t=1.0 by serving d3 later, or test with earlier expiry first:
-	# Re-select d1_id with partial prefix "s" (real expiry/rebind checked below cleanly).
 	_cook_loose_sayur(kitchen)
 	_click_canvas_target(ui, world, d1_id)
-	kitchen.accept_typed_character("s")
 	_check(
-		"partial prefix s remains active on selected in-spot driver before completion",
-		kitchen.get_selected_target_id() == d1_id
-		and kitchen.get_command_prefix() == "s"
+		"holding unplated cooked sayur hides saji on in-spot driver",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
 	)
-
-	# Finish `saji` with loose/unplated sayur -> rejects `wrong_order` without consuming item:
-	_type_chars_on_kitchen(kitchen, "aji")
+	_type_chars_on_kitchen(kitchen, "saji")
+	kitchen._perform_typed_command(&"saji")
 	_check(
 		"saji with unplated dish on driver rejects wrong_order cleanly",
 		feedbacks[-1] == &"wrong_order"
@@ -1103,9 +1344,16 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 	_cook_plated_nasi_telor(kitchen)
 	var held_before_saji := kitchen.get_held_item_view()
 
-	# Click d1_id and type `saji` -> completes delivery, returns plate clean, clears selection:
+	# With completed dish held, clicking d1_id exposes saji; partial "s" stays active, then "aji" delivers:
 	_click_canvas_target(ui, world, d1_id)
-	_type_chars_on_kitchen(kitchen, "saji")
+	kitchen.accept_typed_character("s")
+	_check(
+		"partial prefix s remains active on selected in-spot driver with completed dish",
+		kitchen.get_selected_target_id() == d1_id
+		and kitchen.get_allowed_commands_for_selected_target() == ["saji"]
+		and kitchen.get_command_prefix() == "s"
+	)
+	_type_chars_on_kitchen(kitchen, "aji")
 	_check(
 		"typed saji on driver completes delivery, returns plate clean, clears selection",
 		feedbacks[-1] == &"order_served"
@@ -1118,10 +1366,15 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 		and int(run.get_run_view()["cash"]) == cash_start + 14000
 	)
 
-	# Advance +20.0s -> cutoff reached (day_queue_remaining == 2) -> `terima` rejects safely:
+	# Advance +20.0s -> cutoff reached (day_queue_remaining == 2) -> `terima` hidden & rejects safely:
 	game_root._process(20.0)
 	_click_canvas_target(ui, world, &"online_station")
+	_check(
+		"online_station hides terima after cutoff reached",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_chars_on_kitchen(kitchen, "terima")
+	kitchen._perform_typed_command(&"terima")
 	_check(
 		"typed terima after cutoff rejects safely and preserves selection",
 		feedbacks[-1] == &"invalid_action"
@@ -1129,6 +1382,7 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 	)
 
 	# 5. Expiring selected driver clears selection & prefix; unrelated target stays selected:
+	_cook_plated_nasi_telor(kitchen)
 	_click_canvas_target(ui, world, d2_id)
 	_type_chars_on_kitchen(kitchen, "sa")
 	_check(
@@ -1143,8 +1397,12 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 		and kitchen.get_command_prefix() == ""
 		and not kitchen.accept_typed_character("j")
 	)
+	kitchen.on_interactable_clicked(&"trash")
+	kitchen.on_interactable_clicked(&"plate_rack")
 
 	# Rebinding service avoids duplicate signal connections and preserves unrelated target:
+	kitchen.on_interactable_clicked(&"storage_box")
+	_type_chars_on_kitchen(kitchen, "telur")
 	kitchen.on_interactable_clicked(&"stove")
 	_type_chars_on_kitchen(kitchen, "go")
 	kitchen.bind_service(service)
@@ -1158,6 +1416,7 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 			func(c: Dictionary) -> bool: return c["callable"].get_object() == kitchen
 		).size() == 1
 	)
+	kitchen.on_interactable_clicked(&"trash")
 
 	# Stale driver ID and overflow driver ID reject safely on delivery:
 	_cook_plated_nasi_telor(kitchen)
@@ -1207,6 +1466,7 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 	var ui := game_root.get_node("UI") as GameUI
 	var world := game_root.get_node("World") as WorldMap
 
+	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 4, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 4, &"storage_box")
 
@@ -1255,7 +1515,7 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		"OnlineStation dialogue shows preview recipe and ready acceptance status",
 		ui.interaction_dialogue.visible
 		and ui.target_title_label.text == "Stasiun Online"
-		and ui.target_status_label.text == "Tawaran: Nasi Telor (Siap diterima)"
+		and ui.target_status_label.text.begins_with("Tawaran: Nasi Telor (Siap diterima")
 		and ui.allowed_commands_label.text == "terima"
 		and ui.prefix_prompt_label.text == "Ketik: terima"
 	)
@@ -1269,8 +1529,10 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		and ui.context_message_label.text != "online_accepted"
 	)
 
-	# Accept 2 more in-spot drivers at t=0 (d1..d3 deadline=60.0), then advance 15s and accept d4:
+	# Accept 2 more in-spot drivers, then advance 15s and accept d4:
+	game_root._process(0.06)
 	_type_word_on_ui(ui, "terima")
+	game_root._process(0.06)
 	_type_word_on_ui(ui, "terima")
 	var d1_id := StringName(service.get_driver_views()[0]["driver_id"])
 	var d2_id := StringName(service.get_driver_views()[1]["driver_id"])
@@ -1289,10 +1551,10 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		and d1_label != null
 		and d1_label.text == "Nasi Telor 60s"
 		and d1_fill != null
-		and is_equal_approx(d1_fill.size.x, 28.0)
+		and d1_fill.size.x >= 27.5
 	)
 
-	game_root._process(15.0)
+	game_root._process(14.88)
 	ui._process(0.016)
 	_type_word_on_ui(ui, "terima")
 	var d4_id := StringName(service.get_driver_views()[3]["driver_id"])
@@ -1301,11 +1563,9 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 	var d4_sprite := d4_vis.get_node_or_null("Sprite2D") as Sprite2D if d4_vis != null else null
 	var d4_label := d4_vis.get_node_or_null("StatusLabel") as Label if d4_vis != null else null
 	_check(
-		"cap=4 dims OnlineStation preview cleanly and shows disabled cap reason in dialogue",
-		preview_vis.visible
-		and preview_vis.modulate != Color.WHITE
-		and preview_label.text == "Nasi Telor"
-		and ui.target_status_label.text == "Tawaran: Nasi Telor (Penuh: maks 4)"
+		"cap=4 hides OnlineStation preview cleanly and shows disabled cap reason in dialogue",
+		not preview_vis.visible
+		and ui.target_status_label.text == "Tawaran penuh (Maks 4)"
 		and d4_vis != null
 		and d4_vis.visible
 		and d4_sprite != null
@@ -1328,19 +1588,21 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		and ui.target_status_label.text == "Pesanan: Nasi Telor (60 dtk) — Di antrean luar"
 	)
 
-	# Typing 's' while overflow driver is selected rejects without building prefix:
+	# Typing 's' while overflow driver is selected rejects silently with shake (no Huruf tidak cocok):
 	_send_ui_key(ui, "s")
 	_check(
-		"overflow driver rejects typed s and keeps invalid_key feedback",
+		"overflow driver rejects typed s and shakes silently without error text",
 		kitchen.get_command_prefix() == ""
 		and ui.get_feedback_code() == &"invalid_key"
-		and ui.context_message_label.text == "Huruf tidak cocok"
+		and not ui.context_message_label.visible
+		and ui.context_message_label.text == ""
+		and ui.is_shaking()
 	)
 
 	# Re-click overflow driver (so overflow feedback is active) and let t=60s expire d1..d3
 	# so d4 promotes IN PLACE while still selected:
 	_click_canvas_pos(ui, world, d4_vis.global_position)
-	game_root._process(45.0)
+	game_root._process(45.12)
 	ui._process(0.016)
 	var promoted_vis := world.get_driver_visual_node(d4_id)
 	var promoted_sprite := (
@@ -1369,18 +1631,20 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		and promoted_label != null
 		and promoted_label.text == "Nasi Telor 15s"
 		and kitchen.get_selected_target_id() == d4_id
-		and kitchen.get_allowed_commands_for_selected_target() == ["saji"]
+		and kitchen.get_allowed_commands_for_selected_target().is_empty()
 		and ui.target_title_label.text == "Pengantar Spot 1"
 		and ui.target_status_label.text == "Pesanan: Nasi Telor (15 dtk) — Di tempat pickup"
 		and ui.get_feedback_code() != &"driver_not_at_pickup"
 	)
 
-	# Clicking promoted driver, typing partial "s", then expiring at t=75 clears target & visual:
+	# Cook completed dish so promoted in-spot driver exposes saji, type partial "s", then expire at t=75:
+	_cook_plated_nasi_telor(kitchen)
 	_click_canvas_target(ui, world, d4_id)
 	_send_ui_key(ui, "s")
 	_check(
 		"selected in-spot driver dialogue shows active countdown and s prefix",
-		kitchen.get_command_prefix() == "s"
+		kitchen.get_allowed_commands_for_selected_target() == ["saji"]
+		and kitchen.get_command_prefix() == "s"
 		and ui.target_status_label.text.contains("Di tempat pickup")
 	)
 	game_root._process(15.0)
@@ -1429,6 +1693,7 @@ func _test_offer_rotation_cutoff_dimming_and_overflow_expiry() -> void:
 	ui.continue_button.pressed.emit()
 
 	service.set_rng_seed(98765)
+	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.select_daily_menu([&"nasi_telor", &"nasi_ayam"])
 	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 2, &"storage_box")
@@ -1447,6 +1712,7 @@ func _test_offer_rotation_cutoff_dimming_and_overflow_expiry() -> void:
 	var rotated := false
 	for _attempt in range(6):
 		_type_word_on_ui(ui, "terima")
+		game_root._process(0.06)
 		if StringName(service.get_online_offer_view()["preview_recipe_id"]) != first_recipe:
 			rotated = true
 			break
@@ -1462,11 +1728,12 @@ func _test_offer_rotation_cutoff_dimming_and_overflow_expiry() -> void:
 		and ui.target_status_label.text.contains(expected_rotated_label)
 	)
 
-	# Ensure 3 in-spot + >=1 overflow driver exist at t=0, click overflow driver & test expiry:
+	# Ensure 3 in-spot + >=1 overflow driver exist, click overflow driver & test expiry:
 	for _i in range(4):
 		if int(service.get_customer_queue_view()["outside_driver_count"]) > 0:
 			break
 		_type_word_on_ui(ui, "terima")
+		game_root._process(0.06)
 	var all_drvs := service.get_driver_views()
 	var ov_id := StringName(all_drvs[3]["driver_id"]) if all_drvs.size() >= 4 else &""
 	var ov_vis := world.get_driver_visual_node(ov_id) if ov_id != &"" else null
@@ -1505,7 +1772,7 @@ func _test_offer_rotation_cutoff_dimming_and_overflow_expiry() -> void:
 		and world.hit_test_overflow_driver(ov_pos) == &""
 	)
 
-	# Advance until cutoff is reached (day_queue_remaining <= 2): preview stays visible but dimmed:
+	# Advance until cutoff is reached (day_queue_remaining <= 2): preview hides cleanly:
 	for _tick in range(12):
 		if int(service.get_customer_queue_view()["day_queue_remaining"]) <= 2:
 			break
@@ -1513,11 +1780,9 @@ func _test_offer_rotation_cutoff_dimming_and_overflow_expiry() -> void:
 	ui._process(0.016)
 	_click_canvas_target(ui, world, &"online_station")
 	_check(
-		"after cutoff OnlineStation keeps preview visible but dimmed and shows cutoff reason",
-		preview_vis.visible
-		and not preview_label.text.is_empty()
-		and preview_vis.modulate != Color.WHITE
-		and ui.target_status_label.text.contains("Tutup: kuota <= 2")
+		"after cutoff OnlineStation hides preview cleanly and shows cutoff reason",
+		not preview_vis.visible
+		and ui.target_status_label.text.contains("Kuota <= 2")
 	)
 
 	# Start fresh Day 1 service quickly to verify completing a pickup driver removes visual/target
@@ -1539,6 +1804,7 @@ func _test_offer_rotation_cutoff_dimming_and_overflow_expiry() -> void:
 	run_2.request_ingredient_purchase(&"beras", 4, &"storage_box")
 	run_2.request_ingredient_purchase(&"telur", 4, &"storage_box")
 	game_root_2.start_service_requested()
+	game_root_2._process(10.0)
 
 	_click_canvas_target(ui_2, world_2, &"online_station")
 	_type_word_on_ui(ui_2, "terima")
@@ -1576,9 +1842,11 @@ func _test_no_pause_modal_overlay_service_clock() -> void:
 
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
 	var service := game_root.get_service_controller() as ServiceController
+	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
 	var world := game_root.get_node("World") as WorldMap
 
+	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	_check("start service for no-pause modal overlay test", game_root.start_service_requested())
 	var dinein_ord_id := StringName(service.get_table_view(&"dining_table_01")["order_id_or_empty"])
 
@@ -1778,6 +2046,7 @@ func _test_typed_online_command_edge_cases() -> void:
 	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 2, &"storage_box")
 	game_root.start_service_requested()
+	game_root._process(10.0)
 
 	# 1. Select OnlineStation while holding a cooked plated dish and type "saji":
 	_cook_plated_nasi_telor(kitchen)
@@ -1813,7 +2082,12 @@ func _test_typed_online_command_edge_cases() -> void:
 	var rack_after_return := kitchen.get_plate_rack_view(&"plate_rack")
 
 	_click_canvas_target(ui, world, drv_id)
+	_check(
+		"empty-hand in-spot driver hides saji command",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_word_on_ui(ui, "saji")
+	kitchen._perform_typed_command(&"saji")
 	_check(
 		"empty-hand typed saji on in-spot driver rejects invalid_action and preserves order/spot",
 		kitchen.get_held_item_view().is_empty()

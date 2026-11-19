@@ -367,7 +367,8 @@ func sync_kitchen_visuals(
 	cooker_has_output: bool,
 	cooker_texture: Texture2D,
 	plate_clean_count: int,
-	washer_dirty_count: int
+	washer_dirty_count: int,
+	cooker_portions: int = -1
 ) -> void:
 	if registry == null:
 		return
@@ -409,18 +410,10 @@ func sync_kitchen_visuals(
 
 	var cooker_node := registry.get_object(&"rice_cooker")
 	if cooker_node != null:
-		var cooker_vis := cooker_node.get_node_or_null("CookerOutputVisual") as Node2D
-		if cooker_vis == null:
-			cooker_vis = Node2D.new()
-			cooker_vis.name = "CookerOutputVisual"
-			cooker_vis.z_index = 2
-			cooker_vis.position = Vector2(0, -20)
-			cooker_vis.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			cooker_node.add_child(cooker_vis)
-		var cooker_textures: Array[Texture2D] = []
-		if cooker_has_output:
-			cooker_textures.append(cooker_texture)
-		sync_food_item_visual(cooker_vis, cooker_has_output, false, cooker_textures)
+		var resolved_portions := (
+			cooker_portions if cooker_portions >= 0 else (1 if cooker_has_output else 0)
+		)
+		_sync_cooker_node_visual(cooker_node, cooker_has_output, resolved_portions, cooker_texture)
 
 	var washer_node := registry.get_object(&"washer")
 	if washer_node != null:
@@ -500,19 +493,44 @@ func sync_extra_kitchen_visuals(cooker_views: Dictionary, rack_views: Dictionary
 			continue
 		var info: Dictionary = cooker_views[cooker_id]
 		var has_out := bool(info.get("has_output", false))
+		var portions := int(info.get("portions", 1 if has_out else 0))
 		var tex := info.get("texture", null) as Texture2D
-		var cooker_vis := cooker_node.get_node_or_null("CookerOutputVisual") as Node2D
-		if cooker_vis == null:
-			cooker_vis = Node2D.new()
-			cooker_vis.name = "CookerOutputVisual"
-			cooker_vis.z_index = 2
-			cooker_vis.position = Vector2(0, -20)
-			cooker_vis.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			cooker_node.add_child(cooker_vis)
-		var textures: Array[Texture2D] = []
-		if has_out:
-			textures.append(tex)
-		sync_food_item_visual(cooker_vis, has_out, false, textures)
+		_sync_cooker_node_visual(cooker_node, has_out, portions, tex)
+
+
+func _sync_cooker_node_visual(
+	cooker_node: Node2D,
+	has_output: bool,
+	portion_count: int,
+	cooker_texture: Texture2D
+) -> void:
+	if cooker_node == null:
+		return
+	var show_output := has_output and portion_count > 0
+	var cooker_vis := cooker_node.get_node_or_null("CookerOutputVisual") as Node2D
+	if cooker_vis == null:
+		cooker_vis = Node2D.new()
+		cooker_vis.name = "CookerOutputVisual"
+		cooker_vis.z_index = 2
+		cooker_vis.position = Vector2(0, -20)
+		cooker_vis.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		cooker_node.add_child(cooker_vis)
+	var textures: Array[Texture2D] = []
+	if show_output:
+		textures.append(cooker_texture)
+	sync_food_item_visual(cooker_vis, show_output, false, textures)
+
+	var portion_label := cooker_node.get_node_or_null("CookerPortionLabel") as Label
+	if portion_label == null:
+		portion_label = Label.new()
+		portion_label.name = "CookerPortionLabel"
+		portion_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portion_label.z_index = 3
+		portion_label.position = Vector2(6, -20)
+		portion_label.add_theme_font_size_override("font_size", 8)
+		cooker_node.add_child(portion_label)
+	portion_label.visible = show_output
+	portion_label.text = str(portion_count) if show_output else ""
 
 
 ## Synchronizes passive OnlineStation preview dish and availability tint from
@@ -1548,8 +1566,8 @@ func _populate_floor_tiles() -> void:
 	_fill_flat_zone(dining_rect, TILE_DINING_FLOOR)
 	_fill_flat_zone(Rect2i(8, 0, 1, 4), TILE_KITCHEN_FLOOR)
 	_fill_flat_zone(Rect2i(8, 4, 1, 5), TILE_DINING_FLOOR)
-	_fill_bordered_lane(waiting_lane_rect)
-	_fill_bordered_lane(online_rect)
+	var exterior_road_rect := waiting_lane_rect.merge(online_rect)
+	_fill_bordered_lane(exterior_road_rect)
 
 
 func _fill_flat_zone(rect: Rect2i, atlas_coords: Vector2i) -> void:

@@ -6,6 +6,8 @@ extends CanvasLayer
 ## timer, and static Indonesian display labels). Never owns or mutates cash,
 ## phase, service clock, inventory, orders, or day progression directly.
 
+signal exit_game_requested()
+
 const LOGICAL_VIEWPORT_SIZE: Vector2 = Vector2(640.0, 360.0)
 const DIALOGUE_ABOVE_OFFSET: float = 20.0
 const DIALOGUE_BELOW_OFFSET: float = 20.0
@@ -40,8 +42,6 @@ const PHASE_LABELS: Dictionary[int, String] = {
 }
 
 const FEEDBACK_LABELS: Dictionary[StringName, String] = {
-	&"invalid_key": "Huruf tidak cocok",
-	&"tile_blocked": "Lantai tidak bisa dilewati",
 	&"unknown_target": "Target tidak dikenal",
 	&"unreachable_target": "Tidak ada akses di sebelahnya",
 	&"start_service_failed": "Tidak bisa mulai layanan",
@@ -76,11 +76,16 @@ const FEEDBACK_LABELS: Dictionary[StringName, String] = {
 	&"driver_not_at_pickup": "Pengantar belum mendapatkan tempat pickup.",
 	&"fixture_purchased": "Alat berhasil dipasang!",
 }
+const SILENT_VISUAL_FEEDBACK_CODES: Array[StringName] = [
+	&"invalid_key",
+	&"tile_blocked",
+]
 
 const EDIT_MENU_SELECTED_BG: Color = Color(0.18, 0.42, 0.28, 1.0)
 const EDIT_MENU_SELECTED_BORDER: Color = Color(0.55, 0.92, 0.62, 1.0)
 const EDIT_MENU_UNSELECTED_BG: Color = Color(0.16, 0.18, 0.23, 1.0)
 const EDIT_MENU_UNSELECTED_BORDER: Color = Color(0.36, 0.40, 0.48, 1.0)
+const EDIT_MENU_PREVIEW_BORDER: Color = Color(0.45, 0.72, 0.98, 1.0)
 const SHOP_INGREDIENT_ORDER: Array[StringName] = [
 	&"beras",
 	&"telur",
@@ -98,24 +103,16 @@ const FIXTURE_SHOP_ORDER: Array[StringName] = [
 	&"plate_rack",
 	&"dining_table",
 ]
-const FIXTURE_CATEGORY_LABELS: Dictionary[int, String] = {
-	SharedTypes.FixtureKind.BOX: "Penyimpanan",
-	SharedTypes.FixtureKind.FRIDGE: "Penyimpanan Dingin",
-	SharedTypes.FixtureKind.STOVE: "Alat Masak",
-	SharedTypes.FixtureKind.WASHER: "Kebersihan",
-	SharedTypes.FixtureKind.PLATE_RACK: "Peralatan Saji",
-	SharedTypes.FixtureKind.RICE_COOKER: "Alat Masak",
-	SharedTypes.FixtureKind.DINING_TABLE: "Ruang Makan",
+const FIXTURE_PURPOSE_LABELS: Dictionary[StringName, String] = {
+	&"box": "Buat nyimpen stok bahan harian",
+	&"fridge": "Buat nyimpen bahan sampai beberapa hari",
+	&"stove": "Untuk memasak",
+	&"washer": "Buat nyuci beras & piring kotor",
+	&"plate_rack": "Nambah stok piring bersih",
+	&"rice_cooker": "Untuk menanak nasi",
+	&"dining_table": "Nambah meja & kursi untuk pelanggan",
 }
-const FIXTURE_BENEFIT_LABELS: Dictionary[StringName, String] = {
-	&"box": "+3 slot bahan kering (kapasitas 5/slot)",
-	&"fridge": "+2 slot dingin (kapasitas 3/slot, stok tahan ke esok hari)",
-	&"stove": "+1 kompor untuk menggoreng paralel",
-	&"washer": "+1 wastafel cuci beras & piring kotor",
-	&"plate_rack": "+4 kapasitas piring bersih",
-	&"rice_cooker": "+1 penanak nasi tambahan",
-	&"dining_table": "+1 meja pelanggan makan di tempat",
-}
+const WARUNG_TILESET_PATH: String = "res://assets/art/tiles/Warung-Tileset.png"
 const SLOT_DISPLAY_LABELS: Dictionary[StringName, String] = {
 	&"slot_utility_01": "Slot Dapur 1",
 	&"slot_utility_02": "Slot Dapur 2",
@@ -130,8 +127,8 @@ const SLOT_DISPLAY_LABELS: Dictionary[StringName, String] = {
 	&"slot_table_06": "Slot Meja 6",
 }
 
-@export var ui_safe_rect: Rect2 = Rect2(0.0, 0.0, 112.0, 360.0)
-@export var world_visible_rect: Rect2 = Rect2(112.0, 0.0, 528.0, 360.0)
+@export var ui_safe_rect: Rect2 = Rect2(0.0, 0.0, 136.0, 360.0)
+@export var world_visible_rect: Rect2 = Rect2(136.0, 0.0, 504.0, 360.0)
 
 var _game_root: Node = null
 var _world_map: WorldMap = null
@@ -143,8 +140,12 @@ var _feedback_code: StringName = &""
 var _feedback_text: String = ""
 var _shake_remaining: float = 0.0
 var _modal_blocking_active: bool = false
+var _exit_quit_disabled: bool = false
 var _pending_menu_selection: Array[StringName] = []
 var _edit_menu_buttons: Dictionary[StringName, Button] = {}
+var _edit_menu_preview_buttons: Dictionary[StringName, Button] = {}
+var _edit_menu_rows: Dictionary[StringName, Dictionary] = {}
+var _previewed_recipe_id: StringName = &""
 var _edit_menu_submitting: bool = false
 var _shop_storage_unit_id: StringName = &""
 var _pending_shop_basket: Dictionary[StringName, int] = {}
@@ -156,14 +157,41 @@ var _fixture_slot_buttons: Dictionary[StringName, Button] = {}
 var _fixture_shop_rows: Dictionary[StringName, Dictionary] = {}
 var _fixture_shop_submitting: bool = false
 
+var _onboarding_enabled: bool = false
+var _onboarding_explicitly_set: bool = false
+var _onboarding_boot_checked: bool = false
+var _shown_day_stories: Dictionary[int, bool] = {}
+var _shown_day7_epilogue: bool = false
+var _active_story_id: StringName = &""
+var _active_story_title: String = ""
+var _active_story_lines: Array[Dictionary] = []
+var _active_story_line_index: int = 0
+var _tutorial_active: bool = false
+var _tutorial_completed: bool = false
+var _tutorial_skipped: bool = false
+var _tutorial_step_index: int = 0
+var _tutorial_started_day: int = 1
+var _tutorial_flags: Dictionary[StringName, bool] = {}
+var _tutorial_hint_text: String = ""
+var _last_shop_storage_unit_id: StringName = &"storage_box"
+var _shown_feature_tips: Dictionary[StringName, bool] = {}
+var _pending_feature_tips: Array[StringName] = []
+var _active_feature_tip_id: StringName = &""
+var _last_seen_unlocked_count: int = 1
+var _portrait_texture_cache: Dictionary[String, Texture2D] = {}
+
 @onready var ui_root: Control = $UIRoot
 @onready var left_hud_region: PanelContainer = $UIRoot/LeftHUDRegion
 @onready var day_label: Label = $UIRoot/LeftHUDRegion/HUDColumn/DayLabel
 @onready var phase_label: Label = $UIRoot/LeftHUDRegion/HUDColumn/PhaseLabel
 @onready var cash_label: Label = $UIRoot/LeftHUDRegion/HUDColumn/CashLabel
+@onready var goal_target_label: Label = $UIRoot/LeftHUDRegion/HUDColumn/GoalTargetLabel
 @onready var goal_label: Label = $UIRoot/LeftHUDRegion/HUDColumn/GoalLabel
 @onready var goal_progress_bar: ProgressBar = $UIRoot/LeftHUDRegion/HUDColumn/GoalProgressBar
 @onready var planning_box: VBoxContainer = $UIRoot/LeftHUDRegion/HUDColumn/PlanningBox
+@onready var potential_demand_label: Label = (
+	$UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/PotentialDemandLabel
+)
 @onready var forecast_quota_label: Label = (
 	$UIRoot/LeftHUDRegion/HUDColumn/PlanningBox/ForecastQuotaLabel
 )
@@ -189,6 +217,7 @@ var _fixture_shop_submitting: bool = false
 @onready var unspawned_quota_label: Label = (
 	$UIRoot/LeftHUDRegion/HUDColumn/ServiceBox/UnspawnedQuotaLabel
 )
+@onready var pause_button: Button = $UIRoot/LeftHUDRegion/HUDColumn/PauseButton
 
 @onready var interaction_dialogue: PanelContainer = $UIRoot/InteractionDialogue
 @onready var target_title_label: Label = (
@@ -217,6 +246,9 @@ var _fixture_shop_submitting: bool = false
 @onready var settlement_summary_label: Label = (
 	$UIRoot/DayResultSidePanel/ResultColumn/ResultSummaryScroll/SettlementSummaryLabel
 )
+@onready var result_narrative_label: Label = (
+	$UIRoot/DayResultSidePanel/ResultColumn/ResultNarrativeLabel
+)
 @onready var continue_button: Button = (
 	$UIRoot/DayResultSidePanel/ResultColumn/ResultFooter/ContinueButton
 )
@@ -226,8 +258,20 @@ var _fixture_shop_submitting: bool = false
 
 @onready var edit_menu_overlay: Control = $UIRoot/EditMenuOverlay
 @onready var edit_menu_popup: PanelContainer = $UIRoot/EditMenuOverlay/EditMenuPopup
+@onready var edit_menu_forecast_label: Label = (
+	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuForecastLabel
+)
 @onready var edit_menu_recipe_list: VBoxContainer = (
-	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/RecipeScroll/RecipeList
+	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow/RecipeScroll/RecipeList
+)
+@onready var recipe_detail_panel: PanelContainer = (
+	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow/RecipeDetailPanel
+)
+@onready var recipe_detail_title_label: Label = (
+	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow/RecipeDetailPanel/DetailColumn/RecipeDetailTitleLabel
+)
+@onready var recipe_detail_list: VBoxContainer = (
+	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuBodyRow/RecipeDetailPanel/DetailColumn/DetailScroll/RecipeDetailList
 )
 @onready var edit_menu_error_label: Label = (
 	$UIRoot/EditMenuOverlay/EditMenuPopup/PopupColumn/EditMenuErrorLabel
@@ -248,6 +292,9 @@ var _fixture_shop_submitting: bool = false
 )
 @onready var shop_cash_label: Label = (
 	$UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopHeaderRow/ShopCashLabel
+)
+@onready var shop_status_row: HBoxContainer = (
+	$UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopStatusRow
 )
 @onready var shop_capacity_label: Label = (
 	$UIRoot/IngredientShopOverlay/IngredientShopPopup/ShopColumn/ShopStatusRow/ShopCapacityLabel
@@ -308,20 +355,103 @@ var _fixture_shop_submitting: bool = false
 @onready var fixture_confirm_button: Button = (
 	$UIRoot/FixtureShopOverlay/FixtureShopPopup/FixtureColumn/FixtureFooterRow/FixtureConfirmButton
 )
+@onready var pause_overlay: Control = $UIRoot/PauseOverlay
+@onready var pause_popup: PanelContainer = $UIRoot/PauseOverlay/PausePopup
+@onready var pause_resume_button: Button = (
+	$UIRoot/PauseOverlay/PausePopup/PauseColumn/PauseResumeButton
+)
+@onready var pause_exit_button: Button = (
+	$UIRoot/PauseOverlay/PausePopup/PauseColumn/PauseExitButton
+)
+@onready var tutorial_guidance_overlay: TutorialGuidanceOverlay = (
+	$UIRoot/TutorialGuidanceOverlay
+)
+@onready var tutorial_help_button: Button = $UIRoot/TutorialHelpButton
+@onready var tutorial_banner: PanelContainer = $UIRoot/TutorialBanner
+@onready var tutorial_title_label: Label = $UIRoot/TutorialBanner/TutorialColumn/TutorialTitleLabel
+@onready var tutorial_body_label: Label = (
+	$UIRoot/TutorialBanner/TutorialColumn/TutorialScroll/TutorialBodyLabel
+)
+@onready var tutorial_skip_button: Button = (
+	$UIRoot/TutorialBanner/TutorialColumn/TutorialButtonsRow/TutorialSkipButton
+)
+@onready var tutorial_next_button: Button = (
+	$UIRoot/TutorialBanner/TutorialColumn/TutorialButtonsRow/TutorialNextButton
+)
+@onready var feature_tip_panel: PanelContainer = $UIRoot/FeatureTipPanel
+@onready var tip_title_label: Label = $UIRoot/FeatureTipPanel/TipColumn/TipTitleLabel
+@onready var tip_body_label: Label = (
+	$UIRoot/FeatureTipPanel/TipColumn/TipScroll/TipBodyLabel
+)
+@onready var tip_dismiss_button: Button = $UIRoot/FeatureTipPanel/TipColumn/TipDismissButton
+@onready var tutorial_reference_overlay: Control = $UIRoot/TutorialReferenceOverlay
+@onready var reference_popup: PanelContainer = $UIRoot/TutorialReferenceOverlay/ReferencePopup
+@onready var reference_body_label: Label = (
+	$UIRoot/TutorialReferenceOverlay/ReferencePopup/RefColumn/RefScroll/RefBodyLabel
+)
+@onready var reference_restart_button: Button = (
+	$UIRoot/TutorialReferenceOverlay/ReferencePopup/RefColumn/RefFooterRow/RefRestartTutorialButton
+)
+@onready var reference_close_button: Button = (
+	$UIRoot/TutorialReferenceOverlay/ReferencePopup/RefColumn/RefFooterRow/RefCloseButton
+)
+@onready var story_dialogue_overlay: Control = $UIRoot/StoryDialogueOverlay
+@onready var story_popup: PanelContainer = $UIRoot/StoryDialogueOverlay/StoryPopup
+@onready var story_title_label: Label = (
+	$UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryTitleLabel
+)
+@onready var story_portrait_frame: PanelContainer = (
+	$UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow/StoryPortraitFrame
+)
+@onready var story_portrait_rect: TextureRect = (
+	$UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow/StoryPortraitFrame/StoryPortraitRect
+)
+@onready var story_speaker_label: Label = (
+	$UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow/StoryTextColumn/StorySpeakerLabel
+)
+@onready var story_body_label: Label = (
+	$UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryContentRow/StoryTextColumn/StoryScroll/StoryBodyLabel
+)
+@onready var story_progress_label: Label = (
+	$UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryFooterRow/StoryProgressLabel
+)
+@onready var story_skip_button: Button = (
+	$UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryFooterRow/StorySkipButton
+)
+@onready var story_continue_button: Button = (
+	$UIRoot/StoryDialogueOverlay/StoryPopup/StoryColumn/StoryFooterRow/StoryContinueButton
+)
+
+
+static func format_rupiah(amount: int) -> String:
+	if amount < 0:
+		return "-%s" % format_rupiah(-amount)
+	if amount < 1000:
+		return "Rp %d" % amount
+	var rounded_tenths: int = roundi(float(amount) / 100.0)
+	if rounded_tenths % 10 == 0:
+		return "Rp %dk" % (rounded_tenths / 10)
+	return "Rp %d.%dk" % [rounded_tenths / 10, rounded_tenths % 10]
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_apply_fallback_styles()
 	_connect_ui_buttons()
 	if get_viewport() != null and not get_viewport().size_changed.is_connected(
 		_on_viewport_size_changed
 	):
 		get_viewport().size_changed.connect(_on_viewport_size_changed)
+	if reference_body_label != null:
+		reference_body_label.text = NarrativeTutorialCatalog.get_reference_summary_text()
 	_layout_fixture_shop_overlay()
 	_refresh_all()
+	call_deferred(&"_check_auto_onboarding_start")
 
 
 func _process(delta: float) -> void:
+	if _is_gameplay_paused():
+		return
 	if (
 		_game_root != null
 		and is_instance_valid(_game_root)
@@ -340,12 +470,18 @@ func _process(delta: float) -> void:
 				_refresh_dialogue()
 			elif _is_selected_target_driver():
 				_refresh_dialogue()
+			elif _feedback_text.is_empty() and _is_selected_target_online_station():
+				_refresh_dialogue()
 			elif not is_ingredient_shop_open() and _is_selected_target_storage_unit():
 				_refresh_dialogue()
+			if _onboarding_enabled:
+				_refresh_visual_guidance()
 
 	if _shake_remaining > 0.0:
 		_shake_remaining = maxf(0.0, _shake_remaining - maxf(0.0, delta))
 		_update_dialogue_position()
+		if _onboarding_enabled:
+			_refresh_visual_guidance()
 
 
 ## Binds GameRoot, WorldMap, and controller references once per wiring pass,
@@ -366,6 +502,7 @@ func bind_context(
 	_connect_context_signals()
 	if is_node_ready():
 		_refresh_all()
+		call_deferred(&"_check_auto_onboarding_start")
 
 
 ## Sets explicit modal blocking state (for overlays/tests that block world/typing input).
@@ -375,6 +512,12 @@ func set_modal_blocking(active: bool) -> void:
 
 func is_modal_blocking() -> bool:
 	if _modal_blocking_active:
+		return true
+	if is_pause_open() or _is_gameplay_paused():
+		return true
+	if is_story_open():
+		return true
+	if is_reference_open():
 		return true
 	if is_edit_menu_open():
 		return true
@@ -387,12 +530,70 @@ func is_modal_blocking() -> bool:
 	return false
 
 
+func is_pause_open() -> bool:
+	return pause_overlay != null and pause_overlay.visible
+
+
+func open_pause() -> bool:
+	if pause_overlay == null:
+		return false
+	if not _is_world_click_phase():
+		return false
+	if _game_root == null or not is_instance_valid(_game_root):
+		return false
+	if _game_root.has_method(&"set_paused"):
+		if not bool(_game_root.set_paused(true)):
+			return false
+	_release_button_focus_if_any()
+	pause_overlay.visible = true
+	_layout_fixture_shop_overlay()
+	return true
+
+
+func close_pause() -> void:
+	if pause_overlay != null:
+		pause_overlay.visible = false
+	if (
+		_game_root != null
+		and is_instance_valid(_game_root)
+		and _game_root.has_method(&"set_paused")
+	):
+		_game_root.set_paused(false)
+	_release_button_focus_if_any()
+	_refresh_hud()
+	_refresh_dialogue()
+
+
+func request_exit_game() -> void:
+	if pause_overlay != null:
+		pause_overlay.visible = false
+	if (
+		_game_root != null
+		and is_instance_valid(_game_root)
+		and _game_root.has_method(&"set_paused")
+	):
+		_game_root.set_paused(false)
+	exit_game_requested.emit()
+	if not _exit_quit_disabled and is_inside_tree() and get_tree() != null:
+		get_tree().quit()
+
+
+func set_exit_quit_disabled_for_test(disabled: bool) -> void:
+	_exit_quit_disabled = disabled
+
+
 func is_ingredient_shop_open() -> bool:
 	return ingredient_shop_overlay != null and ingredient_shop_overlay.visible
 
 
 func open_ingredient_shop(storage_unit_id: StringName) -> bool:
-	if not _is_world_click_phase() or ingredient_shop_overlay == null:
+	if (
+		not _is_world_click_phase()
+		or _is_gameplay_paused()
+		or is_story_open()
+		or is_reference_open()
+		or ingredient_shop_overlay == null
+	):
 		return false
 	if (
 		_kitchen_controller == null
@@ -401,7 +602,13 @@ func open_ingredient_shop(storage_unit_id: StringName) -> bool:
 		or not is_instance_valid(_run_controller)
 	):
 		return false
-	if not _kitchen_controller.has_storage_unit(storage_unit_id):
+	if (
+		not _kitchen_controller.has_storage_unit(storage_unit_id)
+		or (
+			_run_controller.has_method(&"can_purchase_ingredients_for_storage")
+			and not _run_controller.can_purchase_ingredients_for_storage(storage_unit_id)
+		)
+	):
 		return false
 	if is_edit_menu_open():
 		close_edit_menu()
@@ -411,6 +618,7 @@ func open_ingredient_shop(storage_unit_id: StringName) -> bool:
 	_clear_feedback_state()
 	_kitchen_controller.clear_command_prefix()
 	_shop_storage_unit_id = storage_unit_id
+	_last_shop_storage_unit_id = storage_unit_id
 	_shop_submitting = false
 	if shop_checkout_button != null:
 		shop_checkout_button.disabled = false
@@ -418,10 +626,12 @@ func open_ingredient_shop(storage_unit_id: StringName) -> bool:
 	_clear_shop_error()
 	_build_ingredient_shop_rows()
 	ingredient_shop_overlay.visible = true
-	if ingredient_shop_popup != null:
-		ingredient_shop_popup.size = Vector2(456.0, 324.0)
+	if _onboarding_enabled and _is_serving_phase():
+		_queue_feature_tip(&"serving_belanja")
+	_layout_fixture_shop_overlay()
 	_refresh_ingredient_shop_view()
 	_refresh_dialogue()
+	_evaluate_onboarding_progress()
 	return true
 
 
@@ -436,10 +646,11 @@ func close_ingredient_shop() -> void:
 	_clear_shop_error()
 	_release_button_focus_if_any()
 	_refresh_dialogue()
+	_evaluate_onboarding_progress()
 
 
 func adjust_shop_quantity(ingredient_id: StringName, delta: int) -> bool:
-	if not is_ingredient_shop_open() or ingredient_id == &"" or delta == 0:
+	if not is_ingredient_shop_open() or _is_gameplay_paused() or ingredient_id == &"" or delta == 0:
 		return false
 	if _kitchen_controller == null or _run_controller == null:
 		return false
@@ -517,7 +728,7 @@ func get_shop_ingredient_controls(ingredient_id: StringName) -> Dictionary:
 
 
 func submit_ingredient_shop(override_basket: Dictionary = {}) -> bool:
-	if not is_ingredient_shop_open() or _shop_submitting:
+	if not is_ingredient_shop_open() or _is_gameplay_paused() or _shop_submitting:
 		return false
 	if not _is_world_click_phase():
 		_show_shop_error("Belanja hanya bisa saat Perencanaan atau Layanan.")
@@ -569,7 +780,13 @@ func is_edit_menu_open() -> bool:
 
 
 func open_edit_menu() -> bool:
-	if not _is_planning_phase() or edit_menu_overlay == null:
+	if (
+		not _is_planning_phase()
+		or _is_gameplay_paused()
+		or is_story_open()
+		or is_reference_open()
+		or edit_menu_overlay == null
+	):
 		return false
 	if _run_controller == null or not is_instance_valid(_run_controller):
 		return false
@@ -591,6 +808,7 @@ func open_edit_menu() -> bool:
 
 	var run_view := _run_controller.get_run_view()
 	_pending_menu_selection.clear()
+	_previewed_recipe_id = &""
 	for raw_id: Variant in run_view.get("selected_recipe_ids", []):
 		var id := StringName(raw_id)
 		if id != &"" and not _pending_menu_selection.has(id):
@@ -598,9 +816,11 @@ func open_edit_menu() -> bool:
 
 	_rebuild_edit_menu_list(run_view)
 	edit_menu_overlay.visible = true
-	if edit_menu_popup != null:
-		edit_menu_popup.size = Vector2(336.0, 280.0)
+	_layout_fixture_shop_overlay()
+	_refresh_edit_menu_demand_preview()
+	_refresh_recipe_detail_panel()
 	_refresh_dialogue()
+	_evaluate_onboarding_progress()
 	return true
 
 
@@ -608,18 +828,23 @@ func close_edit_menu() -> void:
 	if edit_menu_overlay != null:
 		edit_menu_overlay.visible = false
 	_pending_menu_selection.clear()
+	_previewed_recipe_id = &""
 	_edit_menu_submitting = false
 	if edit_menu_confirm_button != null:
 		edit_menu_confirm_button.disabled = false
 	if edit_menu_error_label != null:
 		edit_menu_error_label.visible = false
 		edit_menu_error_label.text = ""
+	_refresh_recipe_detail_panel()
 	_release_button_focus_if_any()
 	_refresh_dialogue()
+	_evaluate_onboarding_progress()
 
 
 func toggle_edit_menu_recipe(recipe_id: StringName) -> bool:
-	if not is_edit_menu_open() or recipe_id == &"":
+	if not is_edit_menu_open() or _is_gameplay_paused() or recipe_id == &"":
+		return false
+	if not _edit_menu_buttons.has(recipe_id):
 		return false
 	var idx := _pending_menu_selection.find(recipe_id)
 	if idx >= 0:
@@ -627,18 +852,36 @@ func toggle_edit_menu_recipe(recipe_id: StringName) -> bool:
 	else:
 		_pending_menu_selection.append(recipe_id)
 
-	if _edit_menu_buttons.has(recipe_id):
-		var btn := _edit_menu_buttons[recipe_id]
-		if btn != null and is_instance_valid(btn):
-			var selected := _pending_menu_selection.has(recipe_id)
-			if btn.button_pressed != selected:
-				btn.set_pressed_no_signal(selected)
-			_update_recipe_button_visual(btn, recipe_id, selected)
+	var btn := _edit_menu_buttons[recipe_id]
+	if btn != null and is_instance_valid(btn):
+		var selected := _pending_menu_selection.has(recipe_id)
+		if btn.button_pressed != selected:
+			btn.set_pressed_no_signal(selected)
+		_update_recipe_button_visual(btn, recipe_id, selected)
 
 	if edit_menu_error_label != null:
 		edit_menu_error_label.visible = false
 		edit_menu_error_label.text = ""
+	_refresh_edit_menu_demand_preview()
 	return true
+
+
+func preview_edit_menu_recipe(recipe_id: StringName) -> bool:
+	if not is_edit_menu_open() or _is_gameplay_paused():
+		return false
+	if recipe_id != &"" and not _edit_menu_preview_buttons.has(recipe_id):
+		return false
+	_previewed_recipe_id = recipe_id
+	for id: StringName in _edit_menu_buttons:
+		var btn := _edit_menu_buttons[id]
+		if btn != null and is_instance_valid(btn):
+			_update_recipe_button_visual(btn, id, _pending_menu_selection.has(id))
+	_refresh_recipe_detail_panel()
+	return true
+
+
+func get_previewed_edit_menu_recipe_id() -> StringName:
+	return _previewed_recipe_id
 
 
 func get_pending_menu_selection() -> Array[StringName]:
@@ -649,8 +892,27 @@ func get_edit_menu_recipe_button(recipe_id: StringName) -> Button:
 	return _edit_menu_buttons.get(recipe_id, null) as Button
 
 
+func get_edit_menu_preview_button(recipe_id: StringName) -> Button:
+	return _edit_menu_preview_buttons.get(recipe_id, null) as Button
+
+
+func get_edit_menu_recipe_row(recipe_id: StringName) -> Dictionary:
+	return _edit_menu_rows.get(recipe_id, {})
+
+
+func get_edit_menu_detail_lines() -> PackedStringArray:
+	var lines := PackedStringArray()
+	if recipe_detail_list == null:
+		return lines
+	for child in recipe_detail_list.get_children():
+		var lbl := child as Label
+		if lbl != null and lbl.visible:
+			lines.append(lbl.text)
+	return lines
+
+
 func submit_edit_menu(recipe_ids: Array[StringName]) -> bool:
-	if not is_edit_menu_open() or _edit_menu_submitting:
+	if not is_edit_menu_open() or _is_gameplay_paused() or _edit_menu_submitting:
 		return false
 	if _run_controller == null or not is_instance_valid(_run_controller):
 		_show_edit_menu_error("Pengendali menu tidak tersedia.")
@@ -679,9 +941,19 @@ func is_fixture_shop_open() -> bool:
 
 
 func open_fixture_shop(slot_id: StringName = &"") -> bool:
-	if not _is_planning_phase() or fixture_shop_overlay == null:
+	if (
+		not _is_planning_phase()
+		or _is_gameplay_paused()
+		or is_story_open()
+		or is_reference_open()
+		or fixture_shop_overlay == null
+	):
 		return false
 	if _run_controller == null or not is_instance_valid(_run_controller):
+		return false
+	if _world_map == null or not is_instance_valid(_world_map):
+		return false
+	if slot_id == &"" or not _world_map.get_placement_slot_ids().has(slot_id):
 		return false
 	if is_edit_menu_open():
 		close_edit_menu()
@@ -697,19 +969,17 @@ func open_fixture_shop(slot_id: StringName = &"") -> bool:
 		fixture_confirm_button.disabled = false
 	_clear_fixture_error()
 
-	if slot_id != &"":
-		_selected_fixture_slot_id = slot_id
-	elif _selected_fixture_slot_id == &"":
-		_selected_fixture_slot_id = _pick_default_fixture_slot()
-
-	if _selected_fixture_utility_id == &"":
-		_selected_fixture_utility_id = _pick_default_fixture_utility(_selected_fixture_slot_id)
+	_selected_fixture_slot_id = slot_id
+	_selected_fixture_utility_id = _pick_default_fixture_utility(_selected_fixture_slot_id)
 
 	_build_fixture_shop_ui()
 	fixture_shop_overlay.visible = true
+	if _onboarding_enabled:
+		_queue_feature_tip(&"fridge_and_power")
 	_layout_fixture_shop_overlay()
 	_refresh_fixture_shop_view()
 	_refresh_dialogue()
+	_evaluate_onboarding_progress()
 	return true
 
 
@@ -722,25 +992,20 @@ func close_fixture_shop() -> void:
 	_clear_fixture_error()
 	_release_button_focus_if_any()
 	_refresh_dialogue()
+	_evaluate_onboarding_progress()
 
 
 func select_fixture_shop_slot(slot_id: StringName) -> bool:
-	if not is_fixture_shop_open() or slot_id == &"":
-		return false
-	if _world_map == null or not is_instance_valid(_world_map):
-		return false
-	if not _world_map.get_placement_slot_ids().has(slot_id):
-		return false
-	_selected_fixture_slot_id = slot_id
-	_clear_fixture_error()
-	_refresh_fixture_shop_view()
-	return true
+	# Chosen world slot remains fixed under M5-D slot-first flow.
+	return is_fixture_shop_open() and slot_id == _selected_fixture_slot_id
 
 
 func select_fixture_shop_utility(utility_id: StringName) -> bool:
-	if not is_fixture_shop_open() or utility_id == &"":
+	if not is_fixture_shop_open() or _is_gameplay_paused() or utility_id == &"":
 		return false
 	if _run_controller == null or not is_instance_valid(_run_controller):
+		return false
+	if not _fixture_shop_rows.has(utility_id):
 		return false
 	if _run_controller.get_utility_def(utility_id) == null:
 		return false
@@ -766,7 +1031,7 @@ func submit_fixture_shop(
 	override_utility_id: StringName = &"",
 	override_slot_id: StringName = &""
 ) -> bool:
-	if not is_fixture_shop_open() or _fixture_shop_submitting:
+	if not is_fixture_shop_open() or _is_gameplay_paused() or _fixture_shop_submitting:
 		return false
 	if _run_controller == null or not is_instance_valid(_run_controller):
 		_show_fixture_error("Pengendali peralatan tidak tersedia.")
@@ -852,7 +1117,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if mouse_btn.button_index != MOUSE_BUTTON_LEFT:
 		return
-	if not _is_world_click_phase():
+	if _is_gameplay_paused() or not _is_world_click_phase():
 		return
 
 	var canvas_pos: Vector2 = mouse_btn.position
@@ -870,9 +1135,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	_clear_feedback_state()
 	var hit_target_id := _hit_test_interactable(world_global_pos)
 	if hit_target_id != &"":
-		var interacted := _kitchen_controller.on_interactable_clicked(hit_target_id)
-		if interacted and _kitchen_controller.has_storage_unit(hit_target_id):
-			open_ingredient_shop(hit_target_id)
+		_kitchen_controller.on_interactable_clicked(hit_target_id)
 	else:
 		var overflow_driver_id := _world_map.hit_test_overflow_driver(world_global_pos)
 		if overflow_driver_id != &"":
@@ -905,27 +1168,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not _is_serving_phase() and not _is_planning_phase():
 		return
 	if key_event.keycode == KEY_ESCAPE:
-		if is_ingredient_shop_open():
-			close_ingredient_shop()
+		if _handle_escape_key():
 			if is_inside_tree() and get_viewport() != null:
 				get_viewport().set_input_as_handled()
-			return
-		if is_fixture_shop_open():
-			close_fixture_shop()
-			if is_inside_tree() and get_viewport() != null:
-				get_viewport().set_input_as_handled()
-			return
+		return
 	if _is_keyboard_blocked_by_focus_or_modal():
 		return
 	if _kitchen_controller == null:
-		return
-
-	if key_event.keycode == KEY_ESCAPE:
-		_clear_feedback_state()
-		_kitchen_controller.clear_command_prefix()
-		_refresh_dialogue()
-		if is_inside_tree() and get_viewport() != null:
-			get_viewport().set_input_as_handled()
 		return
 
 	if key_event.keycode == KEY_BACKSPACE:
@@ -941,6 +1190,45 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		_kitchen_controller.accept_typed_character(ch)
 		if is_inside_tree() and get_viewport() != null:
 			get_viewport().set_input_as_handled()
+
+
+func _handle_escape_key() -> bool:
+	if is_pause_open():
+		close_pause()
+		return true
+	if _is_gameplay_paused():
+		return false
+	if is_story_open():
+		return open_pause()
+	if is_reference_open():
+		close_reference()
+		return true
+	if is_ingredient_shop_open():
+		close_ingredient_shop()
+		return true
+	if is_fixture_shop_open():
+		close_fixture_shop()
+		return true
+	if is_edit_menu_open():
+		close_edit_menu()
+		return true
+	if _modal_blocking_active or _has_focused_text_input():
+		return false
+
+	var has_target := false
+	var has_prefix := false
+	if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
+		has_target = _kitchen_controller.get_selected_target_id() != &""
+		has_prefix = not _kitchen_controller.get_command_prefix().is_empty()
+	if has_target or has_prefix or not _feedback_text.is_empty():
+		_clear_feedback_state()
+		if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
+			_kitchen_controller.clear_selected_target()
+		_release_button_focus_if_any()
+		_refresh_dialogue()
+		return true
+
+	return open_pause()
 
 
 func _extract_typed_character(key_event: InputEventKey) -> String:
@@ -1010,6 +1298,45 @@ func _connect_ui_buttons() -> void:
 	if extra_mode_button != null:
 		if not extra_mode_button.pressed.is_connected(_on_extra_mode_pressed):
 			extra_mode_button.pressed.connect(_on_extra_mode_pressed)
+	if interaction_dialogue != null:
+		if not interaction_dialogue.gui_input.is_connected(_on_interaction_dialogue_gui_input):
+			interaction_dialogue.gui_input.connect(_on_interaction_dialogue_gui_input)
+	if allowed_commands_label != null:
+		if not allowed_commands_label.gui_input.is_connected(_on_allowed_commands_gui_input):
+			allowed_commands_label.gui_input.connect(_on_allowed_commands_gui_input)
+	if pause_button != null:
+		if not pause_button.pressed.is_connected(_on_pause_pressed):
+			pause_button.pressed.connect(_on_pause_pressed)
+	if pause_resume_button != null:
+		if not pause_resume_button.pressed.is_connected(_on_pause_resume_pressed):
+			pause_resume_button.pressed.connect(_on_pause_resume_pressed)
+	if pause_exit_button != null:
+		if not pause_exit_button.pressed.is_connected(_on_pause_exit_pressed):
+			pause_exit_button.pressed.connect(_on_pause_exit_pressed)
+	if story_continue_button != null:
+		if not story_continue_button.pressed.is_connected(_on_story_continue_pressed):
+			story_continue_button.pressed.connect(_on_story_continue_pressed)
+	if story_skip_button != null:
+		if not story_skip_button.pressed.is_connected(_on_story_skip_pressed):
+			story_skip_button.pressed.connect(_on_story_skip_pressed)
+	if tutorial_skip_button != null:
+		if not tutorial_skip_button.pressed.is_connected(_on_tutorial_skip_pressed):
+			tutorial_skip_button.pressed.connect(_on_tutorial_skip_pressed)
+	if tutorial_next_button != null:
+		if not tutorial_next_button.pressed.is_connected(_on_tutorial_next_pressed):
+			tutorial_next_button.pressed.connect(_on_tutorial_next_pressed)
+	if tip_dismiss_button != null:
+		if not tip_dismiss_button.pressed.is_connected(_on_tip_dismiss_pressed):
+			tip_dismiss_button.pressed.connect(_on_tip_dismiss_pressed)
+	if tutorial_help_button != null:
+		if not tutorial_help_button.pressed.is_connected(_on_tutorial_help_pressed):
+			tutorial_help_button.pressed.connect(_on_tutorial_help_pressed)
+	if reference_restart_button != null:
+		if not reference_restart_button.pressed.is_connected(_on_reference_restart_pressed):
+			reference_restart_button.pressed.connect(_on_reference_restart_pressed)
+	if reference_close_button != null:
+		if not reference_close_button.pressed.is_connected(_on_reference_close_pressed):
+			reference_close_button.pressed.connect(_on_reference_close_pressed)
 
 
 func _connect_context_signals() -> void:
@@ -1017,6 +1344,9 @@ func _connect_context_signals() -> void:
 		if _game_root.has_signal(&"phase_changed"):
 			if not _game_root.is_connected(&"phase_changed", _on_phase_changed):
 				_game_root.connect(&"phase_changed", _on_phase_changed)
+		if _game_root.has_signal(&"pause_changed"):
+			if not _game_root.is_connected(&"pause_changed", _on_pause_changed):
+				_game_root.connect(&"pause_changed", _on_pause_changed)
 
 	if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
 		if not _kitchen_controller.player_tile_changed.is_connected(_on_player_tile_changed):
@@ -1033,6 +1363,17 @@ func _connect_context_signals() -> void:
 			_kitchen_controller.action_feedback.connect(_on_action_feedback)
 		if not _kitchen_controller.kitchen_state_changed.is_connected(_on_kitchen_state_changed):
 			_kitchen_controller.kitchen_state_changed.connect(_on_kitchen_state_changed)
+		if (
+			_kitchen_controller.has_signal(&"ingredient_shop_requested")
+			and not _kitchen_controller.is_connected(
+				&"ingredient_shop_requested",
+				_on_ingredient_shop_requested
+			)
+		):
+			_kitchen_controller.connect(
+				&"ingredient_shop_requested",
+				_on_ingredient_shop_requested
+			)
 
 	if _service_controller != null and is_instance_valid(_service_controller):
 		if not _service_controller.orders_changed.is_connected(_on_orders_changed):
@@ -1062,6 +1403,9 @@ func _disconnect_context_signals() -> void:
 		if _game_root.has_signal(&"phase_changed"):
 			if _game_root.is_connected(&"phase_changed", _on_phase_changed):
 				_game_root.disconnect(&"phase_changed", _on_phase_changed)
+		if _game_root.has_signal(&"pause_changed"):
+			if _game_root.is_connected(&"pause_changed", _on_pause_changed):
+				_game_root.disconnect(&"pause_changed", _on_pause_changed)
 
 	if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
 		if _kitchen_controller.player_tile_changed.is_connected(_on_player_tile_changed):
@@ -1078,6 +1422,17 @@ func _disconnect_context_signals() -> void:
 			_kitchen_controller.action_feedback.disconnect(_on_action_feedback)
 		if _kitchen_controller.kitchen_state_changed.is_connected(_on_kitchen_state_changed):
 			_kitchen_controller.kitchen_state_changed.disconnect(_on_kitchen_state_changed)
+		if (
+			_kitchen_controller.has_signal(&"ingredient_shop_requested")
+			and _kitchen_controller.is_connected(
+				&"ingredient_shop_requested",
+				_on_ingredient_shop_requested
+			)
+		):
+			_kitchen_controller.disconnect(
+				&"ingredient_shop_requested",
+				_on_ingredient_shop_requested
+			)
 
 	if _service_controller != null and is_instance_valid(_service_controller):
 		if _service_controller.orders_changed.is_connected(_on_orders_changed):
@@ -1157,8 +1512,38 @@ func _on_extra_mode_pressed() -> void:
 		_game_root.request_extra_mode()
 
 
-func _on_phase_changed(phase: int, _day_index: int) -> void:
+func _on_pause_pressed() -> void:
+	open_pause()
+
+
+func _on_pause_resume_pressed() -> void:
+	close_pause()
+
+
+func _on_pause_exit_pressed() -> void:
+	request_exit_game()
+
+
+func _on_pause_changed(paused: bool) -> void:
+	if pause_overlay != null:
+		pause_overlay.visible = paused
+	if paused:
+		_release_button_focus_if_any()
+		_layout_fixture_shop_overlay()
+	else:
+		_refresh_hud()
+		_refresh_dialogue()
+	_refresh_onboarding_visibility()
+
+
+func _on_phase_changed(phase: int, day_index: int) -> void:
 	_clear_feedback_state()
+	if (
+		phase != SharedTypes.Phase.PLANNING
+		and phase != SharedTypes.Phase.SERVING
+		and is_pause_open()
+	):
+		close_pause()
 	if phase != SharedTypes.Phase.PLANNING and is_edit_menu_open():
 		close_edit_menu()
 	if phase != SharedTypes.Phase.PLANNING and is_fixture_shop_open():
@@ -1169,16 +1554,25 @@ func _on_phase_changed(phase: int, _day_index: int) -> void:
 		and is_ingredient_shop_open()
 	):
 		close_ingredient_shop()
+	if (
+		phase != SharedTypes.Phase.PLANNING
+		and phase != SharedTypes.Phase.SERVING
+		and is_reference_open()
+	):
+		close_reference()
+	_on_onboarding_phase_changed(phase, day_index)
 	_refresh_all()
 
 
 func _on_player_tile_changed(_tile: Vector2i) -> void:
 	_update_dialogue_position()
+	_refresh_visual_guidance()
 
 
 func _on_selected_interactable_changed(_target_id: StringName) -> void:
 	_clear_feedback_state()
 	_refresh_dialogue()
+	_evaluate_onboarding_progress()
 
 
 func _on_command_prefix_changed(_prefix: String) -> void:
@@ -1188,6 +1582,8 @@ func _on_command_prefix_changed(_prefix: String) -> void:
 
 func _on_action_feedback(code: StringName) -> void:
 	_show_feedback(code)
+	_record_onboarding_feedback(code)
+	_evaluate_onboarding_progress()
 
 
 func _on_kitchen_state_changed() -> void:
@@ -1195,23 +1591,31 @@ func _on_kitchen_state_changed() -> void:
 	if is_ingredient_shop_open():
 		_refresh_ingredient_shop_view()
 	_refresh_dialogue()
+	_evaluate_onboarding_progress()
+
+
+func _on_ingredient_shop_requested(storage_unit_id: StringName) -> void:
+	open_ingredient_shop(storage_unit_id)
 
 
 func _on_queues_changed() -> void:
 	_refresh_hud()
 	_refresh_dine_in_visuals()
+	_evaluate_onboarding_progress()
 
 
 func _on_orders_changed() -> void:
 	_refresh_dine_in_visuals()
 	if _is_selected_target_dining_table():
 		_refresh_dialogue()
+	_evaluate_onboarding_progress()
 
 
 func _on_tables_changed() -> void:
 	_refresh_dine_in_visuals()
 	if _is_selected_target_dining_table():
 		_refresh_dialogue()
+	_evaluate_onboarding_progress()
 
 
 func _on_drivers_changed() -> void:
@@ -1230,12 +1634,14 @@ func _on_drivers_changed() -> void:
 				_clear_feedback_state()
 	if _is_selected_target_driver():
 		_refresh_dialogue()
+	_evaluate_onboarding_progress()
 
 
 func _on_online_offer_changed() -> void:
 	_refresh_online_station_visual()
 	if _is_selected_target_online_station():
 		_refresh_dialogue()
+	_evaluate_onboarding_progress()
 
 
 func _on_run_state_changed() -> void:
@@ -1246,13 +1652,21 @@ func _on_run_state_changed() -> void:
 	if is_fixture_shop_open():
 		_refresh_fixture_shop_view()
 	_refresh_results_panel()
+	_evaluate_onboarding_progress()
 
 
 func _show_feedback(code: StringName) -> void:
 	_feedback_code = code
-	_feedback_text = FEEDBACK_LABELS.get(code, String(code))
 	if code == &"invalid_key":
+		_feedback_text = ""
 		_shake_remaining = SHAKE_DURATION
+		_refresh_dialogue()
+		return
+	if SILENT_VISUAL_FEEDBACK_CODES.has(code):
+		_feedback_text = ""
+		_refresh_dialogue()
+		return
+	_feedback_text = FEEDBACK_LABELS.get(code, String(code))
 	_refresh_dialogue()
 
 
@@ -1266,6 +1680,7 @@ func _refresh_all() -> void:
 	_refresh_driver_visuals()
 	_refresh_dialogue()
 	_refresh_results_panel()
+	_refresh_onboarding_visibility()
 
 
 func _refresh_kitchen_visuals() -> void:
@@ -1288,7 +1703,8 @@ func _refresh_kitchen_visuals() -> void:
 	var table_textures := _resolve_item_textures(table_view)
 
 	var cooker_view := _kitchen_controller.get_cooker_output_view(&"rice_cooker")
-	var cooker_has := not cooker_view.is_empty()
+	var cooker_portions := int(cooker_view.get("portions", 0))
+	var cooker_has := not cooker_view.is_empty() and cooker_portions > 0
 	var cooker_textures := _resolve_item_textures(cooker_view)
 	var cooker_tex: Texture2D = cooker_textures[0] if not cooker_textures.is_empty() else null
 
@@ -1304,7 +1720,8 @@ func _refresh_kitchen_visuals() -> void:
 		cooker_has,
 		cooker_tex,
 		clean_plates,
-		dirty_plates
+		dirty_plates,
+		cooker_portions
 	)
 	if _world_map.has_method(&"sync_extra_kitchen_visuals"):
 		var extra_cookers: Dictionary[StringName, Dictionary] = {}
@@ -1312,11 +1729,13 @@ func _refresh_kitchen_visuals() -> void:
 			if cooker_id == &"rice_cooker":
 				continue
 			var c_view := _kitchen_controller.get_cooker_output_view(cooker_id)
-			var c_has := not c_view.is_empty()
+			var c_portions := int(c_view.get("portions", 0))
+			var c_has := not c_view.is_empty() and c_portions > 0
 			var c_textures := _resolve_item_textures(c_view)
 			var c_tex: Texture2D = c_textures[0] if not c_textures.is_empty() else null
 			extra_cookers[cooker_id] = {
 				"has_output": c_has,
+				"portions": c_portions,
 				"texture": c_tex,
 			}
 		var extra_racks: Dictionary[StringName, Dictionary] = {}
@@ -1510,21 +1929,35 @@ func _format_online_station_status() -> String:
 	var preview_id := StringName(offer_view.get("preview_recipe_id", &""))
 	var dish_label := _get_recipe_display_name(preview_id)
 	if bool(offer_view.get("acceptance_enabled", false)):
+		var secs := maxi(0, ceili(float(offer_view.get("offer_seconds_remaining", 0.0))))
+		if secs > 0:
+			return "Tawaran: %s (Siap diterima, %d dtk)" % [dish_label, secs]
 		return "Tawaran: %s (Siap diterima)" % dish_label
 
 	var reason := StringName(offer_view.get("disabled_reason", &""))
 	match reason:
+		&"offer_waiting":
+			var wait_secs := maxi(
+				0, ceili(float(offer_view.get("next_offer_in_seconds", 0.0)))
+			)
+			return "Menunggu tawaran (%d dtk)" % wait_secs
 		&"cutoff_reached":
-			return "Tawaran: %s (Tutup: kuota <= 2)" % dish_label
+			if preview_id != &"":
+				return "Tawaran: %s (Tutup: kuota <= 2)" % dish_label
+			return "Tawaran tutup (Kuota <= 2)"
 		&"concurrent_cap_reached":
 			var cap := int(offer_view.get("concurrent_limit", 0))
-			return "Tawaran: %s (Penuh: maks %d)" % [dish_label, cap]
+			if preview_id != &"":
+				return "Tawaran: %s (Penuh: maks %d)" % [dish_label, cap]
+			return "Tawaran penuh (Maks %d)" % cap
 		&"not_serving":
 			return "Tawaran: %s (Belum layanan)" % dish_label if preview_id != &"" else ""
 		&"empty_menu":
 			return "Tawaran tutup (Menu kosong)"
 		&"invalid_price":
-			return "Tawaran: %s (Harga tidak valid)" % dish_label
+			if preview_id != &"":
+				return "Tawaran: %s (Harga tidak valid)" % dish_label
+			return "Tawaran tidak valid"
 	return "Tawaran: %s (Tidak tersedia)" % dish_label if preview_id != &"" else ""
 
 
@@ -1649,6 +2082,7 @@ func _refresh_hud() -> void:
 	var day_index: int = _get_current_day_index()
 	var cash: int = 0
 	var target: int = 0
+	var potential_demand: int = 0
 	var planned_quota: int = 0
 
 	if _run_controller != null and is_instance_valid(_run_controller):
@@ -1656,6 +2090,7 @@ func _refresh_hud() -> void:
 		day_index = int(run_view.get("day_index", day_index))
 		cash = int(run_view.get("cash", 0))
 		target = int(run_view.get("day_7_target", 0))
+		potential_demand = int(run_view.get("potential_demand", 0))
 		planned_quota = int(run_view.get("planned_dinein_quota", 0))
 
 	var unspawned_quota: int = 0
@@ -1677,12 +2112,13 @@ func _refresh_hud() -> void:
 
 	day_label.text = "Hari %d/7" % day_index if day_index <= 7 else "Hari %d" % day_index
 	var is_planning := (phase == SharedTypes.Phase.PLANNING)
+	var is_serving := (phase == SharedTypes.Phase.SERVING)
 	phase_label.text = (
 		"persiapan sebelum buka"
 		if is_planning
 		else PHASE_LABELS.get(phase, "Perencanaan")
 	)
-	cash_label.text = "Kas: Rp%d" % cash
+	cash_label.text = "Kas: %s" % format_rupiah(cash)
 
 	var target_ratio := (
 		clampf(float(cash) / float(target), 0.0, 1.0)
@@ -1690,6 +2126,9 @@ func _refresh_hud() -> void:
 		else 0.0
 	)
 	var target_pct := int(round(target_ratio * 100.0))
+	if goal_target_label != null:
+		goal_target_label.visible = is_planning
+		goal_target_label.text = "Target: %s" % format_rupiah(target)
 	goal_label.text = "Target Hari 7: %d%%" % target_pct
 
 	goal_progress_bar.min_value = 0.0
@@ -1703,8 +2142,9 @@ func _refresh_hud() -> void:
 		if not is_planning and edit_menu_button.has_focus():
 			edit_menu_button.release_focus()
 	if fixture_shop_button != null:
-		fixture_shop_button.disabled = not is_planning
-		if not is_planning and fixture_shop_button.has_focus():
+		fixture_shop_button.visible = false
+		fixture_shop_button.disabled = true
+		if fixture_shop_button.has_focus():
 			fixture_shop_button.release_focus()
 	if menu_stub_button != null:
 		menu_stub_button.disabled = not is_planning
@@ -1714,16 +2154,24 @@ func _refresh_hud() -> void:
 		exit_stub_button.disabled = not is_planning
 		if not is_planning and exit_stub_button.has_focus():
 			exit_stub_button.release_focus()
+	if potential_demand_label != null:
+		potential_demand_label.text = "Potensi Tamu: %d" % potential_demand
 	forecast_quota_label.text = "Target Tamu: %d" % planned_quota
 	if start_hint_label != null:
 		start_hint_label.text = "Ketik: buka"
 
 	service_box.visible = (
-		phase == SharedTypes.Phase.SERVING
+		is_serving
 		or phase == SharedTypes.Phase.CLOSING
 	)
 	service_elapsed_label.text = "Waktu: %.1f dtk" % elapsed
 	unspawned_quota_label.text = "Antrean Datang: %d" % unspawned_quota
+	if pause_button != null:
+		var can_pause := is_planning or is_serving
+		pause_button.visible = can_pause
+		pause_button.disabled = not can_pause
+		if not can_pause and pause_button.has_focus():
+			pause_button.release_focus()
 
 
 func _refresh_dialogue() -> void:
@@ -1735,7 +2183,7 @@ func _refresh_dialogue() -> void:
 		phase == SharedTypes.Phase.PLANNING
 		or phase == SharedTypes.Phase.SERVING
 	)
-	if not in_active_world_phase:
+	if not in_active_world_phase or is_ingredient_shop_open():
 		interaction_dialogue.visible = false
 		return
 
@@ -1752,8 +2200,31 @@ func _refresh_dialogue() -> void:
 		and selected_id == &""
 		and not prefix.is_empty()
 	)
+	var show_planning_storage := (
+		phase == SharedTypes.Phase.PLANNING
+		and selected_id != &""
+		and not allowed.is_empty()
+	)
 	if selected_id == &"" and _feedback_text.is_empty() and not show_planning_typing:
 		interaction_dialogue.visible = false
+		if target_title_label != null:
+			target_title_label.visible = false
+			target_title_label.text = ""
+		if target_status_label != null:
+			target_status_label.visible = false
+			target_status_label.text = ""
+		if allowed_commands_label != null:
+			allowed_commands_label.visible = false
+			allowed_commands_label.text = ""
+		if prefix_prompt_label != null:
+			prefix_prompt_label.visible = false
+			prefix_prompt_label.text = ""
+		if remaining_prompt_label != null:
+			remaining_prompt_label.visible = false
+			remaining_prompt_label.text = ""
+		if context_message_label != null:
+			context_message_label.visible = false
+			context_message_label.text = ""
 		return
 
 	interaction_dialogue.visible = true
@@ -1765,11 +2236,18 @@ func _refresh_dialogue() -> void:
 		target_title_label.text = ""
 
 	var is_serving := (phase == SharedTypes.Phase.SERVING)
-	var show_commands := is_serving or show_planning_typing
+	var show_commands := is_serving or show_planning_typing or show_planning_storage
 	if target_status_label != null:
+		var is_selected_storage := (
+			selected_id != &""
+			and _kitchen_controller != null
+			and is_instance_valid(_kitchen_controller)
+			and _kitchen_controller.has_storage_unit(selected_id)
+		)
 		var live_status := (
 			_format_selected_target_live_status(selected_id)
-			if is_serving and selected_id != &""
+			if (is_serving or (phase == SharedTypes.Phase.PLANNING and is_selected_storage))
+			and selected_id != &""
 			else ""
 		)
 		target_status_label.visible = not live_status.is_empty()
@@ -1814,6 +2292,7 @@ func _refresh_dialogue() -> void:
 		context_message_label.text = ""
 
 	_update_dialogue_position()
+	_refresh_visual_guidance()
 
 
 func _format_allowed_commands(prefix: String, allowed: Array[String]) -> String:
@@ -1831,6 +2310,137 @@ func _format_allowed_commands(prefix: String, allowed: Array[String]) -> String:
 		else:
 			formatted.append(norm_cmd)
 	return ", ".join(formatted)
+
+
+func get_dialogue_command_rect(command: String) -> Rect2:
+	if (
+		interaction_dialogue == null
+		or not interaction_dialogue.visible
+		or allowed_commands_label == null
+		or not allowed_commands_label.visible
+	):
+		return Rect2()
+	var norm_target := command.strip_edges().to_lower()
+	if norm_target.is_empty():
+		return Rect2()
+	var label_global := allowed_commands_label.get_global_rect().position
+	for entry in _compute_dialogue_command_entries():
+		if String(entry.get("command", "")) == norm_target:
+			var local_rect: Rect2 = entry.get("rect", Rect2())
+			return Rect2(label_global + local_rect.position, local_rect.size)
+	return Rect2()
+
+
+func _compute_dialogue_command_entries() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	if (
+		allowed_commands_label == null
+		or not allowed_commands_label.visible
+		or _kitchen_controller == null
+		or not is_instance_valid(_kitchen_controller)
+	):
+		return entries
+	if _kitchen_controller.get_selected_target_id() == &"":
+		return entries
+	var allowed := _kitchen_controller.get_allowed_commands_for_selected_target()
+	if allowed.is_empty():
+		return entries
+	var prefix := _kitchen_controller.get_command_prefix()
+	var norm_prefix := prefix.to_lower()
+	var formatted: Array[String] = []
+	var normalized: Array[String] = []
+	for cmd in allowed:
+		var norm_cmd := cmd.strip_edges().to_lower()
+		normalized.append(norm_cmd)
+		if not norm_prefix.is_empty() and norm_cmd.begins_with(norm_prefix):
+			formatted.append(
+				"[%s]%s" % [
+					norm_cmd.left(norm_prefix.length()),
+					norm_cmd.substr(norm_prefix.length()),
+				]
+			)
+		else:
+			formatted.append(norm_cmd)
+
+	var label_size := allowed_commands_label.size
+	var label_h := maxf(1.0, label_size.y)
+	var font: Font = allowed_commands_label.get_theme_font("font")
+	var font_size: int = allowed_commands_label.get_theme_font_size("font_size")
+	var full_rendered := ", ".join(formatted)
+	var total_chars := maxi(1, full_rendered.length())
+	for i in range(formatted.size()):
+		var before_text := "" if i == 0 else ", ".join(formatted.slice(0, i)) + ", "
+		var up_to_text := before_text + formatted[i]
+		var start_x := 0.0
+		var end_x := 0.0
+		if font != null and font_size > 0:
+			start_x = (
+				font.get_string_size(
+					before_text,
+					HORIZONTAL_ALIGNMENT_LEFT,
+					-1,
+					font_size
+				).x
+				if not before_text.is_empty()
+				else 0.0
+			)
+			end_x = font.get_string_size(
+				up_to_text,
+				HORIZONTAL_ALIGNMENT_LEFT,
+				-1,
+				font_size
+			).x
+		else:
+			var full_w := maxf(1.0, label_size.x)
+			start_x = full_w * (float(before_text.length()) / float(total_chars))
+			end_x = full_w * (float(up_to_text.length()) / float(total_chars))
+		var width := maxf(1.0, end_x - start_x)
+		entries.append({
+			"command": normalized[i],
+			"rect": Rect2(Vector2(start_x, 0.0), Vector2(width, label_h)),
+		})
+	return entries
+
+
+func _on_interaction_dialogue_gui_input(event: InputEvent) -> void:
+	if interaction_dialogue == null or not interaction_dialogue.visible:
+		return
+	var mouse_btn := event as InputEventMouseButton
+	if mouse_btn != null and mouse_btn.pressed:
+		interaction_dialogue.accept_event()
+
+
+func _on_allowed_commands_gui_input(event: InputEvent) -> void:
+	if (
+		interaction_dialogue == null
+		or not interaction_dialogue.visible
+		or allowed_commands_label == null
+		or not allowed_commands_label.visible
+	):
+		return
+	var mouse_btn := event as InputEventMouseButton
+	if mouse_btn == null or not mouse_btn.pressed:
+		return
+	allowed_commands_label.accept_event()
+	if mouse_btn.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if not _is_world_click_phase() or is_modal_blocking():
+		return
+	if _kitchen_controller == null or not is_instance_valid(_kitchen_controller):
+		return
+	if _kitchen_controller.get_selected_target_id() == &"":
+		return
+
+	var local_pos: Vector2 = mouse_btn.position
+	for entry in _compute_dialogue_command_entries():
+		var rect: Rect2 = entry.get("rect", Rect2())
+		if rect.has_point(local_pos):
+			var cmd := StringName(String(entry.get("command", "")))
+			_release_button_focus_if_any()
+			_clear_feedback_state()
+			_kitchen_controller.execute_allowed_command(cmd)
+			_refresh_dialogue()
+			return
 
 
 func _format_prefix_prompt(prefix: String, allowed: Array[String]) -> String:
@@ -1920,6 +2530,9 @@ func _refresh_results_panel() -> void:
 		day_result_side_panel.position = Vector2(384.0, 12.0)
 		day_result_side_panel.size = Vector2(244.0, 336.0)
 	if not show_panel:
+		if result_narrative_label != null:
+			result_narrative_label.visible = false
+			result_narrative_label.text = ""
 		continue_button.disabled = true
 		extra_mode_button.disabled = true
 		if continue_button.has_focus():
@@ -1947,15 +2560,15 @@ func _refresh_results_panel() -> void:
 		result_title_label.text = "Hasil Hari %d" % day_index
 
 	var lines: PackedStringArray = [
-		"Kas Awal: Rp%d" % int(settlement.get("begin_cash", 0)),
-		"Belanja Bahan: -Rp%d" % int(settlement.get("ingredient_purchase_total", 0)),
-		"Beli Alat: -Rp%d" % int(settlement.get("fixture_purchase_total", 0)),
-		"Jual Alat: +Rp%d" % int(settlement.get("fixture_sale_total", 0)),
-		"Pendapatan Makan: +Rp%d" % int(settlement.get("order_revenue_dinein", 0)),
-		"Pendapatan Online: +Rp%d" % int(settlement.get("order_revenue_online", 0)),
-		"Refund Kiriman: +Rp%d" % int(settlement.get("refund_total", 0)),
-		"Listrik Harian: -Rp%d" % int(settlement.get("electricity_charge", 0)),
-		"Kas Akhir: Rp%d" % int(settlement.get("end_cash", 0)),
+		"Kas Awal: %s" % format_rupiah(int(settlement.get("begin_cash", 0))),
+		"Belanja Bahan: -%s" % format_rupiah(int(settlement.get("ingredient_purchase_total", 0))),
+		"Beli Alat: -%s" % format_rupiah(int(settlement.get("fixture_purchase_total", 0))),
+		"Jual Alat: +%s" % format_rupiah(int(settlement.get("fixture_sale_total", 0))),
+		"Pendapatan Makan: +%s" % format_rupiah(int(settlement.get("order_revenue_dinein", 0))),
+		"Pendapatan Online: +%s" % format_rupiah(int(settlement.get("order_revenue_online", 0))),
+		"Refund Kiriman: +%s" % format_rupiah(int(settlement.get("refund_total", 0))),
+		"Listrik Harian: -%s" % format_rupiah(int(settlement.get("electricity_charge", 0))),
+		"Kas Akhir: %s" % format_rupiah(int(settlement.get("end_cash", 0))),
 		"Selesai (Makan/Online): %d / %d" % [
 			int(settlement.get("completed_dinein_count", 0)),
 			int(settlement.get("completed_online_count", 0)),
@@ -1968,9 +2581,19 @@ func _refresh_results_panel() -> void:
 			int(settlement.get("penalty_debt_before", 0)),
 			int(settlement.get("penalty_debt_after", 0)),
 		],
+		"Potensi Besok: %d" % int(settlement.get("forecast_next_day_potential", 0)),
 		"Perkiraan Besok: %d" % int(settlement.get("forecast_next_day", 0)),
 	]
 	settlement_summary_label.text = "\n".join(lines)
+	if result_narrative_label != null:
+		var caption := (
+			NarrativeTutorialCatalog.get_day_closing_caption(day_index, goal_outcome)
+			if _onboarding_enabled
+			else ""
+		)
+		result_narrative_label.text = caption
+		result_narrative_label.visible = not caption.is_empty()
+		result_narrative_label.modulate = Color(0.84, 0.90, 0.98, 1.0)
 
 	var can_continue := (phase == SharedTypes.Phase.RESULTS and day_index != 7)
 	var can_extra := (
@@ -2047,21 +2670,52 @@ func _is_point_blocked_by_ui(canvas_pos: Vector2) -> bool:
 	if day_result_side_panel != null and day_result_side_panel.visible:
 		if day_result_side_panel.get_global_rect().has_point(canvas_pos):
 			return true
+	if interaction_dialogue != null and interaction_dialogue.visible:
+		if interaction_dialogue.get_global_rect().has_point(canvas_pos):
+			return true
+	if tutorial_help_button != null and tutorial_help_button.visible:
+		if tutorial_help_button.get_global_rect().has_point(canvas_pos):
+			return true
+	if tutorial_banner != null and tutorial_banner.visible:
+		if tutorial_banner.get_global_rect().has_point(canvas_pos):
+			return true
+	if feature_tip_panel != null and feature_tip_panel.visible:
+		if feature_tip_panel.get_global_rect().has_point(canvas_pos):
+			return true
 	return false
 
 
 func _is_keyboard_blocked_by_focus_or_modal() -> bool:
 	if is_modal_blocking():
 		return true
+	if _has_focused_text_input():
+		return true
+	if is_inside_tree() and get_viewport() != null:
+		var focused := get_viewport().gui_get_focus_owner()
+		if focused != null and is_instance_valid(focused):
+			if focused is BaseButton and focused.is_visible_in_tree():
+				return true
+			if bool(focused.get_meta(&"blocks_gameplay_keys", false)):
+				return true
+	return false
+
+
+func _has_focused_text_input() -> bool:
 	if is_inside_tree() and get_viewport() != null:
 		var focused := get_viewport().gui_get_focus_owner()
 		if focused != null and is_instance_valid(focused):
 			if focused is LineEdit or focused is TextEdit or focused is SpinBox:
 				return true
-			if focused is BaseButton and focused.is_visible_in_tree():
-				return true
-			if bool(focused.get_meta(&"blocks_gameplay_keys", false)):
-				return true
+	return false
+
+
+func _is_gameplay_paused() -> bool:
+	if (
+		_game_root != null
+		and is_instance_valid(_game_root)
+		and _game_root.has_method(&"is_paused")
+	):
+		return bool(_game_root.is_paused())
 	return false
 
 
@@ -2124,6 +2778,13 @@ func _apply_fallback_styles() -> void:
 			10
 		)
 		edit_menu_popup.add_theme_stylebox_override("panel", popup_style)
+	if recipe_detail_panel != null:
+		var detail_style := _make_panel_style(
+			Color(0.09, 0.11, 0.16, 0.96),
+			Color(0.32, 0.37, 0.48, 1.0),
+			6
+		)
+		recipe_detail_panel.add_theme_stylebox_override("panel", detail_style)
 	if ingredient_shop_popup != null:
 		var shop_style := _make_panel_style(
 			Color(0.12, 0.14, 0.20, 0.98),
@@ -2145,6 +2806,46 @@ func _apply_fallback_styles() -> void:
 			8
 		)
 		day_result_side_panel.add_theme_stylebox_override("panel", result_style)
+	if pause_popup != null:
+		var pause_style := _make_panel_style(
+			Color(0.12, 0.14, 0.20, 0.98),
+			Color(0.45, 0.52, 0.66, 1.0),
+			10
+		)
+		pause_popup.add_theme_stylebox_override("panel", pause_style)
+	if tutorial_banner != null:
+		tutorial_banner.add_theme_stylebox_override(
+			"panel",
+			_make_panel_style(Color(0.10, 0.14, 0.19, 0.96), Color(0.42, 0.78, 0.58, 1.0), 6)
+		)
+	if tutorial_title_label != null:
+		tutorial_title_label.modulate = Color(0.55, 0.94, 0.68, 1.0)
+	if feature_tip_panel != null:
+		feature_tip_panel.add_theme_stylebox_override(
+			"panel",
+			_make_panel_style(Color(0.12, 0.14, 0.22, 0.96), Color(0.95, 0.78, 0.36, 1.0), 6)
+		)
+	if tip_title_label != null:
+		tip_title_label.modulate = Color(0.98, 0.85, 0.45, 1.0)
+	if reference_popup != null:
+		reference_popup.add_theme_stylebox_override(
+			"panel",
+			_make_panel_style(Color(0.11, 0.13, 0.20, 0.98), Color(0.45, 0.55, 0.72, 1.0), 10)
+		)
+	if story_popup != null:
+		story_popup.add_theme_stylebox_override(
+			"panel",
+			_make_panel_style(Color(0.10, 0.12, 0.19, 0.98), Color(0.58, 0.68, 0.84, 1.0), 8)
+		)
+	if story_portrait_frame != null:
+		story_portrait_frame.add_theme_stylebox_override(
+			"panel",
+			_make_panel_style(Color(0.08, 0.10, 0.15, 1.0), Color(0.38, 0.46, 0.60, 1.0), 3)
+		)
+	if story_title_label != null:
+		story_title_label.modulate = Color(0.98, 0.85, 0.45, 1.0)
+	if story_speaker_label != null:
+		story_speaker_label.modulate = Color(0.65, 0.88, 1.0, 1.0)
 
 
 func _make_panel_style(bg: Color, border: Color, margin_px: int) -> StyleBoxFlat:
@@ -2159,6 +2860,8 @@ func _make_panel_style(bg: Color, border: Color, margin_px: int) -> StyleBoxFlat
 
 func _rebuild_edit_menu_list(run_view: Dictionary) -> void:
 	_edit_menu_buttons.clear()
+	_edit_menu_preview_buttons.clear()
+	_edit_menu_rows.clear()
 	if edit_menu_recipe_list == null:
 		return
 	for child in edit_menu_recipe_list.get_children():
@@ -2177,15 +2880,33 @@ func _rebuild_edit_menu_list(run_view: Dictionary) -> void:
 		row.name = "RecipeRow_%s" % recipe_id
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_theme_constant_override("separation", 3)
 		edit_menu_recipe_list.add_child(row)
+
+		var toggle_btn := CheckBox.new()
+		toggle_btn.name = "CheckBox_%s" % recipe_id
+		toggle_btn.text = ""
+		toggle_btn.custom_minimum_size = Vector2(20, 22)
+		toggle_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		toggle_btn.focus_mode = Control.FOCUS_ALL
+		toggle_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		var selected := _pending_menu_selection.has(recipe_id)
+		toggle_btn.set_pressed_no_signal(selected)
+		toggle_btn.toggled.connect(
+			func(pressed: bool) -> void:
+				_on_recipe_button_toggled(recipe_id, pressed)
+		)
+		row.add_child(toggle_btn)
 
 		var icons_box := HBoxContainer.new()
 		icons_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icons_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icons_box.add_theme_constant_override("separation", 1)
 		row.add_child(icons_box)
 		var textures := _resolve_recipe_part_textures(recipe_id)
 		if textures.is_empty():
 			var fallback_rect := ColorRect.new()
-			fallback_rect.custom_minimum_size = Vector2(16, 16)
+			fallback_rect.custom_minimum_size = Vector2(12, 12)
 			fallback_rect.color = Color(0.65, 0.58, 0.42, 1.0)
 			fallback_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			icons_box.add_child(fallback_rect)
@@ -2194,39 +2915,58 @@ func _rebuild_edit_menu_list(run_view: Dictionary) -> void:
 				if tex != null:
 					var tex_rect := TextureRect.new()
 					tex_rect.texture = tex
-					tex_rect.custom_minimum_size = Vector2(16, 16)
+					tex_rect.custom_minimum_size = Vector2(12, 12)
 					tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 					tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+					tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 					tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 					icons_box.add_child(tex_rect)
 				else:
 					var part_fallback := ColorRect.new()
-					part_fallback.custom_minimum_size = Vector2(16, 16)
+					part_fallback.custom_minimum_size = Vector2(12, 12)
 					part_fallback.color = Color(0.55, 0.62, 0.72, 1.0)
 					part_fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 					icons_box.add_child(part_fallback)
 
-		var btn := Button.new()
-		btn.name = "RecipeButton_%s" % recipe_id
-		btn.toggle_mode = true
-		btn.focus_mode = Control.FOCUS_ALL
-		btn.mouse_filter = Control.MOUSE_FILTER_STOP
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn.clip_text = true
-		var selected := _pending_menu_selection.has(recipe_id)
-		btn.set_pressed_no_signal(selected)
-		_update_recipe_button_visual(btn, recipe_id, selected)
-		btn.toggled.connect(
-			func(pressed: bool) -> void:
-				_on_recipe_button_toggled(recipe_id, pressed)
+		var preview_btn := Button.new()
+		preview_btn.name = "RecipeButton_%s" % recipe_id
+		preview_btn.toggle_mode = false
+		preview_btn.focus_mode = Control.FOCUS_ALL
+		preview_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		preview_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		preview_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		preview_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		preview_btn.add_theme_font_size_override("font_size", 11)
+		preview_btn.pressed.connect(
+			func() -> void:
+				_on_recipe_preview_pressed(recipe_id)
 		)
-		row.add_child(btn)
-		_edit_menu_buttons[recipe_id] = btn
+		row.add_child(preview_btn)
+
+		_edit_menu_buttons[recipe_id] = toggle_btn
+		_edit_menu_preview_buttons[recipe_id] = preview_btn
+		_edit_menu_rows[recipe_id] = {
+			"row": row,
+			"toggle_button": toggle_btn,
+			"preview_button": preview_btn,
+			"icons_box": icons_box,
+		}
+		_update_recipe_button_visual(toggle_btn, recipe_id, selected)
+
+
+func _on_recipe_preview_pressed(recipe_id: StringName) -> void:
+	if not is_edit_menu_open() or _is_gameplay_paused() or recipe_id == &"":
+		return
+	if _previewed_recipe_id == recipe_id:
+		preview_edit_menu_recipe(&"")
+	else:
+		preview_edit_menu_recipe(recipe_id)
 
 
 func _on_recipe_button_toggled(recipe_id: StringName, pressed: bool) -> void:
-	if not is_edit_menu_open() or recipe_id == &"":
+	if not is_edit_menu_open() or _is_gameplay_paused() or recipe_id == &"":
+		return
+	if not _edit_menu_buttons.has(recipe_id):
 		return
 	var idx := _pending_menu_selection.find(recipe_id)
 	if pressed and idx < 0:
@@ -2234,14 +2974,29 @@ func _on_recipe_button_toggled(recipe_id: StringName, pressed: bool) -> void:
 	elif not pressed and idx >= 0:
 		_pending_menu_selection.remove_at(idx)
 
-	if _edit_menu_buttons.has(recipe_id):
-		var btn := _edit_menu_buttons[recipe_id]
-		if btn != null and is_instance_valid(btn):
-			_update_recipe_button_visual(btn, recipe_id, pressed)
+	var btn := _edit_menu_buttons[recipe_id]
+	if btn != null and is_instance_valid(btn):
+		_update_recipe_button_visual(btn, recipe_id, pressed)
 
 	if edit_menu_error_label != null:
 		edit_menu_error_label.visible = false
 		edit_menu_error_label.text = ""
+	_refresh_edit_menu_demand_preview()
+
+
+func _refresh_edit_menu_demand_preview() -> void:
+	if edit_menu_forecast_label == null:
+		return
+	if _run_controller == null or not is_instance_valid(_run_controller):
+		edit_menu_forecast_label.text = "Potensi Tamu: 0 | Target Tamu: 0"
+		return
+	if _pending_menu_selection.is_empty():
+		edit_menu_forecast_label.text = "Potensi Tamu: 0 | Target Tamu: 0"
+		return
+	var preview: Dictionary = _run_controller.preview_demand_for_menu(_pending_menu_selection)
+	var potential := int(preview.get("potential_demand", 0))
+	var quota := int(preview.get("planned_dinein_quota", 0))
+	edit_menu_forecast_label.text = "Potensi Tamu: %d | Target Tamu: %d" % [potential, quota]
 
 
 func _update_recipe_button_visual(
@@ -2249,22 +3004,101 @@ func _update_recipe_button_visual(
 	recipe_id: StringName,
 	selected: bool
 ) -> void:
+	var preview_btn := _edit_menu_preview_buttons.get(recipe_id, null) as Button
 	var display := _get_recipe_display_name(recipe_id)
 	var price := _get_recipe_dine_in_price(recipe_id)
-	var marker := "[Aktif]" if selected else "[ ]"
-	if price > 0:
-		btn.text = "%s %s — Rp%d" % [marker, display, price]
-	else:
-		btn.text = "%s %s" % [marker, display]
+	var label_text := "%s: %s" % [display, format_rupiah(price)] if price > 0 else display
+	if preview_btn != null and is_instance_valid(preview_btn):
+		preview_btn.text = label_text
+	if btn != null and is_instance_valid(btn) and not (btn is CheckBox):
+		btn.text = label_text
 
-	var style := _make_panel_style(
-		EDIT_MENU_SELECTED_BG if selected else EDIT_MENU_UNSELECTED_BG,
-		EDIT_MENU_SELECTED_BORDER if selected else EDIT_MENU_UNSELECTED_BORDER,
-		4
+	var is_previewed := (_previewed_recipe_id == recipe_id)
+	var bg := EDIT_MENU_SELECTED_BG if selected else EDIT_MENU_UNSELECTED_BG
+	var border := (
+		EDIT_MENU_PREVIEW_BORDER
+		if is_previewed
+		else (EDIT_MENU_SELECTED_BORDER if selected else EDIT_MENU_UNSELECTED_BORDER)
 	)
-	btn.add_theme_stylebox_override("normal", style)
-	btn.add_theme_stylebox_override("hover", style)
-	btn.add_theme_stylebox_override("pressed", style)
+	var style := _make_panel_style(bg, border, 4)
+	if preview_btn != null and is_instance_valid(preview_btn):
+		preview_btn.add_theme_stylebox_override("normal", style)
+		preview_btn.add_theme_stylebox_override("hover", style)
+		preview_btn.add_theme_stylebox_override("pressed", style)
+	if btn != null and is_instance_valid(btn):
+		var toggle_style := _make_panel_style(bg, border, 2)
+		btn.add_theme_stylebox_override("normal", toggle_style)
+		btn.add_theme_stylebox_override("hover", toggle_style)
+		btn.add_theme_stylebox_override("pressed", toggle_style)
+
+
+func _refresh_recipe_detail_panel() -> void:
+	if recipe_detail_title_label == null or recipe_detail_list == null:
+		return
+	for child in recipe_detail_list.get_children():
+		recipe_detail_list.remove_child(child)
+		child.free()
+
+	if _previewed_recipe_id == &"":
+		recipe_detail_title_label.text = "Detail Resep"
+		recipe_detail_title_label.remove_theme_font_override("font")
+		var hint_lbl := Label.new()
+		hint_lbl.name = "DetailEmptyLabel"
+		hint_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hint_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint_lbl.add_theme_font_size_override("font_size", 10)
+		hint_lbl.modulate = Color(0.76, 0.80, 0.88, 1.0)
+		hint_lbl.text = "Pilih hidangan untuk lihat bahan."
+		recipe_detail_list.add_child(hint_lbl)
+		return
+
+	recipe_detail_title_label.text = _get_recipe_display_name(_previewed_recipe_id)
+	var base_font := recipe_detail_title_label.get_theme_font("font")
+	if base_font != null:
+		var bold_font := FontVariation.new()
+		bold_font.base_font = base_font
+		bold_font.variation_embolden = 0.45
+		recipe_detail_title_label.add_theme_font_override("font", bold_font)
+
+	var def: RecipeDef = (
+		_kitchen_controller.get_recipe_def(_previewed_recipe_id)
+		if _kitchen_controller != null and is_instance_valid(_kitchen_controller)
+		else null
+	)
+	if def == null:
+		return
+
+	for i in range(def.required_parts.size()):
+		var part := def.required_parts[i]
+		if part == null:
+			continue
+		var line_lbl := Label.new()
+		line_lbl.name = "IngredientLine_%d" % i
+		line_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		line_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		line_lbl.add_theme_font_size_override("font_size", 11)
+		line_lbl.text = _format_recipe_ingredient_line(part)
+		recipe_detail_list.add_child(line_lbl)
+
+
+func _format_recipe_ingredient_line(part: RecipePartDef) -> String:
+	if part == null:
+		return ""
+	var ing_name := _get_ingredient_display_name(part.ingredient_id)
+	match part.required_state:
+		SharedTypes.PrepState.COOKED, SharedTypes.PrepState.COOKED_RICE:
+			return ing_name
+		SharedTypes.PrepState.CHOPPED:
+			return "%s (potong)" % ing_name
+		SharedTypes.PrepState.CHOPPED_AND_COOKED:
+			return "%s (potong & masak)" % ing_name
+		SharedTypes.PrepState.WASHED:
+			return "%s (cuci)" % ing_name
+		SharedTypes.PrepState.RAW:
+			return "%s (mentah)" % ing_name
+	return ing_name
 
 
 func _get_recipe_dine_in_price(recipe_id: StringName) -> int:
@@ -2371,7 +3205,10 @@ func _validate_shop_basket(basket: Dictionary) -> String:
 		clean_items[ing_id] = qty
 		total += price * qty
 	if total > cash:
-		return "Uang tidak cukup (Total Rp%d, Kas Rp%d)." % [total, cash]
+		return "Uang tidak cukup (Total %s, Kas %s)." % [
+			format_rupiah(total),
+			format_rupiah(cash),
+		]
 	if not _kitchen_controller.can_receive_stock_basket(clean_items, _shop_storage_unit_id):
 		return "Kapasitas penyimpanan penuh."
 	return ""
@@ -2390,6 +3227,7 @@ func _build_ingredient_shop_rows() -> void:
 		row.name = "ShopRow_%s" % ing_id
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_theme_constant_override("separation", 4)
 		shop_ingredient_list.add_child(row)
 
 		var def := _kitchen_controller.get_ingredient_def(ing_id)
@@ -2414,25 +3252,23 @@ func _build_ingredient_shop_rows() -> void:
 		var name_label := Label.new()
 		name_label.text = _get_ingredient_display_name(ing_id)
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.clip_text = true
+		name_label.add_theme_font_size_override("font_size", 11)
 		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(name_label)
 
 		var price_label := Label.new()
-		price_label.text = "Rp%d" % _get_ingredient_unit_price(ing_id)
-		price_label.custom_minimum_size = Vector2(64, 0)
+		price_label.text = format_rupiah(_get_ingredient_unit_price(ing_id))
+		price_label.custom_minimum_size = Vector2(46, 0)
+		price_label.add_theme_font_size_override("font_size", 11)
 		price_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(price_label)
-
-		var stock_label := Label.new()
-		stock_label.text = "Stok: 0"
-		stock_label.custom_minimum_size = Vector2(54, 0)
-		stock_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(stock_label)
 
 		var minus_btn := Button.new()
 		minus_btn.name = "Minus_%s" % ing_id
 		minus_btn.text = "-"
-		minus_btn.custom_minimum_size = Vector2(26, 0)
+		minus_btn.custom_minimum_size = Vector2(22, 22)
+		minus_btn.add_theme_font_size_override("font_size", 11)
 		minus_btn.focus_mode = Control.FOCUS_ALL
 		minus_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 		minus_btn.pressed.connect(func() -> void: adjust_shop_quantity(ing_id, -1))
@@ -2440,24 +3276,27 @@ func _build_ingredient_shop_rows() -> void:
 
 		var qty_label := Label.new()
 		qty_label.text = "0"
-		qty_label.custom_minimum_size = Vector2(24, 0)
+		qty_label.custom_minimum_size = Vector2(20, 0)
 		qty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		qty_label.add_theme_font_size_override("font_size", 11)
 		qty_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(qty_label)
 
 		var plus_btn := Button.new()
 		plus_btn.name = "Plus_%s" % ing_id
 		plus_btn.text = "+"
-		plus_btn.custom_minimum_size = Vector2(26, 0)
+		plus_btn.custom_minimum_size = Vector2(22, 22)
+		plus_btn.add_theme_font_size_override("font_size", 11)
 		plus_btn.focus_mode = Control.FOCUS_ALL
 		plus_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 		plus_btn.pressed.connect(func() -> void: adjust_shop_quantity(ing_id, 1))
 		row.add_child(plus_btn)
 
 		var subtotal_label := Label.new()
-		subtotal_label.text = "Rp0"
-		subtotal_label.custom_minimum_size = Vector2(64, 0)
+		subtotal_label.text = format_rupiah(0)
+		subtotal_label.custom_minimum_size = Vector2(48, 0)
 		subtotal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		subtotal_label.add_theme_font_size_override("font_size", 11)
 		subtotal_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(subtotal_label)
 
@@ -2465,7 +3304,6 @@ func _build_ingredient_shop_rows() -> void:
 			"minus_button": minus_btn,
 			"plus_button": plus_btn,
 			"qty_label": qty_label,
-			"stock_label": stock_label,
 			"subtotal_label": subtotal_label,
 			"price_label": price_label,
 		}
@@ -2480,31 +3318,22 @@ func _refresh_ingredient_shop_view() -> void:
 	var run_view := _run_controller.get_run_view()
 	var cash := int(run_view.get("cash", 0))
 	var storage_view := _kitchen_controller.get_storage_unit_view(_shop_storage_unit_id)
-	var stock_by_id: Dictionary[StringName, int] = {}
-	var raw_slots: Variant = storage_view.get("slots", [])
-	if raw_slots is Array:
-		for slot: Variant in raw_slots:
-			if not (slot is Dictionary):
-				continue
-			var s_ing := StringName((slot as Dictionary).get("ingredient_id", &""))
-			var s_qty := int((slot as Dictionary).get("quantity", 0))
-			if s_ing != &"" and s_qty > 0:
-				stock_by_id[s_ing] = int(stock_by_id.get(s_ing, 0)) + s_qty
+	var is_serving := _is_serving_phase()
 
 	if shop_target_label != null:
 		shop_target_label.text = get_target_display_title(_shop_storage_unit_id)
 	if shop_cash_label != null:
-		shop_cash_label.text = "Kas: Rp%d" % cash
+		shop_cash_label.visible = false
 	if shop_capacity_label != null:
-		shop_capacity_label.text = "Sisa kapasitas: %d" % get_shop_remaining_capacity()
+		shop_capacity_label.visible = false
+	if shop_status_row != null:
+		shop_status_row.visible = is_serving
 	if shop_delivery_hint_label != null:
-		shop_delivery_hint_label.text = (
-			"Tiba 100 dtk (Esc/Ambil utk ketik)" if _is_serving_phase() else "Tiba langsung"
-		)
+		shop_delivery_hint_label.visible = is_serving
+		shop_delivery_hint_label.text = "Tiba 100 dtk" if is_serving else ""
 	if shop_retrieve_button != null:
-		var show_retrieve := _is_serving_phase()
-		shop_retrieve_button.visible = show_retrieve
-		shop_retrieve_button.disabled = not show_retrieve
+		shop_retrieve_button.visible = is_serving
+		shop_retrieve_button.disabled = not is_serving
 
 	_refresh_shop_slots(storage_view)
 	_refresh_shop_pending_deliveries()
@@ -2512,13 +3341,11 @@ func _refresh_ingredient_shop_view() -> void:
 	for ing_id: StringName in _shop_ingredient_rows:
 		var controls: Dictionary = _shop_ingredient_rows[ing_id]
 		var qty := int(_pending_shop_basket.get(ing_id, 0))
-		var stock_qty := int(stock_by_id.get(ing_id, 0))
 		var unit_price := _get_ingredient_unit_price(ing_id)
 
-		(controls["stock_label"] as Label).text = "Stok: %d" % stock_qty
 		(controls["qty_label"] as Label).text = "%d" % qty
-		(controls["subtotal_label"] as Label).text = "Rp%d" % (unit_price * qty)
-		(controls["price_label"] as Label).text = "Rp%d" % unit_price
+		(controls["subtotal_label"] as Label).text = format_rupiah(unit_price * qty)
+		(controls["price_label"] as Label).text = format_rupiah(unit_price)
 
 		var minus_btn := controls["minus_button"] as Button
 		minus_btn.disabled = qty <= 0
@@ -2538,7 +3365,7 @@ func _refresh_ingredient_shop_view() -> void:
 		plus_btn.disabled = not can_add
 
 	if shop_total_label != null:
-		shop_total_label.text = "Total: Rp%d" % get_shop_total()
+		shop_total_label.text = "Total: %s" % format_rupiah(get_shop_total())
 
 
 func _refresh_shop_slots(storage_view: Dictionary) -> void:
@@ -2551,11 +3378,9 @@ func _refresh_shop_slots(storage_view: Dictionary) -> void:
 	var raw_slots: Variant = storage_view.get("slots", [])
 	if not (raw_slots is Array):
 		return
-	var idx := 0
 	for raw_slot: Variant in raw_slots:
 		if not (raw_slot is Dictionary):
 			continue
-		idx += 1
 		var slot: Dictionary = raw_slot
 		var ing_id := StringName(slot.get("ingredient_id", &""))
 		var qty := int(slot.get("quantity", 0))
@@ -2569,10 +3394,12 @@ func _refresh_shop_slots(storage_view: Dictionary) -> void:
 		)
 		var lbl := Label.new()
 		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lbl.add_theme_font_size_override("font_size", 10)
+		lbl.clip_text = true
 		if ing_id == &"" or qty <= 0:
-			lbl.text = "S%d: Kosong (0/%d)" % [idx, cap]
+			lbl.text = "Kosong (0/%d)" % cap
 		else:
-			lbl.text = "S%d: %s %d/%d" % [idx, _get_ingredient_display_name(ing_id), qty, cap]
+			lbl.text = "%s %d/%d" % [_get_ingredient_display_name(ing_id), qty, cap]
 		slot_box.add_child(lbl)
 		shop_slots_row.add_child(slot_box)
 
@@ -2598,8 +3425,10 @@ func _refresh_shop_pending_deliveries() -> void:
 		parts.append("%s x%d (%d dtk)" % [_get_ingredient_display_name(ing_id), qty, rem])
 
 	if parts.is_empty():
-		shop_pending_label.text = "Kiriman tertunda: tidak ada"
+		shop_pending_label.visible = false
+		shop_pending_label.text = ""
 	else:
+		shop_pending_label.visible = true
 		shop_pending_label.text = "Kiriman tertunda: %s" % ", ".join(parts)
 
 
@@ -2635,7 +3464,7 @@ func _pick_default_fixture_utility(slot_id: StringName) -> StringName:
 	var ordered := _get_ordered_utility_ids()
 	if slot_id != &"" and _world_map != null and is_instance_valid(_world_map):
 		var slot_view := _world_map.get_placement_slot_view(slot_id)
-		var allowed_raw: Variant = slot_view.get("allowed_kinds", [])
+		var allowed_raw: Variant = slot_view.get("allowed_fixture_kinds", [])
 		if allowed_raw is Array:
 			for u_id in ordered:
 				var def := _run_controller.get_utility_def(u_id)
@@ -2678,10 +3507,106 @@ func _get_occupied_slot_map() -> Dictionary[StringName, StringName]:
 	return result
 
 
+func _get_filtered_utility_ids_for_slot(slot_id: StringName) -> Array[StringName]:
+	var ordered := _get_ordered_utility_ids()
+	if slot_id == &"" or _world_map == null or not is_instance_valid(_world_map):
+		return ordered
+	if _run_controller == null or not is_instance_valid(_run_controller):
+		return ordered
+	var slot_view := _world_map.get_placement_slot_view(slot_id)
+	var allowed_raw: Variant = slot_view.get("allowed_fixture_kinds", [])
+	if not (allowed_raw is Array):
+		return ordered
+	var filtered: Array[StringName] = []
+	for u_id in ordered:
+		var def := _run_controller.get_utility_def(u_id)
+		if def != null and (allowed_raw as Array).has(int(def.fixture_kind)):
+			filtered.append(u_id)
+	return filtered
+
+
+func _create_fixture_shop_icon(def: UtilityDef) -> Control:
+	var box := Control.new()
+	box.name = "IconContainer"
+	box.custom_minimum_size = Vector2(28, 36)
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var tileset_tex := load(WARUNG_TILESET_PATH) as Texture2D
+	if def != null and def.fixture_kind == SharedTypes.FixtureKind.DINING_TABLE:
+		var base := ColorRect.new()
+		base.position = Vector2(4, 3)
+		base.size = Vector2(20, 16)
+		base.color = Color(0.35, 0.21, 0.12, 1.0)
+		base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(base)
+
+		var surface := ColorRect.new()
+		surface.position = Vector2(5, 4)
+		surface.size = Vector2(18, 12)
+		surface.color = Color(0.76, 0.56, 0.34, 1.0)
+		surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(surface)
+
+		if tileset_tex != null:
+			var chair_atlas := AtlasTexture.new()
+			chair_atlas.atlas = tileset_tex
+			chair_atlas.region = WorldMap.REGION_DINING_CHAIR
+			var chair_rect := TextureRect.new()
+			chair_rect.position = Vector2(4, 18)
+			chair_rect.size = Vector2(20, 16)
+			chair_rect.texture = chair_atlas
+			chair_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			chair_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			chair_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			chair_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			box.add_child(chair_rect)
+		return box
+
+	var region := (
+		_world_map.get_fixture_region_rect(int(def.fixture_kind))
+		if def != null and _world_map != null and is_instance_valid(_world_map)
+		else Rect2()
+	)
+	if tileset_tex != null and region.size != Vector2.ZERO:
+		var atlas := AtlasTexture.new()
+		atlas.atlas = tileset_tex
+		atlas.region = region
+		var tex_rect := TextureRect.new()
+		tex_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tex_rect.texture = atlas
+		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(tex_rect)
+	else:
+		var fallback := ColorRect.new()
+		fallback.set_anchors_preset(Control.PRESET_FULL_RECT)
+		fallback.color = Color(0.45, 0.52, 0.64, 1.0)
+		fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(fallback)
+	return box
+
+
+func _format_fixture_description(utility_id: StringName, def: UtilityDef) -> String:
+	var desc: String = FIXTURE_PURPOSE_LABELS.get(utility_id, "Peralatan restoran")
+	var power := 0
+	if _run_controller != null and is_instance_valid(_run_controller) and def != null:
+		power = _run_controller.get_fixture_daily_electricity_cost(
+			utility_id,
+			int(def.fixture_kind)
+		)
+	if power > 0:
+		return "%s (listrik: %s/hari)" % [desc, format_rupiah(power)]
+	return desc
+
+
 func _build_fixture_shop_ui() -> void:
 	_fixture_slot_buttons.clear()
 	_fixture_shop_rows.clear()
 	if fixture_slots_row != null:
+		fixture_slots_row.visible = false
 		for child in fixture_slots_row.get_children():
 			fixture_slots_row.remove_child(child)
 			child.free()
@@ -2690,30 +3615,10 @@ func _build_fixture_shop_ui() -> void:
 			fixture_list.remove_child(child)
 			child.free()
 
-	if _world_map != null and is_instance_valid(_world_map) and fixture_slots_row != null:
-		fixture_slots_row.add_theme_constant_override("separation", 2)
-		for slot_id in _world_map.get_placement_slot_ids():
-			var btn := Button.new()
-			btn.name = "SlotBtn_%s" % slot_id
-			btn.toggle_mode = true
-			btn.focus_mode = Control.FOCUS_ALL
-			btn.mouse_filter = Control.MOUSE_FILTER_STOP
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.custom_minimum_size = Vector2(20, 22)
-			btn.add_theme_font_size_override("font_size", 10)
-			btn.clip_text = true
-			var captured_slot := slot_id
-			btn.pressed.connect(
-				func() -> void:
-					select_fixture_shop_slot(captured_slot)
-			)
-			fixture_slots_row.add_child(btn)
-			_fixture_slot_buttons[slot_id] = btn
-
 	if _run_controller == null or fixture_list == null:
 		return
 
-	for u_id in _get_ordered_utility_ids():
+	for u_id in _get_filtered_utility_ids_for_slot(_selected_fixture_slot_id):
 		var def := _run_controller.get_utility_def(u_id)
 		if def == null:
 			continue
@@ -2730,10 +3635,14 @@ func _build_fixture_shop_ui() -> void:
 		row_box.add_theme_constant_override("separation", 6)
 		row_panel.add_child(row_box)
 
+		var icon_ctrl := _create_fixture_shop_icon(def)
+		row_box.add_child(icon_ctrl)
+
 		var info_col := VBoxContainer.new()
 		info_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		info_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		info_col.add_theme_constant_override("separation", 1)
+		info_col.add_theme_constant_override("separation", 2)
 		row_box.add_child(info_col)
 
 		var title_lbl := Label.new()
@@ -2742,40 +3651,23 @@ func _build_fixture_shop_ui() -> void:
 		title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		title_lbl.add_theme_font_size_override("font_size", 11)
-		var cat_label: String = FIXTURE_CATEGORY_LABELS.get(int(def.fixture_kind), "Peralatan")
-		title_lbl.text = "%s [%s] — Rp%d" % [def.display_name, cat_label, def.purchase_price]
+		var base_font := title_lbl.get_theme_font("font")
+		if base_font != null:
+			var bold_font := FontVariation.new()
+			bold_font.base_font = base_font
+			bold_font.variation_embolden = 0.45
+			title_lbl.add_theme_font_override("font", bold_font)
+		title_lbl.text = "%s: %s" % [def.display_name, format_rupiah(def.purchase_price)]
 		info_col.add_child(title_lbl)
 
-		var benefit_lbl := Label.new()
-		benefit_lbl.name = "BenefitLabel"
-		benefit_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		benefit_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		benefit_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		benefit_lbl.add_theme_font_size_override("font_size", 10)
-		benefit_lbl.modulate = Color(0.75, 0.95, 0.80, 1.0)
-		benefit_lbl.text = "Manfaat: %s" % FIXTURE_BENEFIT_LABELS.get(
-			u_id,
-			"Meningkatkan kapasitas operasional"
-		)
-		info_col.add_child(benefit_lbl)
-
-		var downside_lbl := Label.new()
-		downside_lbl.name = "DownsideLabel"
-		downside_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		downside_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		downside_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		downside_lbl.add_theme_font_size_override("font_size", 10)
-		downside_lbl.modulate = Color(1.0, 0.82, 0.55, 1.0)
-		downside_lbl.text = _describe_fixture_downside(u_id, def)
-		info_col.add_child(downside_lbl)
-
-		var avail_lbl := Label.new()
-		avail_lbl.name = "AvailabilityLabel"
-		avail_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		avail_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		avail_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		avail_lbl.add_theme_font_size_override("font_size", 10)
-		info_col.add_child(avail_lbl)
+		var desc_lbl := Label.new()
+		desc_lbl.name = "DescriptionLabel"
+		desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc_lbl.add_theme_font_size_override("font_size", 10)
+		desc_lbl.text = _format_fixture_description(u_id, def)
+		info_col.add_child(desc_lbl)
 
 		var select_btn := Button.new()
 		select_btn.name = "SelectButton"
@@ -2795,10 +3687,9 @@ func _build_fixture_shop_ui() -> void:
 
 		_fixture_shop_rows[u_id] = {
 			"panel": row_panel,
+			"icon": icon_ctrl,
 			"title_label": title_lbl,
-			"benefit_label": benefit_lbl,
-			"downside_label": downside_lbl,
-			"availability_label": avail_lbl,
+			"description_label": desc_lbl,
 			"select_button": select_btn,
 		}
 
@@ -2826,51 +3717,68 @@ func _layout_fixture_shop_overlay() -> void:
 		maxf(120.0, vp_size.y)
 	)
 	world_visible_rect = world_rect
-	if fixture_shop_overlay == null or fixture_shop_popup == null:
-		return
-	var dimmer := fixture_shop_overlay.get_node_or_null("WorldDimmer") as ColorRect
-	if dimmer != null:
-		dimmer.position = world_rect.position
-		dimmer.size = world_rect.size
 	var margin_x := clampf(roundf(world_rect.size.x * 0.035), 8.0, 20.0)
 	var margin_y := clampf(roundf(world_rect.size.y * 0.04), 8.0, 14.0)
 	var avail_w := maxf(180.0, world_rect.size.x - margin_x * 2.0)
 	var avail_h := maxf(140.0, world_rect.size.y - margin_y * 2.0)
-	var popup_w := minf(488.0, avail_w)
-	var popup_h := minf(332.0, avail_h)
-	var popup_x := world_rect.position.x + floorf((world_rect.size.x - popup_w) * 0.5)
-	var popup_y := world_rect.position.y + floorf((world_rect.size.y - popup_h) * 0.5)
-	fixture_shop_popup.custom_minimum_size = Vector2.ZERO
-	fixture_shop_popup.position = Vector2(popup_x, popup_y)
-	fixture_shop_popup.size = Vector2(popup_w, popup_h)
+	if fixture_shop_overlay != null and fixture_shop_popup != null:
+		var dimmer := fixture_shop_overlay.get_node_or_null("WorldDimmer") as ColorRect
+		if dimmer != null:
+			dimmer.position = world_rect.position
+			dimmer.size = world_rect.size
+		var popup_w := minf(488.0, avail_w)
+		var popup_h := minf(332.0, avail_h)
+		var popup_x := world_rect.position.x + floorf((world_rect.size.x - popup_w) * 0.5)
+		var popup_y := world_rect.position.y + floorf((world_rect.size.y - popup_h) * 0.5)
+		fixture_shop_popup.custom_minimum_size = Vector2.ZERO
+		fixture_shop_popup.position = Vector2(popup_x, popup_y)
+		fixture_shop_popup.size = Vector2(popup_w, popup_h)
+	if edit_menu_overlay != null:
+		var edit_dimmer := edit_menu_overlay.get_node_or_null("WorldDimmer") as ColorRect
+		if edit_dimmer != null:
+			edit_dimmer.position = world_rect.position
+			edit_dimmer.size = world_rect.size
+		if edit_menu_popup != null:
+			var edit_w := minf(456.0, avail_w)
+			var edit_h := minf(280.0, avail_h)
+			var edit_x := world_rect.position.x + floorf((world_rect.size.x - edit_w) * 0.5)
+			var edit_y := world_rect.position.y + floorf((world_rect.size.y - edit_h) * 0.5)
+			edit_menu_popup.custom_minimum_size = Vector2.ZERO
+			edit_menu_popup.position = Vector2(edit_x, edit_y)
+			edit_menu_popup.size = Vector2(edit_w, edit_h)
+	if ingredient_shop_overlay != null:
+		var shop_dimmer := ingredient_shop_overlay.get_node_or_null("WorldDimmer") as ColorRect
+		if shop_dimmer != null:
+			shop_dimmer.position = world_rect.position
+			shop_dimmer.size = world_rect.size
+		if ingredient_shop_popup != null:
+			var shop_w := minf(456.0, avail_w)
+			var shop_h := minf(324.0, avail_h)
+			var shop_x := world_rect.position.x + floorf((world_rect.size.x - shop_w) * 0.5)
+			var shop_y := world_rect.position.y + floorf((world_rect.size.y - shop_h) * 0.5)
+			ingredient_shop_popup.custom_minimum_size = Vector2.ZERO
+			ingredient_shop_popup.position = Vector2(shop_x, shop_y)
+			ingredient_shop_popup.size = Vector2(shop_w, shop_h)
+	if pause_popup != null:
+		var p_size := pause_popup.get_combined_minimum_size()
+		pause_popup.position = Vector2(
+			floorf((vp_size.x - p_size.x) * 0.5),
+			floorf((vp_size.y - p_size.y) * 0.5)
+		)
+		pause_popup.size = p_size
+	_layout_onboarding_overlays(vp_size, world_rect)
 
 
 func _refresh_fixture_shop_view() -> void:
 	if not is_node_ready() or _run_controller == null:
 		return
 
-	var run_view := _run_controller.get_run_view()
-	var cash := int(run_view.get("cash", 0))
-	var daily_power := _run_controller.get_daily_electricity_estimate()
 	if fixture_cash_label != null:
-		fixture_cash_label.text = "Kas: Rp%d" % cash
+		fixture_cash_label.visible = false
 	if fixture_power_label != null:
-		fixture_power_label.text = "Listrik: Rp%d/hari" % daily_power
-
-	var occupied := _get_occupied_slot_map()
-	for slot_id: StringName in _fixture_slot_buttons:
-		var btn := _fixture_slot_buttons[slot_id]
-		if btn == null or not is_instance_valid(btn):
-			continue
-		var selected := (slot_id == _selected_fixture_slot_id)
-		btn.set_pressed_no_signal(selected)
-		var slot_title: String = SLOT_DISPLAY_LABELS.get(slot_id, String(slot_id))
-		if occupied.has(slot_id):
-			var inst_id := occupied[slot_id]
-			var inst_title := get_target_display_title(inst_id)
-			btn.text = "%s (%s)" % [slot_title, inst_title]
-		else:
-			btn.text = "%s (Kosong)" % slot_title
+		fixture_power_label.visible = false
+	if fixture_slots_row != null:
+		fixture_slots_row.visible = false
 
 	for u_id: StringName in _fixture_shop_rows:
 		var controls: Dictionary = _fixture_shop_rows[u_id]
@@ -2891,48 +3799,12 @@ func _refresh_fixture_shop_view() -> void:
 		select_btn.set_pressed_no_signal(selected)
 		select_btn.text = "Terpilih" if selected else "Pilih"
 
-		var compat_slots := _run_controller.get_compatible_empty_slots(u_id)
-		var check := _run_controller.can_purchase_fixture(u_id, _selected_fixture_slot_id)
-		var avail_lbl := controls["availability_label"] as Label
-		if bool(check.get("ok", false)):
-			avail_lbl.text = "Siap dipasang di %s (slot kompatibel: %d)" % [
-				SLOT_DISPLAY_LABELS.get(_selected_fixture_slot_id, String(_selected_fixture_slot_id)),
-				compat_slots.size(),
-			]
-			avail_lbl.modulate = Color(0.65, 0.95, 0.72, 1.0)
-		else:
-			var reason := StringName(check.get("reason", &"invalid"))
-			avail_lbl.text = "%s (slot kosong kompatibel: %d)" % [
-				_describe_fixture_purchase_rejection(reason),
-				compat_slots.size(),
-			]
-			avail_lbl.modulate = Color(0.95, 0.65, 0.65, 1.0)
-
 	if fixture_selection_label != null:
 		var sel_def := _run_controller.get_utility_def(_selected_fixture_utility_id)
-		var slot_label: String = SLOT_DISPLAY_LABELS.get(
-			_selected_fixture_slot_id,
-			String(_selected_fixture_slot_id)
-		)
 		if sel_def != null:
-			fixture_selection_label.text = "%s -> %s (Rp%d)" % [
-				sel_def.display_name,
-				slot_label,
-				sel_def.purchase_price,
-			]
+			fixture_selection_label.text = "Harga: %s" % format_rupiah(sel_def.purchase_price)
 		else:
-			fixture_selection_label.text = "Pilih slot & alat"
-
-
-func _describe_fixture_downside(utility_id: StringName, def: UtilityDef) -> String:
-	var power := 0
-	if _run_controller != null and is_instance_valid(_run_controller):
-		power = _run_controller.get_fixture_daily_electricity_cost(utility_id)
-	if power > 0:
-		return "Beban (Complexity Debt): Listrik +Rp%d/hari & pakai 1 slot permanen" % power
-	if def != null and def.fixture_kind == SharedTypes.FixtureKind.DINING_TABLE:
-		return "Beban (Complexity Debt): Tambah meja meningkatkan tekanan antrean & piring"
-	return "Beban (Complexity Debt): Listrik Rp0/hari, pakai 1 slot dapur permanen"
+			fixture_selection_label.text = "Harga: -"
 
 
 func _describe_fixture_purchase_rejection(reason: StringName) -> String:
@@ -2962,3 +3834,1445 @@ func _clear_fixture_error() -> void:
 	if fixture_error_label != null:
 		fixture_error_label.visible = false
 		fixture_error_label.text = ""
+
+
+func set_onboarding_enabled(enabled: bool) -> void:
+	_onboarding_explicitly_set = true
+	_onboarding_enabled = enabled
+	_ensure_onboarding_connections()
+	if not enabled:
+		_close_story_internal()
+		_tutorial_active = false
+		_active_feature_tip_id = &""
+		_pending_feature_tips.clear()
+		if tutorial_reference_overlay != null:
+			tutorial_reference_overlay.visible = false
+	else:
+		_onboarding_boot_checked = true
+		_on_onboarding_phase_changed(_get_current_phase(), _get_current_day_index())
+	_refresh_onboarding_visibility()
+
+
+func is_onboarding_enabled() -> bool:
+	return _onboarding_enabled
+
+
+func _check_auto_onboarding_start() -> void:
+	_ensure_onboarding_connections()
+	if _onboarding_boot_checked:
+		return
+	if _game_root == null or _run_controller == null:
+		return
+	var tree := get_tree()
+	if tree == null:
+		return
+	if not _onboarding_explicitly_set:
+		if tree.current_scene != _game_root:
+			return
+		_onboarding_enabled = true
+	_onboarding_boot_checked = true
+	if _onboarding_enabled:
+		_on_onboarding_phase_changed(_get_current_phase(), _get_current_day_index())
+	_refresh_onboarding_visibility()
+
+
+func _ensure_onboarding_connections() -> void:
+	if edit_menu_confirm_button != null:
+		var cb := Callable(self, &"_on_onboarding_edit_menu_confirm_pressed")
+		if not edit_menu_confirm_button.pressed.is_connected(cb):
+			edit_menu_confirm_button.pressed.connect(cb)
+
+
+func _on_onboarding_edit_menu_confirm_pressed() -> void:
+	if not _onboarding_enabled:
+		return
+	if not is_edit_menu_open() and _has_selected_recipes():
+		_tutorial_flags[&"edit_menu_confirmed"] = true
+		_evaluate_onboarding_progress()
+
+
+func is_story_open() -> bool:
+	return (
+		_active_story_id != &""
+		and _active_story_line_index >= 0
+		and _active_story_line_index < _active_story_lines.size()
+	)
+
+
+func is_reference_open() -> bool:
+	return (
+		tutorial_reference_overlay != null
+		and tutorial_reference_overlay.visible
+	)
+
+
+func open_reference() -> bool:
+	if not _onboarding_enabled or _is_gameplay_paused():
+		return false
+	if is_story_open() or is_edit_menu_open() or is_ingredient_shop_open() or is_fixture_shop_open():
+		return false
+	if tutorial_reference_overlay == null:
+		return false
+	if reference_body_label != null:
+		reference_body_label.text = NarrativeTutorialCatalog.get_reference_summary_text()
+	tutorial_reference_overlay.visible = true
+	_refresh_onboarding_visibility()
+	if reference_close_button != null:
+		reference_close_button.grab_focus()
+	return true
+
+
+func close_reference() -> void:
+	if tutorial_reference_overlay != null:
+		tutorial_reference_overlay.visible = false
+	_release_button_focus_if_any()
+	_refresh_onboarding_visibility()
+
+
+func open_opening_story() -> bool:
+	if not _onboarding_enabled:
+		return false
+	if _shown_day_stories.get(1, false):
+		return false
+	_shown_day_stories[1] = true
+	return _open_story_payload(NarrativeTutorialCatalog.get_opening_story())
+
+
+func open_day_narrative(day_index: int) -> bool:
+	if not _onboarding_enabled:
+		return false
+	if day_index <= 1:
+		return open_opening_story()
+	if _shown_day_stories.get(day_index, false):
+		return false
+	var payload := NarrativeTutorialCatalog.get_day_intro_story(day_index)
+	if payload.is_empty():
+		return false
+	_shown_day_stories[day_index] = true
+	return _open_story_payload(payload)
+
+
+func open_day_7_epilogue(goal_outcome: int) -> bool:
+	if not _onboarding_enabled:
+		return false
+	if _shown_day7_epilogue:
+		return false
+	_shown_day7_epilogue = true
+	return _open_story_payload(NarrativeTutorialCatalog.get_day_7_epilogue(goal_outcome))
+
+
+func _open_story_payload(payload: Dictionary) -> bool:
+	var raw_lines: Variant = payload.get("lines", [])
+	if not (raw_lines is Array) or (raw_lines as Array).is_empty():
+		return false
+	_active_story_id = StringName(payload.get("id", &""))
+	_active_story_title = str(payload.get("title", ""))
+	_active_story_lines.clear()
+	for entry_v in (raw_lines as Array):
+		if entry_v is Dictionary:
+			_active_story_lines.append((entry_v as Dictionary).duplicate(true))
+	if _active_story_lines.is_empty():
+		_active_story_id = &""
+		return false
+	_active_story_line_index = 0
+	if tutorial_reference_overlay != null:
+		tutorial_reference_overlay.visible = false
+	_update_story_dialogue_view()
+	_refresh_onboarding_visibility()
+	if story_continue_button != null and not _is_gameplay_paused():
+		story_continue_button.grab_focus()
+	return true
+
+
+func advance_story() -> bool:
+	if not is_story_open() or _is_gameplay_paused():
+		return false
+	_active_story_line_index += 1
+	if _active_story_line_index >= _active_story_lines.size():
+		var finished_id := _active_story_id
+		_close_story_internal()
+		_on_story_finished(finished_id)
+		_refresh_onboarding_visibility()
+		_evaluate_onboarding_progress()
+		_release_button_focus_if_any()
+		return true
+	_update_story_dialogue_view()
+	_refresh_onboarding_visibility()
+	return true
+
+
+func skip_story() -> void:
+	if not is_story_open() or _is_gameplay_paused():
+		return
+	var finished_id := _active_story_id
+	_close_story_internal()
+	_on_story_finished(finished_id)
+	_refresh_onboarding_visibility()
+	_evaluate_onboarding_progress()
+	_release_button_focus_if_any()
+
+
+func get_story_state_view() -> Dictionary:
+	var open := is_story_open()
+	var line: Dictionary = {}
+	if open:
+		line = _active_story_lines[_active_story_line_index]
+	return {
+		"open": open,
+		"id": _active_story_id,
+		"title": _active_story_title,
+		"line_index": _active_story_line_index,
+		"line_count": _active_story_lines.size(),
+		"speaker": str(line.get("speaker", "")),
+		"text": str(line.get("text", "")),
+	}
+
+
+func _close_story_internal() -> void:
+	_active_story_id = &""
+	_active_story_title = ""
+	_active_story_lines.clear()
+	_active_story_line_index = 0
+
+
+func _on_story_finished(finished_id: StringName) -> void:
+	if finished_id == NarrativeTutorialCatalog.DAY_1_OPENING_ID:
+		if not _tutorial_completed and not _tutorial_skipped:
+			_start_tutorial()
+
+
+func _update_story_dialogue_view() -> void:
+	if not is_story_open():
+		return
+	var line := _active_story_lines[_active_story_line_index]
+	if story_title_label != null:
+		story_title_label.text = _active_story_title
+	if story_speaker_label != null:
+		story_speaker_label.text = str(line.get("speaker", "Narasi"))
+	if story_body_label != null:
+		story_body_label.text = str(line.get("text", ""))
+	if story_progress_label != null:
+		story_progress_label.text = "%d/%d" % [
+			_active_story_line_index + 1,
+			_active_story_lines.size(),
+		]
+	var portrait_path := str(line.get("portrait_path", ""))
+	if story_portrait_frame != null and story_portrait_rect != null:
+		if not portrait_path.is_empty() and ResourceLoader.exists(portrait_path):
+			var tex := load(portrait_path) as Texture2D
+			story_portrait_rect.texture = tex
+			story_portrait_frame.visible = tex != null
+		else:
+			story_portrait_rect.texture = null
+			story_portrait_frame.visible = false
+	if story_continue_button != null:
+		var is_last := _active_story_line_index >= _active_story_lines.size() - 1
+		story_continue_button.text = "Selesai" if is_last else "Lanjut"
+
+
+func _start_tutorial() -> void:
+	if not _onboarding_enabled or _tutorial_completed or _tutorial_skipped:
+		return
+	_tutorial_active = true
+	_tutorial_step_index = 0
+	_tutorial_started_day = _get_current_day_index()
+	_tutorial_flags.clear()
+	_tutorial_hint_text = ""
+	_evaluate_onboarding_progress()
+	_refresh_onboarding_visibility()
+
+
+func is_tutorial_active() -> bool:
+	return (
+		_onboarding_enabled
+		and _tutorial_active
+		and not _tutorial_skipped
+		and not _tutorial_completed
+	)
+
+
+func is_tutorial_completed() -> bool:
+	return _tutorial_completed
+
+
+func is_tutorial_skipped() -> bool:
+	return _tutorial_skipped
+
+
+func get_tutorial_step_id() -> StringName:
+	if not is_tutorial_active():
+		return &""
+	var steps := NarrativeTutorialCatalog.get_tutorial_steps()
+	if _tutorial_step_index < 0 or _tutorial_step_index >= steps.size():
+		return &""
+	return StringName(steps[_tutorial_step_index].get("id", &""))
+
+
+func get_tutorial_guidance_view() -> Dictionary:
+	if tutorial_guidance_overlay == null:
+		return {
+			"active": false,
+			"target_id": &"",
+			"target_rect": Rect2(),
+			"callout_rect": Rect2(),
+			"badge_text": "",
+			"marker_number": "",
+			"pointer_side": &"",
+		}
+	return {
+		"active": tutorial_guidance_overlay.is_guidance_active(),
+		"target_id": tutorial_guidance_overlay.get_target_id(),
+		"target_rect": tutorial_guidance_overlay.get_target_rect(),
+		"callout_rect": tutorial_guidance_overlay.get_callout_rect(),
+		"badge_text": tutorial_guidance_overlay.get_badge_text(),
+		"marker_number": tutorial_guidance_overlay.get_marker_number(),
+		"pointer_side": tutorial_guidance_overlay.get_pointer_side(),
+	}
+
+
+func skip_tutorial() -> void:
+	_tutorial_skipped = true
+	_tutorial_active = false
+	_tutorial_hint_text = ""
+	_refresh_onboarding_visibility()
+	_release_button_focus_if_any()
+
+
+func restart_tutorial() -> void:
+	_onboarding_explicitly_set = true
+	_onboarding_enabled = true
+	_onboarding_boot_checked = true
+	_tutorial_skipped = false
+	_tutorial_completed = false
+	_tutorial_active = true
+	_tutorial_step_index = 0
+	_tutorial_started_day = _get_current_day_index()
+	_tutorial_flags.clear()
+	_tutorial_hint_text = ""
+	if tutorial_reference_overlay != null:
+		tutorial_reference_overlay.visible = false
+	_evaluate_onboarding_progress()
+	_refresh_onboarding_visibility()
+	_release_button_focus_if_any()
+
+
+func get_active_feature_tip_id() -> StringName:
+	return _active_feature_tip_id
+
+
+func has_shown_feature_tip(tip_id: StringName) -> bool:
+	return bool(_shown_feature_tips.get(tip_id, false))
+
+
+func dismiss_feature_tip() -> void:
+	if _active_feature_tip_id == &"":
+		return
+	_active_feature_tip_id = &""
+	if not _pending_feature_tips.is_empty():
+		var next_id := _pending_feature_tips[0]
+		_pending_feature_tips.remove_at(0)
+		_activate_feature_tip(next_id)
+	_refresh_onboarding_visibility()
+	_release_button_focus_if_any()
+
+
+func _queue_feature_tip(tip_id: StringName) -> void:
+	if not _onboarding_enabled or tip_id == &"":
+		return
+	if _shown_feature_tips.get(tip_id, false):
+		return
+	if _active_feature_tip_id == tip_id or _pending_feature_tips.has(tip_id):
+		return
+	if _active_feature_tip_id == &"":
+		_activate_feature_tip(tip_id)
+	else:
+		_pending_feature_tips.append(tip_id)
+	_refresh_onboarding_visibility()
+
+
+func _activate_feature_tip(tip_id: StringName) -> void:
+	var tip := NarrativeTutorialCatalog.get_feature_discovery_tip(tip_id)
+	if tip.is_empty():
+		return
+	_shown_feature_tips[tip_id] = true
+	_active_feature_tip_id = tip_id
+	if tip_title_label != null:
+		tip_title_label.text = str(tip.get("title", "Tip"))
+	if tip_body_label != null:
+		tip_body_label.text = str(tip.get("body", ""))
+
+
+func _on_story_continue_pressed() -> void:
+	advance_story()
+
+
+func _on_story_skip_pressed() -> void:
+	skip_story()
+
+
+func _on_tutorial_skip_pressed() -> void:
+	skip_tutorial()
+
+
+func _on_tutorial_next_pressed() -> void:
+	if not is_tutorial_active() or _is_gameplay_paused():
+		return
+	var step_id := get_tutorial_step_id()
+	if step_id == &"step_01_objective":
+		_tutorial_flags[&"step_01_next"] = true
+	elif step_id == &"step_09_finish_day":
+		_tutorial_flags[&"step_09_done"] = true
+	_evaluate_onboarding_progress()
+	_refresh_onboarding_visibility()
+	_release_button_focus_if_any()
+
+
+func _on_tip_dismiss_pressed() -> void:
+	dismiss_feature_tip()
+
+
+func _on_tutorial_help_pressed() -> void:
+	if is_reference_open():
+		close_reference()
+	else:
+		open_reference()
+
+
+func _on_reference_restart_pressed() -> void:
+	restart_tutorial()
+
+
+func _on_reference_close_pressed() -> void:
+	close_reference()
+
+
+func _on_onboarding_phase_changed(phase: int, day_index: int) -> void:
+	if not _onboarding_enabled:
+		return
+	if phase == SharedTypes.Phase.SERVING or phase == SharedTypes.Phase.CLOSING:
+		if is_story_open():
+			_close_story_internal()
+		if is_reference_open():
+			close_reference()
+	if phase == SharedTypes.Phase.RESULTS or phase == SharedTypes.Phase.FINISHED:
+		for stale_tip in [&"online_offer", &"first_driver_pickup", &"driver_overflow", &"serving_belanja"]:
+			_pending_feature_tips.erase(stale_tip)
+		if _active_feature_tip_id in [&"online_offer", &"first_driver_pickup", &"driver_overflow", &"serving_belanja"]:
+			dismiss_feature_tip()
+	if phase == SharedTypes.Phase.PLANNING:
+		if day_index >= 2 and _tutorial_active and _tutorial_started_day < day_index:
+			_tutorial_completed = true
+			_tutorial_active = false
+		if day_index == 1:
+			open_opening_story()
+		elif day_index >= 2 and day_index <= 7:
+			open_day_narrative(day_index)
+	elif phase == SharedTypes.Phase.FINISHED:
+		var goal_outcome: int = SharedTypes.DayOutcome.UNDECIDED
+		if _run_controller != null:
+			goal_outcome = int(_run_controller.get_run_view().get("goal_outcome", SharedTypes.DayOutcome.UNDECIDED))
+		open_day_7_epilogue(goal_outcome)
+	_evaluate_onboarding_progress()
+	_refresh_onboarding_visibility()
+
+
+func _record_onboarding_feedback(code: StringName) -> void:
+	if not _onboarding_enabled:
+		return
+	match code:
+		&"item_taken":
+			if _held_has_ingredient(&"beras"):
+				_tutorial_flags[&"rice_picked"] = true
+				_tutorial_hint_text = "Beras diambil! Sekarang cuci di Wastafel."
+			if _held_has_ingredient(&"telur"):
+				_tutorial_flags[&"telur_picked"] = true
+				_tutorial_hint_text = "Telur diambil! Bawa ke Kompor lalu ketik 'goreng'."
+		&"item_washed":
+			if _held_has_ingredient_state(&"beras", SharedTypes.PrepState.WASHED):
+				_tutorial_flags[&"rice_washed"] = true
+				_tutorial_hint_text = "Beras sudah dicuci! Lanjut ke Penanak Nasi."
+		&"item_cooked":
+			if _held_has_ingredient_state(&"telur", SharedTypes.PrepState.COOKED):
+				_tutorial_flags[&"telur_cooked"] = true
+				_tutorial_hint_text = "Telur matang! Rakit bersama piring & nasi."
+		&"rice_cooked":
+			_tutorial_flags[&"rice_cooked"] = true
+			_tutorial_hint_text = "Nasi matang! 1x masak = 5 porsi nasi."
+		&"rice_taken":
+			_tutorial_flags[&"rice_cooked"] = true
+			_tutorial_flags[&"rice_taken"] = true
+		&"dish_ready":
+			if _has_valid_nasi_telor_in_hand_or_table():
+				_tutorial_flags[&"dish_assembled"] = true
+				_tutorial_hint_text = "Nasi Telor siap! Antarkan ke meja pelanggan."
+		&"order_served":
+			_tutorial_flags[&"order_served"] = true
+			_tutorial_hint_text = "Pesanan tersaji!"
+		&"wrong_order":
+			if is_tutorial_active() and get_tutorial_step_id() == &"step_07_serve_customer":
+				_tutorial_hint_text = "Hidangan belum sesuai! Pastikan membawa piring Nasi Telor matang."
+		&"invalid_key":
+			if (
+				is_tutorial_active()
+				and get_tutorial_step_id() == &"step_07_serve_customer"
+				and _kitchen_controller != null
+				and not _has_valid_nasi_telor_in_hand_or_table()
+			):
+				_tutorial_hint_text = "Hidangan belum sesuai! Pastikan membawa piring Nasi Telor matang."
+		&"table_cleaned":
+			_tutorial_flags[&"table_cleaned"] = true
+			_tutorial_hint_text = "Meja bersih! Cuci piring kotor di Wastafel."
+		&"plate_washed":
+			_tutorial_flags[&"plate_washed"] = true
+			_tutorial_hint_text = "Piring bersih kembali ke tangan!"
+
+
+func _evaluate_onboarding_progress() -> void:
+	if not _onboarding_enabled:
+		return
+	_evaluate_feature_discovery()
+	if not is_tutorial_active():
+		_refresh_onboarding_visibility()
+		return
+
+	var phase := _get_current_phase()
+	var day_index := _get_current_day_index()
+	if day_index >= 2 and _tutorial_started_day < day_index:
+		_tutorial_completed = true
+		_tutorial_active = false
+		_refresh_onboarding_visibility()
+		return
+
+	var steps := NarrativeTutorialCatalog.get_tutorial_steps()
+	var prev_idx := _tutorial_step_index
+	var safety: int = 0
+	while _tutorial_active and _tutorial_step_index < steps.size() and safety < 12:
+		safety += 1
+		var step_id := StringName(steps[_tutorial_step_index].get("id", &""))
+		if not _is_tutorial_step_satisfied(step_id, phase):
+			break
+		_tutorial_step_index += 1
+		if _tutorial_step_index >= steps.size():
+			_tutorial_completed = true
+			_tutorial_active = false
+			break
+
+	if _tutorial_step_index != prev_idx and get_tutorial_step_id() != &"step_05_cook_egg":
+		if _tutorial_step_index >= prev_idx + 2:
+			_tutorial_hint_text = ""
+
+	_update_tutorial_banner_view()
+	_refresh_onboarding_visibility()
+
+
+func _is_tutorial_step_satisfied(step_id: StringName, phase: int) -> bool:
+	var already_results := (
+		phase == SharedTypes.Phase.RESULTS
+		or phase == SharedTypes.Phase.FINISHED
+	)
+	match step_id:
+		&"step_01_objective":
+			return (
+				bool(_tutorial_flags.get(&"step_01_next", false))
+				or phase == SharedTypes.Phase.SERVING
+				or phase == SharedTypes.Phase.CLOSING
+				or already_results
+			)
+		&"step_02_prepare_ingredients":
+			var both_ready := _has_or_used_ingredient(&"beras") and _has_or_used_ingredient(&"telur")
+			var rice_retrieved := (
+				bool(_tutorial_flags.get(&"rice_picked", false))
+				or _held_has_ingredient(&"beras")
+				or _held_has_ingredient_state(&"beras", SharedTypes.PrepState.WASHED)
+				or bool(_tutorial_flags.get(&"rice_washed", false))
+				or _rice_cooker_has_cooked_rice()
+				or bool(_tutorial_flags.get(&"rice_cooked", false))
+			)
+			return already_results or (both_ready and rice_retrieved)
+		&"step_03_wash_rice":
+			return (
+				already_results
+				or bool(_tutorial_flags.get(&"rice_washed", false))
+				or _held_has_ingredient_state(&"beras", SharedTypes.PrepState.WASHED)
+				or bool(_tutorial_flags.get(&"rice_cooked", false))
+				or _rice_cooker_has_cooked_rice()
+			)
+		&"step_04_cook_rice":
+			return (
+				already_results
+				or bool(_tutorial_flags.get(&"rice_cooked", false))
+				or _rice_cooker_has_cooked_rice()
+				or _has_valid_nasi_telor_in_hand_or_table()
+				or bool(_tutorial_flags.get(&"order_served", false))
+			)
+		&"step_05_cook_egg":
+			return (
+				already_results
+				or bool(_tutorial_flags.get(&"telur_cooked", false))
+				or _stove_or_plate_has_cooked_telur()
+				or _has_valid_nasi_telor_in_hand_or_table()
+				or bool(_tutorial_flags.get(&"order_served", false))
+			)
+		&"step_06_assemble_dish":
+			return (
+				already_results
+				or _has_valid_nasi_telor_in_hand_or_table()
+				or bool(_tutorial_flags.get(&"dish_assembled", false))
+				or bool(_tutorial_flags.get(&"order_served", false))
+			)
+		&"step_07_serve_customer":
+			return already_results or bool(_tutorial_flags.get(&"order_served", false))
+		&"step_08_clean_and_wash":
+			return (
+				already_results
+				or (
+					bool(_tutorial_flags.get(&"table_cleaned", false))
+					and bool(_tutorial_flags.get(&"plate_washed", false))
+				)
+			)
+		&"step_09_finish_day":
+			return (
+				bool(_tutorial_flags.get(&"step_09_done", false))
+				or phase == SharedTypes.Phase.FINISHED
+			)
+		_:
+			return false
+
+
+func _evaluate_feature_discovery() -> void:
+	if _service_controller != null:
+		var offer_view := _service_controller.get_online_offer_view()
+		if (
+			bool(offer_view.get("acceptance_enabled", false))
+			or StringName(offer_view.get("preview_recipe_id", &"")) != &""
+		):
+			_queue_feature_tip(&"online_offer")
+
+		var has_driver_at_pickup := false
+		var has_driver_overflow := false
+		for dv in _service_controller.get_driver_views():
+			var drv_state := int(dv.get("state", dv.get("driver_state", -1)))
+			if drv_state == SharedTypes.DriverState.AT_PICKUP_SPOT:
+				has_driver_at_pickup = true
+			elif drv_state == SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE:
+				has_driver_overflow = true
+		if has_driver_at_pickup:
+			_queue_feature_tip(&"first_driver_pickup")
+		if not has_driver_overflow:
+			var qv := _service_controller.get_customer_queue_view()
+			if int(qv.get("outside_driver_count", 0)) > 0:
+				has_driver_overflow = true
+		if has_driver_overflow:
+			_queue_feature_tip(&"driver_overflow")
+
+	if _run_controller != null:
+		var rv := _run_controller.get_run_view()
+		var unlocked: Array = rv.get("unlocked_recipe_ids", [])
+		if unlocked.size() > 1:
+			_queue_feature_tip(&"recipe_unlock")
+		var selected: Array = rv.get("selected_recipe_ids", [])
+		if _recipes_need_chopped_veggie(selected) or _recipes_need_chopped_veggie(unlocked):
+			_queue_feature_tip(&"potong_veggie")
+		if _get_current_phase() == SharedTypes.Phase.RESULTS:
+			var settlement := _run_controller.get_day_settlement_view(_get_current_day_index())
+			if float(settlement.get("penalty_debt_after", 0.0)) > 0.0:
+				_queue_feature_tip(&"demand_and_debt")
+
+
+func _recipes_need_chopped_veggie(recipe_ids: Array) -> bool:
+	if _kitchen_controller == null:
+		return false
+	for r_id_v in recipe_ids:
+		var def := _kitchen_controller.get_recipe_def(StringName(r_id_v))
+		if def == null:
+			continue
+		var parts_v: Variant = def.get("required_parts")
+		if not (parts_v is Array):
+			parts_v = def.get("ingredients")
+		if not (parts_v is Array):
+			continue
+		for part_v in (parts_v as Array):
+			var ing_id: StringName = &""
+			var req_state: int = -1
+			if part_v is Dictionary:
+				var d := part_v as Dictionary
+				ing_id = StringName(d.get("ingredient_id", &""))
+				req_state = int(d.get("state", d.get("required_state", -1)))
+			elif part_v is Object:
+				var obj := part_v as Object
+				var ing_v: Variant = obj.get("ingredient_id")
+				if ing_v != null:
+					ing_id = StringName(ing_v)
+				var st_v: Variant = obj.get("state")
+				if st_v == null:
+					st_v = obj.get("required_state")
+				if st_v != null:
+					req_state = int(st_v)
+			if (
+				req_state == SharedTypes.PrepState.CHOPPED
+				or req_state == SharedTypes.PrepState.CHOPPED_AND_COOKED
+				or ing_id in [&"sayur", &"kol", &"timun", &"selada", &"tomat"]
+			):
+				return true
+	return false
+
+
+func _has_selected_recipes() -> bool:
+	if _run_controller == null:
+		return false
+	var selected: Array = _run_controller.get_run_view().get("selected_recipe_ids", [])
+	return not selected.is_empty()
+
+
+func _storage_has_ingredient(ingredient_id: StringName) -> bool:
+	if _kitchen_controller == null:
+		return false
+	for unit_id in [&"storage_box", &"fridge_a", &"fridge_b", &"fridge_c"]:
+		if not _kitchen_controller.has_storage_unit(unit_id):
+			continue
+		var view := _kitchen_controller.get_storage_unit_view(unit_id)
+		var slots_v: Variant = view.get("slots", [])
+		if not (slots_v is Array):
+			continue
+		for slot_v in (slots_v as Array):
+			if slot_v is Dictionary:
+				var d := slot_v as Dictionary
+				if (
+					StringName(d.get("ingredient_id", &"")) == ingredient_id
+					and int(d.get("quantity", 0)) > 0
+				):
+					return true
+	return false
+
+
+func _held_has_ingredient(ingredient_id: StringName) -> bool:
+	if _kitchen_controller == null:
+		return false
+	return _view_has_ingredient_state(_kitchen_controller.get_held_item_view(), ingredient_id, -1)
+
+
+func _held_has_ingredient_state(ingredient_id: StringName, req_state: int) -> bool:
+	if _kitchen_controller == null:
+		return false
+	return _view_has_ingredient_state(_kitchen_controller.get_held_item_view(), ingredient_id, req_state)
+
+
+func _has_or_used_ingredient(ingredient_id: StringName) -> bool:
+	if _storage_has_ingredient(ingredient_id) or _held_has_ingredient(ingredient_id):
+		return true
+	if _kitchen_controller != null:
+		for deliv: Dictionary in _kitchen_controller.get_pending_delivery_views():
+			if StringName(deliv.get("ingredient_id", &"")) == ingredient_id:
+				return true
+		var wt := _kitchen_controller.get_work_table_view(&"work_table")
+		if _view_has_ingredient_state(wt, ingredient_id, -1):
+			return true
+		if ingredient_id == &"beras":
+			if _rice_cooker_has_rice() or bool(_tutorial_flags.get(&"rice_cooked", false)):
+				return true
+		if ingredient_id == &"telur":
+			if bool(_tutorial_flags.get(&"telur_cooked", false)) or _stove_or_plate_has_cooked_telur():
+				return true
+	if bool(_tutorial_flags.get(&"order_served", false)):
+		return true
+	return false
+
+
+func _find_storage_with_ingredient(ingredient_id: StringName) -> StringName:
+	if _kitchen_controller != null:
+		for unit_id in [&"storage_box", &"fridge_a", &"fridge_b", &"fridge_c"]:
+			if not _kitchen_controller.has_storage_unit(unit_id):
+				continue
+			var view := _kitchen_controller.get_storage_unit_view(unit_id)
+			var slots_v: Variant = view.get("slots", [])
+			if not (slots_v is Array):
+				continue
+			for slot_v in (slots_v as Array):
+				if slot_v is Dictionary:
+					var d := slot_v as Dictionary
+					if (
+						StringName(d.get("ingredient_id", &"")) == ingredient_id
+						and int(d.get("quantity", 0)) > 0
+					):
+						return unit_id
+	return &"storage_box"
+
+
+func _rice_cooker_has_rice() -> bool:
+	if _kitchen_controller == null:
+		return false
+	var view := _kitchen_controller.get_cooker_output_view(&"rice_cooker")
+	if int(view.get("portions", 0)) > 0:
+		return true
+	return _view_has_ingredient_state(view, &"beras", -1)
+
+
+func _rice_cooker_has_cooked_rice() -> bool:
+	if _kitchen_controller == null:
+		return false
+	for cooker_id in _kitchen_controller.get_cooker_ids():
+		var view := _kitchen_controller.get_cooker_output_view(cooker_id)
+		if int(view.get("portions", 0)) > 0 and _view_has_ingredient_state(
+			view, &"beras", SharedTypes.PrepState.COOKED_RICE
+		):
+			return true
+	if _view_has_ingredient_state(
+		_kitchen_controller.get_held_item_view(), &"beras", SharedTypes.PrepState.COOKED_RICE
+	):
+		return true
+	return _view_has_ingredient_state(
+		_kitchen_controller.get_work_table_view(&"work_table"),
+		&"beras",
+		SharedTypes.PrepState.COOKED_RICE
+	)
+
+
+func _stove_or_plate_has_cooked_telur() -> bool:
+	if _kitchen_controller == null:
+		return false
+	for cooker_id in _kitchen_controller.get_cooker_ids():
+		if cooker_id == &"rice_cooker":
+			continue
+		var c_view := _kitchen_controller.get_cooker_output_view(cooker_id)
+		if _view_has_ingredient_state(c_view, &"telur", SharedTypes.PrepState.COOKED):
+			return true
+	if _view_has_ingredient_state(
+		_kitchen_controller.get_held_item_view(), &"telur", SharedTypes.PrepState.COOKED
+	):
+		return true
+	return _view_has_ingredient_state(
+		_kitchen_controller.get_work_table_view(&"work_table"),
+		&"telur",
+		SharedTypes.PrepState.COOKED
+	)
+
+
+func _has_valid_nasi_telor_in_hand_or_table() -> bool:
+	if _kitchen_controller == null:
+		return false
+	var held := _kitchen_controller.get_held_item_view()
+	if StringName(held.get("matched_recipe_id", &"")) == &"nasi_telor":
+		return true
+	var table := _kitchen_controller.get_work_table_view(&"work_table")
+	return StringName(table.get("matched_recipe_id", &"")) == &"nasi_telor"
+
+
+func _washer_dirty_plate_count() -> int:
+	if _kitchen_controller == null:
+		return 0
+	return int(_kitchen_controller.get_washer_view().get("dirty_plate_count", 0))
+
+
+func _find_waiting_table_for_tutorial(fallback_to_first: bool = true) -> StringName:
+	if _service_controller == null:
+		return &"dining_table_01" if fallback_to_first else &""
+	var first_waiting := &""
+	for table_id in _service_controller.get_registered_table_ids():
+		var tview := _service_controller.get_table_view(table_id)
+		if int(tview.get("state", -1)) != SharedTypes.TableState.OCCUPIED_WAITING:
+			continue
+		if first_waiting == &"":
+			first_waiting = table_id
+		var order_id := StringName(tview.get("order_id_or_empty", &""))
+		if order_id != &"":
+			var oview := _service_controller.get_order_view(order_id)
+			if StringName(oview.get("recipe_id", &"")) == &"nasi_telor":
+				return table_id
+	if first_waiting != &"":
+		return first_waiting
+	return &"dining_table_01" if fallback_to_first else &""
+
+
+func _find_dirty_table_for_tutorial() -> StringName:
+	if _service_controller == null:
+		return &""
+	for table_id in _service_controller.get_registered_table_ids():
+		if int(_service_controller.get_table_view(table_id).get("state", -1)) == SharedTypes.TableState.DIRTY:
+			return table_id
+	return &""
+
+
+func _find_eating_table_for_tutorial() -> StringName:
+	if _service_controller == null:
+		return &""
+	for table_id in _service_controller.get_registered_table_ids():
+		if int(_service_controller.get_table_view(table_id).get("state", -1)) == SharedTypes.TableState.OCCUPIED_EATING:
+			return table_id
+	return &""
+
+
+func _view_has_ingredient_state(view: Dictionary, ingredient_id: StringName, req_state: int) -> bool:
+	if view.is_empty():
+		return false
+	var parts_v: Variant = view.get("parts", [])
+	if not (parts_v is Array):
+		return false
+	for part_v in (parts_v as Array):
+		var ing := &""
+		var st := -1
+		if part_v is Dictionary:
+			var d := part_v as Dictionary
+			ing = StringName(d.get("ingredient_id", &""))
+			st = int(d.get("state", -1))
+		elif part_v is Object:
+			var obj := part_v as Object
+			var ing_v: Variant = obj.get("ingredient_id")
+			if ing_v != null:
+				ing = StringName(ing_v)
+			var st_v: Variant = obj.get("state")
+			if st_v != null:
+				st = int(st_v)
+		if ing == ingredient_id and (req_state < 0 or st == req_state):
+			return true
+	return false
+
+
+func _resolve_step_guidance_detail() -> Dictionary:
+	var steps := NarrativeTutorialCatalog.get_tutorial_steps()
+	if _tutorial_step_index < 0 or _tutorial_step_index >= steps.size():
+		return {}
+	var step := steps[_tutorial_step_index]
+	var step_id := StringName(step.get("id", &""))
+	var title := str(step.get("title", "Tutorial"))
+	var body := str(step.get("body", ""))
+	var allow_next := bool(step.get("allow_next", false))
+	var next_label := str(step.get("next_label", "Lanjut"))
+	var phase := _get_current_phase()
+
+	var target_id: StringName = &""
+	var marker := ""
+	var badge := ""
+
+	var held := _kitchen_controller.get_held_item_view() if _kitchen_controller != null else {}
+	var table := _kitchen_controller.get_work_table_view(&"work_table") if _kitchen_controller != null else {}
+
+	match step_id:
+		&"step_01_objective":
+			pass
+		&"step_02_prepare_ingredients":
+			var has_b := _has_or_used_ingredient(&"beras")
+			var has_t := _has_or_used_ingredient(&"telur")
+			marker = "2"
+			if not has_b or not has_t:
+				target_id = &"storage_box"
+				badge = "[2] Ketik: beli"
+				var missing := "beras dan telur" if (not has_b and not has_t) else ("beras" if not has_b else "telur")
+				body = "Kita butuh %s. Klik Kotak Bahan lalu ketik 'beli' untuk membeli bahan!" % missing
+			elif phase == SharedTypes.Phase.PLANNING:
+				target_id = &"ui_start_service"
+				badge = "[2] Ketik: buka"
+				if _kitchen_controller != null and _kitchen_controller.get_selected_target_id() != &"":
+					body = "Stok beras & telur siap! Klik lantai / tekan ESC, lalu ketik 'buka' untuk membuka warung."
+				else:
+					body = "Stok beras & telur siap! Ketik 'buka' untuk membuka warung agar bahan bisa diambil."
+			else:
+				target_id = _find_storage_with_ingredient(&"beras")
+				badge = "[2] Ketik: beras"
+				body = "Klik Kotak Bahan dan ketik 'beras' untuk mengambil beras. (Telur akan diambil dengan 'telur' nanti.)"
+		&"step_03_wash_rice":
+			marker = "3"
+			if _view_has_ingredient_state(held, &"beras", SharedTypes.PrepState.RAW):
+				target_id = &"washer"
+				badge = "[3] Ketik: cuci"
+				body = "Beras harus dicuci terlebih dahulu. Klik Wastafel, lalu ketik 'cuci'."
+			elif _view_has_ingredient_state(table, &"beras", SharedTypes.PrepState.RAW):
+				target_id = &"work_table_stage"
+				badge = "[3] Ambil beras"
+				body = "Klik Meja Kerja untuk mengambil kembali beras mentah, lalu cuci di Wastafel."
+			else:
+				target_id = _find_storage_with_ingredient(&"beras")
+				badge = "[3] Ketik: beras"
+				body = "Ambil beras dari Kotak Bahan ('beras'), lalu bawa ke Wastafel ('cuci')."
+		&"step_04_cook_rice":
+			marker = "4"
+			if _view_has_ingredient_state(held, &"beras", SharedTypes.PrepState.WASHED):
+				target_id = &"rice_cooker"
+				badge = "[4] Ketik: masak"
+				body = "Masukkan beras yang sudah dicuci ke Penanak Nasi. Klik Penanak Nasi lalu ketik 'masak'."
+			elif _view_has_ingredient_state(table, &"beras", SharedTypes.PrepState.WASHED):
+				target_id = &"work_table_stage"
+				badge = "[4] Ambil beras cuci"
+				body = "Ambil beras cuci di Meja Kerja lalu masukkan ke Penanak Nasi ('masak')."
+			else:
+				target_id = &"rice_cooker"
+				badge = "[4] Penanak Nasi"
+		&"step_05_cook_egg":
+			marker = "5"
+			if _view_has_ingredient_state(held, &"telur", SharedTypes.PrepState.RAW):
+				target_id = &"stove"
+				badge = "[5] Ketik: goreng"
+				body = "1x masak menghasilkan 5 porsi nasi! Sekarang bawa telur ke Kompor, klik lalu ketik 'goreng'."
+			elif _view_has_ingredient_state(table, &"telur", SharedTypes.PrepState.RAW):
+				target_id = &"work_table_stage"
+				badge = "[5] Ambil telur"
+				body = "Klik Meja Kerja untuk mengambil telur mentah lalu goreng di Kompor ('goreng')."
+			elif not held.is_empty():
+				if table.is_empty():
+					target_id = &"work_table_stage"
+					badge = "[5] Taruh sementara"
+					body = "1x masak = 5 porsi nasi! Taruh item di tangan ke Meja Kerja sebentar, lalu ambil 'telur' di Kotak Bahan."
+				else:
+					target_id = _find_storage_with_ingredient(&"telur")
+					badge = "[5] Ketik: telur"
+			elif _storage_has_ingredient(&"telur"):
+				target_id = _find_storage_with_ingredient(&"telur")
+				badge = "[5] Ketik: telur"
+				body = "Satu kali memasak menghasilkan 5 porsi nasi! Klik Kotak Bahan lalu ketik 'telur'."
+			else:
+				target_id = &"storage_box"
+				badge = "[5] Ketik: beli"
+				body = "Stok telur habis! Klik Kotak Bahan -> ketik 'beli' untuk membeli telur."
+		&"step_06_assemble_dish":
+			marker = "6"
+			var held_plate_id := StringName(held.get("plate_id", &""))
+			var held_parts: Array = held.get("parts", [])
+			var table_plate_id := StringName(table.get("plate_id", &""))
+			var held_has_egg := _view_has_ingredient_state(held, &"telur", SharedTypes.PrepState.COOKED)
+			var held_has_rice := _view_has_ingredient_state(held, &"beras", SharedTypes.PrepState.COOKED_RICE)
+			var table_has_egg := _view_has_ingredient_state(table, &"telur", SharedTypes.PrepState.COOKED)
+			var table_has_rice := _view_has_ingredient_state(table, &"beras", SharedTypes.PrepState.COOKED_RICE)
+			if held_plate_id == &"" and not held.is_empty():
+				if table_plate_id != &"":
+					target_id = &"work_table_stage"
+					badge = "[6] Klik Meja Kerja"
+					body = "Klik Meja Kerja untuk menggabungkan bahan matang di tangan ke piring di meja!"
+				else:
+					target_id = &"plate_rack"
+					badge = "[6] Klik Rak Piring"
+					body = "Klik Rak Piring agar bahan matang langsung di piring (atau taruh dulu di Meja Kerja)!"
+			elif held_plate_id != &"" and held_parts.is_empty():
+				if table_has_egg or table_has_rice:
+					target_id = &"work_table_stage"
+					badge = "[6] Klik Meja Kerja"
+					body = "Piring bersih siap! Klik Meja Kerja untuk memindahkan bahan matang ke piring."
+				else:
+					target_id = &"rice_cooker"
+					badge = "[6] Ketik: nasi"
+					body = "Piring bersih siap! Klik Penanak Nasi lalu ketik 'nasi'."
+			elif held_plate_id != &"" and held_has_egg and not held_has_rice:
+				if table_has_rice:
+					target_id = &"work_table_stage"
+					badge = "[6] Klik Meja Kerja"
+					body = "Klik Meja Kerja untuk menambahkan nasi ke piring telur!"
+				else:
+					target_id = &"rice_cooker"
+					badge = "[6] Ketik: nasi"
+					body = "Telur sudah di piring! Klik Penanak Nasi lalu ketik 'nasi' untuk melengkapi Nasi Telor."
+			elif held_plate_id != &"" and held_has_rice and not held_has_egg:
+				if table_has_egg:
+					target_id = &"work_table_stage"
+					badge = "[6] Klik Meja Kerja"
+					body = "Nasi sudah di piring! Klik Meja Kerja untuk menggabungkan telur goreng."
+				else:
+					target_id = _find_storage_with_ingredient(&"telur")
+					badge = "[6] Siapkan telur"
+					body = "Nasi di piring siap — ambil & goreng telur jika belum matang."
+			elif not table.is_empty():
+				if table_plate_id != &"":
+					target_id = &"work_table_stage"
+					badge = "[6] Klik Meja Kerja"
+					body = "Lanjutkan merakit Nasi Telor di Meja Kerja atau Penanak Nasi ('nasi')."
+				else:
+					target_id = &"plate_rack"
+					badge = "[6] Klik Rak Piring"
+					body = "Bahan matang sudah siap di Meja Kerja! Klik Rak Piring untuk ambil piring bersih, lalu gabung."
+			else:
+				target_id = &"plate_rack"
+				badge = "[6] Klik Rak Piring"
+		&"step_07_serve_customer":
+			marker = "7"
+			if StringName(table.get("matched_recipe_id", &"")) == &"nasi_telor" and held.is_empty():
+				target_id = &"work_table_stage"
+				badge = "[7] Ambil Nasi Telor"
+				body = "Nasi Telor sudah jadi di Meja Kerja! Klik Meja Kerja untuk mengambilnya."
+			else:
+				target_id = _find_waiting_table_for_tutorial()
+				badge = "[7] Ketik: saji"
+				body = "Pesanan sudah siap! Pilih meja pelanggan yang menunggu, lalu ketik 'saji'."
+		&"step_08_clean_and_wash":
+			var dirty_tid := _find_dirty_table_for_tutorial()
+			if bool(_tutorial_flags.get(&"table_cleaned", false)) or _washer_dirty_plate_count() > 0:
+				marker = "8b"
+				if not held.is_empty() and table.is_empty():
+					target_id = &"work_table_stage"
+					badge = "[8b] Taruh dulu"
+					body = "Kosongkan tangan (taruh di Meja Kerja) sebelum mencuci piring kotor di Wastafel."
+				else:
+					target_id = &"washer"
+					badge = "[8b] Ketik: cuci"
+					body = "Piring kotor masuk Wastafel. Dengan tangan kosong, klik Wastafel lalu ketik 'cuci'."
+			elif dirty_tid != &"":
+				marker = "8a"
+				target_id = dirty_tid
+				badge = "[8a] Ketik: bersihkan"
+				body = "Pelanggan selesai makan & meja kotor! Klik meja tersebut lalu ketik 'bersihkan'."
+			else:
+				marker = "8"
+				var eat_tid := _find_eating_table_for_tutorial()
+				target_id = eat_tid if eat_tid != &"" else &"dining_table_01"
+				badge = "[8] Tunggu selesai"
+				body = "Pelanggan sedang makan (~20 dtk). Setelah selesai, bersihkan mejanya ('bersihkan') lalu cuci piring di Wastafel."
+		&"step_09_finish_day":
+			marker = "9"
+			if phase == SharedTypes.Phase.RESULTS or phase == SharedTypes.Phase.FINISHED:
+				target_id = &"ui_day_result"
+				badge = "[9] Hasil Hari 1"
+			else:
+				allow_next = false
+				var wait_tid := _find_waiting_table_for_tutorial(false)
+				var dirty_tid := _find_dirty_table_for_tutorial()
+				target_id = wait_tid if wait_tid != &"" else dirty_tid
+				badge = "[9] Lanjut layani" if target_id != &"" else ""
+				body = "Teruskan melayani pelanggan yang tersisa sampai jam warung tutup otomatis, lalu cek laporan hasil hari pertama."
+
+	if not _tutorial_hint_text.is_empty() and step_id != &"step_01_objective" and phase != SharedTypes.Phase.RESULTS:
+		body = _tutorial_hint_text + "\n" + body
+
+	return {
+		"id": step_id,
+		"title": title,
+		"body": body,
+		"allow_next": allow_next,
+		"next_label": next_label,
+		"target_id": target_id,
+		"marker": marker,
+		"badge": badge,
+	}
+
+
+func _update_tutorial_banner_view() -> void:
+	if not is_tutorial_active():
+		return
+	var detail := _resolve_step_guidance_detail()
+	if detail.is_empty():
+		return
+	if tutorial_title_label != null:
+		tutorial_title_label.text = str(detail.get("title", "Tutorial"))
+	if tutorial_body_label != null:
+		tutorial_body_label.text = str(detail.get("body", ""))
+	if tutorial_next_button != null:
+		tutorial_next_button.visible = bool(detail.get("allow_next", false))
+		tutorial_next_button.text = str(detail.get("next_label", "Lanjut"))
+
+
+func _refresh_onboarding_visibility() -> void:
+	var paused := _is_gameplay_paused()
+	var story_open := is_story_open()
+	var ref_open := is_reference_open()
+
+	if story_dialogue_overlay != null:
+		story_dialogue_overlay.visible = _onboarding_enabled and story_open and not paused
+		if story_dialogue_overlay.visible:
+			_update_story_dialogue_view()
+
+	if tutorial_reference_overlay != null:
+		tutorial_reference_overlay.visible = (
+			_onboarding_enabled and ref_open and not paused and not story_open
+		)
+
+	if tutorial_help_button != null:
+		tutorial_help_button.visible = _onboarding_enabled and not paused and not story_open
+
+	var modal_blocking := (
+		story_open
+		or ref_open
+		or is_edit_menu_open()
+		or is_ingredient_shop_open()
+		or is_fixture_shop_open()
+	)
+	if tutorial_banner != null:
+		tutorial_banner.visible = (
+			is_tutorial_active()
+			and not paused
+			and not story_open
+			and not ref_open
+		)
+		if tutorial_banner.visible:
+			_update_tutorial_banner_view()
+
+	if feature_tip_panel != null:
+		feature_tip_panel.visible = (
+			_onboarding_enabled
+			and _active_feature_tip_id != &""
+			and not paused
+			and not modal_blocking
+		)
+
+	var vp := get_viewport()
+	if vp != null:
+		var vp_size := vp.get_visible_rect().size
+		if vp_size.x > 0.0 and vp_size.y > 0.0:
+			var hud_w: float = left_hud_region.size.x if left_hud_region != null else 136.0
+			var world_rect := Rect2(hud_w, 0.0, maxf(0.0, vp_size.x - hud_w), vp_size.y)
+			_layout_onboarding_overlays(vp_size, world_rect)
+	_refresh_visual_guidance()
+
+
+func _refresh_visual_guidance() -> void:
+	if tutorial_guidance_overlay == null:
+		return
+	var paused := _is_gameplay_paused()
+	var story_open := is_story_open()
+	var ref_open := is_reference_open()
+	var modal_blocking := (
+		story_open
+		or ref_open
+		or is_edit_menu_open()
+		or is_ingredient_shop_open()
+		or is_fixture_shop_open()
+	)
+	if not _onboarding_enabled or paused or modal_blocking:
+		tutorial_guidance_overlay.clear_guidance()
+		return
+
+	var target_id: StringName = &""
+	var badge := ""
+	var marker := ""
+	var accent := Color(0.32, 0.96, 0.62, 1.0)
+
+	if is_tutorial_active():
+		var detail := _resolve_step_guidance_detail()
+		target_id = StringName(detail.get("target_id", &""))
+		badge = str(detail.get("badge", ""))
+		marker = str(detail.get("marker", ""))
+
+	if target_id == &"" and _active_feature_tip_id != &"":
+		var tip_spec := _resolve_tip_guidance_detail(_active_feature_tip_id)
+		target_id = StringName(tip_spec.get("target_id", &""))
+		badge = str(tip_spec.get("badge", ""))
+		marker = str(tip_spec.get("marker", "!"))
+		accent = Color(0.98, 0.80, 0.30, 1.0)
+
+	if target_id == &"":
+		tutorial_guidance_overlay.clear_guidance()
+		return
+
+	var resolved := _resolve_guidance_target_rect(target_id)
+	var target_rect: Rect2 = resolved.get("rect", Rect2())
+	var bounds_rect: Rect2 = resolved.get("bounds_rect", world_visible_rect)
+	if target_rect.size.x <= 0.0 or target_rect.size.y <= 0.0:
+		tutorial_guidance_overlay.clear_guidance()
+		return
+
+	var avoid_rect := Rect2()
+	if interaction_dialogue != null and interaction_dialogue.visible:
+		avoid_rect = interaction_dialogue.get_global_rect()
+	if target_id == &"ui_day_result" and tutorial_banner != null and tutorial_banner.visible:
+		var banner_rect := tutorial_banner.get_global_rect()
+		avoid_rect = banner_rect if avoid_rect.size == Vector2.ZERO else avoid_rect.merge(banner_rect)
+
+	tutorial_guidance_overlay.set_guidance(
+		target_id,
+		target_rect,
+		bounds_rect,
+		badge,
+		marker,
+		accent,
+		avoid_rect,
+		paused
+	)
+
+
+func _resolve_tip_guidance_detail(tip_id: StringName) -> Dictionary:
+	var phase := _get_current_phase()
+	match tip_id:
+		&"online_offer":
+			if phase == SharedTypes.Phase.SERVING:
+				return { "target_id": &"online_station", "marker": "!", "badge": "[Tip] Ketik: terima" }
+			return {}
+		&"first_driver_pickup":
+			if phase == SharedTypes.Phase.SERVING and _service_controller != null:
+				for dv in _service_controller.get_driver_views():
+					if int(dv.get("state", dv.get("driver_state", -1))) == SharedTypes.DriverState.AT_PICKUP_SPOT:
+						var did := StringName(dv.get("driver_id", &""))
+						if did != &"":
+							return { "target_id": did, "marker": "!", "badge": "[Tip] Ketik: saji" }
+			return {}
+		&"driver_overflow":
+			if phase == SharedTypes.Phase.SERVING and _service_controller != null:
+				for dv in _service_controller.get_driver_views():
+					if int(dv.get("state", dv.get("driver_state", -1))) == SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE:
+						var did := StringName(dv.get("driver_id", &""))
+						if did != &"":
+							return { "target_id": did, "marker": "!", "badge": "[Tip] Spot Penuh" }
+			return { "target_id": &"driver_overflow", "marker": "!", "badge": "[Tip] Antrean Penuh" } if phase == SharedTypes.Phase.SERVING else {}
+		&"potong_veggie":
+			if phase == SharedTypes.Phase.SERVING:
+				return { "target_id": &"work_table_chop", "marker": "!", "badge": "[Tip] Ketik: potong" }
+			return {}
+		&"serving_belanja":
+			if phase != SharedTypes.Phase.SERVING:
+				return {}
+			if _kitchen_controller != null and _kitchen_controller.has_storage_unit(_last_shop_storage_unit_id):
+				return { "target_id": _last_shop_storage_unit_id, "marker": "!", "badge": "[Tip] Kirim ~100d" }
+			return { "target_id": &"storage_box", "marker": "!", "badge": "[Tip] Kirim ~100d" }
+		&"recipe_unlock":
+			if phase == SharedTypes.Phase.PLANNING:
+				return { "target_id": &"ui_edit_menu_button", "marker": "!", "badge": "[Tip] Edit Menu" }
+			return {}
+		&"demand_and_debt":
+			if phase == SharedTypes.Phase.RESULTS or phase == SharedTypes.Phase.FINISHED:
+				return { "target_id": &"ui_day_result", "marker": "!", "badge": "[Tip] Penalti" }
+			return {}
+		_:
+			return {}
+
+
+func _resolve_guidance_target_rect(target_id: StringName) -> Dictionary:
+	var vp := get_viewport()
+	var vp_size := vp.get_visible_rect().size if vp != null else LOGICAL_VIEWPORT_SIZE
+	var hud_w: float = left_hud_region.size.x if left_hud_region != null else 136.0
+	var world_bounds := Rect2(hud_w, 0.0, maxf(160.0, vp_size.x - hud_w), vp_size.y)
+	var full_bounds := Rect2(0.0, 0.0, vp_size.x, vp_size.y)
+
+	match target_id:
+		&"ui_start_service":
+			if start_hint_label != null and start_hint_label.is_visible_in_tree():
+				return { "rect": start_hint_label.get_global_rect().grow(3.0), "bounds_rect": full_bounds }
+			return {}
+		&"ui_edit_menu_button":
+			if edit_menu_button != null and edit_menu_button.is_visible_in_tree():
+				return { "rect": edit_menu_button.get_global_rect().grow(2.0), "bounds_rect": full_bounds }
+			return {}
+		&"ui_day_result":
+			if day_result_side_panel != null and day_result_side_panel.visible:
+				var raw_rect := day_result_side_panel.get_global_rect()
+				var clamped_rect := raw_rect.intersection(full_bounds)
+				return {
+					"rect": clamped_rect if clamped_rect.size.x > 0.0 else raw_rect,
+					"bounds_rect": full_bounds,
+				}
+			return {}
+
+	if _world_map == null or not is_instance_valid(_world_map):
+		return {}
+	var node: Node2D = null
+	if _world_map.registry != null and _world_map.registry.has_object(target_id):
+		node = _world_map.registry.get_object(target_id)
+	if node == null and _world_map.has_method(&"get_driver_visual_node"):
+		node = _world_map.get_driver_visual_node(target_id)
+	if node == null or not is_instance_valid(node) or not node.is_visible_in_tree():
+		return {}
+
+	return {
+		"rect": _compute_world_node_canvas_rect(node),
+		"bounds_rect": world_bounds,
+	}
+
+
+func _compute_world_node_canvas_rect(node: Node2D) -> Rect2:
+	if node is Area2D:
+		var has_shape := false
+		var min_pt := Vector2(INF, INF)
+		var max_pt := Vector2(-INF, -INF)
+		for child in (node as Area2D).get_children():
+			if not (child is CollisionShape2D):
+				continue
+			var col := child as CollisionShape2D
+			if col.disabled or col.shape == null:
+				continue
+			var ext := Vector2(14.0, 14.0)
+			if col.shape is RectangleShape2D:
+				ext = (col.shape as RectangleShape2D).size * 0.5
+			elif col.shape is CircleShape2D:
+				var r := (col.shape as CircleShape2D).radius
+				ext = Vector2(r, r)
+			var xform := col.get_global_transform_with_canvas()
+			for corner: Vector2 in [
+				Vector2(-ext.x, -ext.y),
+				Vector2(ext.x, -ext.y),
+				Vector2(ext.x, ext.y),
+				Vector2(-ext.x, ext.y),
+			]:
+				var c: Vector2 = xform * corner
+				min_pt.x = minf(min_pt.x, c.x)
+				min_pt.y = minf(min_pt.y, c.y)
+				max_pt.x = maxf(max_pt.x, c.x)
+				max_pt.y = maxf(max_pt.y, c.y)
+			has_shape = true
+		if has_shape:
+			return Rect2(min_pt, max_pt - min_pt)
+
+	var xform := node.get_global_transform_with_canvas()
+	var center := xform.origin
+	var scale_vec := xform.get_scale()
+	var half := Vector2(15.0 * absf(scale_vec.x), 15.0 * absf(scale_vec.y))
+	return Rect2(center - half, half * 2.0)
+
+
+func _layout_onboarding_overlays(vp_size: Vector2, world_rect: Rect2) -> void:
+	var world_left: float = clampf(world_rect.position.x, 0.0, vp_size.x)
+	var world_w: float = maxf(160.0, vp_size.x - world_left)
+
+	if story_dialogue_overlay != null:
+		var dimmer := story_dialogue_overlay.get_node_or_null("WorldDimmer") as Control
+		if dimmer != null:
+			dimmer.position = Vector2(world_left, 0.0)
+			dimmer.size = Vector2(world_w, vp_size.y)
+	if story_popup != null:
+		var sw: float = clampf(world_w - 20.0, 200.0, 468.0)
+		var sh: float = clampf(126.0 if vp_size.y >= 320.0 else 120.0, 96.0, vp_size.y - 20.0)
+		var sx: float = world_left + floorf((world_w - sw) * 0.5)
+		var sy: float = maxf(10.0, vp_size.y - sh - 10.0)
+		story_popup.position = Vector2(sx, sy)
+		story_popup.size = Vector2(sw, sh)
+
+	if tutorial_reference_overlay != null:
+		var ref_dimmer := tutorial_reference_overlay.get_node_or_null("WorldDimmer") as Control
+		if ref_dimmer != null:
+			ref_dimmer.position = Vector2(world_left, 0.0)
+			ref_dimmer.size = Vector2(world_w, vp_size.y)
+	if reference_popup != null:
+		var rw: float = clampf(world_w - 24.0, 220.0, 456.0)
+		var rh: float = clampf(vp_size.y - 36.0, 180.0, 304.0)
+		var rx: float = world_left + floorf((world_w - rw) * 0.5)
+		var ry: float = floorf((vp_size.y - rh) * 0.5)
+		reference_popup.position = Vector2(rx, ry)
+		reference_popup.size = Vector2(rw, rh)
+
+	var results_visible := day_result_side_panel != null and day_result_side_panel.visible
+	var right_space: float = world_w
+	if tutorial_help_button != null:
+		var hx: float = (
+			maxf(world_left + 6.0, day_result_side_panel.position.x - 78.0)
+			if results_visible
+			else vp_size.x - 76.0
+		)
+		tutorial_help_button.position = Vector2(hx, 4.0)
+		tutorial_help_button.size = Vector2(72.0, 20.0)
+
+	if results_visible:
+		var panel_left := day_result_side_panel.position.x
+		var avail_left: float = maxf(140.0, panel_left - world_left - 12.0)
+		var bw: float = clampf(avail_left, 140.0, 234.0)
+		var bh: float = clampf(120.0 if vp_size.y >= 320.0 else 96.0, 76.0, vp_size.y - 36.0)
+		if tutorial_banner != null:
+			tutorial_banner.position = Vector2(world_left + 6.0, maxf(8.0, vp_size.y - bh - 8.0))
+			tutorial_banner.size = Vector2(bw, bh)
+		if feature_tip_panel != null:
+			var th: float = clampf(114.0 if vp_size.y >= 320.0 else 86.0, 68.0, vp_size.y - 40.0)
+			var ty: float = (
+				maxf(28.0, tutorial_banner.position.y - th - 6.0)
+				if tutorial_banner != null and tutorial_banner.visible
+				else 28.0
+			)
+			feature_tip_panel.position = Vector2(world_left + 6.0, ty)
+			feature_tip_panel.size = Vector2(bw, th)
+		return
+
+	var strip_w: float = clampf(172.0 if vp_size.x >= 560.0 else 150.0, 128.0, maxf(130.0, right_space - 12.0))
+	var bx: float = vp_size.x - strip_w - 4.0
+	var by: float = 28.0
+	var banner_h: float = clampf(122.0 if vp_size.y >= 320.0 else 102.0, 76.0, vp_size.y - by - 8.0)
+	if tutorial_banner != null:
+		tutorial_banner.position = Vector2(bx, by)
+		tutorial_banner.size = Vector2(strip_w, banner_h)
+	if feature_tip_panel != null:
+		var th: float = clampf(114.0 if vp_size.y >= 320.0 else 92.0, 64.0, vp_size.y - 36.0)
+		var ty: float = by
+		if tutorial_banner != null and tutorial_banner.visible:
+			ty = tutorial_banner.position.y + tutorial_banner.size.y + 6.0
+			if ty + th > vp_size.y - 4.0:
+				ty = maxf(28.0, vp_size.y - th - 4.0)
+		feature_tip_panel.position = Vector2(bx, ty)
+		feature_tip_panel.size = Vector2(strip_w, th)

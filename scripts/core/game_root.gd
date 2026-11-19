@@ -7,10 +7,12 @@ extends Node2D
 ## ServiceController, and RunController lifecycle boundaries synchronously.
 
 signal phase_changed(phase: int, day_index: int)
+signal pause_changed(paused: bool)
 
 var _phase: SharedTypes.Phase = SharedTypes.Phase.PLANNING
 var _service_elapsed: float = 0.0
 var _closing_in_progress: bool = false
+var _paused: bool = false
 var _initialized: bool = false
 
 var _kitchen_controller: Node = null
@@ -24,6 +26,9 @@ func _ready() -> void:
 	_initialized = true
 	_phase = SharedTypes.Phase.PLANNING
 	_service_elapsed = 0.0
+	_paused = false
+	if is_inside_tree() and get_tree() != null:
+		get_tree().paused = false
 
 	if _kitchen_controller == null:
 		_kitchen_controller = get_node_or_null("KitchenController")
@@ -37,8 +42,14 @@ func _ready() -> void:
 		_run_controller.start_new_run()
 
 
+func _exit_tree() -> void:
+	if _paused and is_inside_tree() and get_tree() != null:
+		get_tree().paused = false
+	_paused = false
+
+
 func _process(delta: float) -> void:
-	if _phase != SharedTypes.Phase.SERVING or delta <= 0.0:
+	if _phase != SharedTypes.Phase.SERVING or _paused or delta <= 0.0:
 		return
 
 	_service_elapsed += delta
@@ -63,7 +74,7 @@ func bind_controllers(kitchen: Node, service: Node, run: Node) -> void:
 ## Transitions PLANNING -> SERVING once when KitchenController, RunController,
 ## and ServiceController are valid and plan finalization succeeds.
 func start_service_requested() -> bool:
-	if _phase != SharedTypes.Phase.PLANNING:
+	if _phase != SharedTypes.Phase.PLANNING or _paused:
 		return false
 	if (
 		not _is_valid_kitchen_controller()
@@ -134,7 +145,7 @@ func request_extra_mode() -> bool:
 ## Closes SERVING synchronously and idempotently only when ServiceController
 ## is bound and reports drained.
 func request_close_if_drained() -> void:
-	if _phase != SharedTypes.Phase.SERVING or _closing_in_progress:
+	if _phase != SharedTypes.Phase.SERVING or _closing_in_progress or _paused:
 		return
 	if _service_controller == null or not _service_controller.has_method(&"is_drained"):
 		return
@@ -185,6 +196,28 @@ func request_close_if_drained() -> void:
 		post_close_phase = SharedTypes.Phase.FINISHED
 	_set_phase(post_close_phase)
 	_closing_in_progress = false
+
+
+func set_paused(paused: bool) -> bool:
+	if paused:
+		if (
+			_phase != SharedTypes.Phase.PLANNING
+			and _phase != SharedTypes.Phase.SERVING
+		):
+			return false
+	if _paused == paused:
+		if is_inside_tree() and get_tree() != null and get_tree().paused != _paused:
+			get_tree().paused = _paused
+		return true
+	_paused = paused
+	if is_inside_tree() and get_tree() != null:
+		get_tree().paused = _paused
+	pause_changed.emit(_paused)
+	return true
+
+
+func is_paused() -> bool:
+	return _paused
 
 
 func is_serving() -> bool:
@@ -278,6 +311,12 @@ func _is_valid_service_controller() -> bool:
 
 
 func _set_phase(next_phase: SharedTypes.Phase) -> void:
+	if (
+		_paused
+		and next_phase != SharedTypes.Phase.PLANNING
+		and next_phase != SharedTypes.Phase.SERVING
+	):
+		set_paused(false)
 	_phase = next_phase
 	phase_changed.emit(_phase, get_day_index())
 

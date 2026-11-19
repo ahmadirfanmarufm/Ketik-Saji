@@ -23,6 +23,7 @@ func _init() -> void:
 	await _test_dialogue_display_and_clamping()
 	await _test_m1_kitchen_gameplay_and_visuals()
 	await _test_m1_edge_cases_and_readonly()
+	await _test_p5a_beef_held_and_cooked_visuals()
 	await _test_worktable_hitboxes_player_movement_and_results_layout()
 	print("SUMMARY fails=%d" % _fails)
 	quit(_fails)
@@ -31,6 +32,16 @@ func _init() -> void:
 func _type_word(ui: GameUI, word: String) -> void:
 	for i in range(word.length()):
 		_send_key(ui, word.unicode_at(i))
+
+
+func _click_world_pos(ui: GameUI, pos: Vector2) -> void:
+	if ui.interaction_dialogue != null and ui.interaction_dialogue.visible:
+		if ui.interaction_dialogue.get_global_rect().has_point(pos):
+			var clear_pt := Vector2(352, 276)
+			if ui.interaction_dialogue.get_global_rect().has_point(clear_pt):
+				clear_pt = Vector2(160, 148)
+			_send_left_click(ui, clear_pt)
+	_send_left_click(ui, pos)
 
 
 func _send_left_click(ui: GameUI, pos: Vector2) -> void:
@@ -92,15 +103,16 @@ func _test_ui_structure_and_wiring() -> void:
 
 	_check("Candidate B World position is (144, 36)", world.position == Vector2(144, 36))
 	_check(
-		"LeftHUDRegion rect is (0, 0, 112, 360)",
-		ui.left_hud_region.get_rect() == Rect2(0, 0, 112, 360)
-		and ui.ui_safe_rect == Rect2(0, 0, 112, 360)
-		and ui.world_visible_rect == Rect2(112, 0, 528, 360)
+		"LeftHUDRegion rect is (0, 0, 136, 360)",
+		ui.left_hud_region.get_rect() == Rect2(0, 0, 136, 360)
+		and ui.ui_safe_rect == Rect2(0, 0, 136, 360)
+		and ui.world_visible_rect == Rect2(136, 0, 504, 360)
 	)
 	_check(
-		"UIRoot and InteractionDialogue use MOUSE_FILTER_IGNORE",
+		"UIRoot uses MOUSE_FILTER_IGNORE and InteractionDialogue + AllowedCommandsLabel use MOUSE_FILTER_STOP",
 		ui.ui_root.mouse_filter == Control.MOUSE_FILTER_IGNORE
-		and ui.interaction_dialogue.mouse_filter == Control.MOUSE_FILTER_IGNORE
+		and ui.interaction_dialogue.mouse_filter == Control.MOUSE_FILTER_STOP
+		and ui.allowed_commands_label.mouse_filter == Control.MOUSE_FILTER_STOP
 	)
 	_check(
 		"LeftHUDRegion and DayResultSidePanel use MOUSE_FILTER_STOP",
@@ -134,7 +146,8 @@ func _test_ui_structure_and_wiring() -> void:
 		"initial PhaseLabel is persiapan sebelum buka",
 		ui.phase_label.text == "persiapan sebelum buka"
 	)
-	_check("initial CashLabel is Kas: Rp100000", ui.cash_label.text == "Kas: Rp100000")
+	_check("initial CashLabel is Kas: Rp 100k", ui.cash_label.text == "Kas: Rp 100k")
+	_check("initial GoalTargetLabel is Target: Rp 700k", ui.goal_target_label.text == "Target: Rp 700k")
 	_check(
 		"initial GoalLabel shows Target Hari 7 percentage",
 		ui.goal_label.text == "Target Hari 7: 14%"
@@ -146,6 +159,7 @@ func _test_ui_structure_and_wiring() -> void:
 	_check(
 		"initial PlanningBox visible with forecast, Edit Menu, buka hint, and stub buttons",
 		ui.planning_box.visible
+		and ui.potential_demand_label.text == "Potensi Tamu: 5"
 		and ui.forecast_quota_label.text == "Target Tamu: 4"
 		and ui.edit_menu_button.visible
 		and ui.start_hint_label.text == "Ketik: buka"
@@ -246,7 +260,7 @@ func _test_phase_and_hud_transitions() -> void:
 		and not ui.continue_button.disabled
 		and not ui.extra_mode_button.visible
 		and ui.result_title_label.text == "Hasil Hari 1"
-		and ui.settlement_summary_label.text.contains("Kas Akhir: Rp98000")
+		and ui.settlement_summary_label.text.contains("Kas Akhir: Rp 98k")
 	)
 	ui.continue_button.grab_focus()
 	_check("ContinueButton grabs keyboard focus in RESULTS", ui.continue_button.has_focus())
@@ -312,10 +326,10 @@ func _test_mouse_input_and_world_offset() -> void:
 	var service := game_root.get_service_controller() as ServiceController
 	var ui := game_root.get_node("UI") as GameUI
 
-	# 1. Click inside LeftHUDRegion (50, 180) does not reach KitchenController.
-	_send_left_click(ui, Vector2(50, 180))
+	# 1. Click inside empty LeftHUDRegion space (50, 320) does not reach KitchenController.
+	_send_left_click(ui, Vector2(50, 320))
 	_check(
-		"HUD click at (50, 180) blocked from World",
+		"HUD click at (50, 320) blocked from World",
 		kitchen.get_player_tile() == Vector2i(6, 3)
 		and kitchen.get_selected_target_id() == &""
 	)
@@ -342,20 +356,21 @@ func _test_mouse_input_and_world_offset() -> void:
 	# WorkTable is at local (112, 80) -> canvas (256, 116).
 	# StagingTarget is at local (107, 80) -> canvas (251, 116).
 	# ChoppingTarget is at local (122, 80) -> canvas (266, 116).
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	_check(
 		"click StagingTarget at (251, 116) selects work_table_stage (not work_table)",
 		kitchen.get_selected_target_id() == &"work_table_stage"
 	)
-	_send_left_click(ui, Vector2(266, 116))
+	_click_world_pos(ui, Vector2(266, 116))
 	_check(
 		"click ChoppingTarget at (266, 116) selects work_table_chop (not work_table)",
 		kitchen.get_selected_target_id() == &"work_table_chop"
 	)
 
-	# 5. InteractionDialogue pass-through via Viewport.push_input():
+	# 5. InteractionDialogue click blocking via Viewport.push_input():
 	# Move to (3, 7) at canvas (256, 276), then click dining_table_01 at (2, 7) -> (224, 276).
 	# Player stays at (3, 7), and InteractionDialogue appears above table over cell (2, 6).
+	# Clicking non-command area of visible dialogue must NOT pass through to floor cell below.
 	_send_left_click(ui, Vector2(256, 276))
 	_send_left_click(ui, Vector2(224, 276))
 	_check(
@@ -365,27 +380,41 @@ func _test_mouse_input_and_world_offset() -> void:
 		and ui.interaction_dialogue.visible
 	)
 	var dlg_rect := ui.interaction_dialogue.get_global_rect()
-	var pass_through_pt := dlg_rect.get_center()
-	var expected_floor_cell := (game_root.get_node("World") as WorldMap).global_to_cell(
-		pass_through_pt
+	var blocked_pt := ui.target_title_label.get_global_rect().get_center()
+	var underlying_floor_cell := (game_root.get_node("World") as WorldMap).global_to_cell(
+		blocked_pt
 	)
 	_check(
-		"dialogue pass-through point lies inside InteractionDialogue rect over free floor cell",
-		dlg_rect.has_point(pass_through_pt)
-		and (game_root.get_node("World") as WorldMap).grid.is_free(expected_floor_cell)
-		and expected_floor_cell != kitchen.get_player_tile()
+		"dialogue click point lies inside visible InteractionDialogue over free floor cell",
+		dlg_rect.has_point(blocked_pt)
+		and (game_root.get_node("World") as WorldMap).grid.is_free(underlying_floor_cell)
+		and underlying_floor_cell != kitchen.get_player_tile()
 	)
-	_send_left_click(ui, pass_through_pt)
+	_send_left_click(ui, blocked_pt)
 	_check(
-		"click inside InteractionDialogue passes through Viewport GUI to floor cell",
-		kitchen.get_player_tile() == expected_floor_cell
+		"click inside visible InteractionDialogue is consumed without moving player or deselecting table",
+		kitchen.get_player_tile() == Vector2i(3, 7)
+		and kitchen.get_selected_target_id() == &"dining_table_01"
+	)
+	# Clicking floor outside InteractionDialogue deselects & moves; once hidden, clicking that same
+	# floor cell moves the player there.
+	_send_left_click(ui, Vector2(320, 148))
+	_check(
+		"clicking outside dialogue moves player and hides InteractionDialogue",
+		not ui.interaction_dialogue.visible and kitchen.get_selected_target_id() == &""
+	)
+	_send_left_click(ui, blocked_pt)
+	_check(
+		"once InteractionDialogue is hidden, clicking underlying floor point moves player normally",
+		kitchen.get_player_tile() == underlying_floor_cell
 		and kitchen.get_selected_target_id() == &""
 	)
+	var expected_floor_cell := underlying_floor_cell
 
-	# 6. Clicks outside the World grid (e.g. left margin (120, 100) or bottom-right (600, 340))
+	# 6. Clicks outside the World grid (e.g. left margin (140, 100) or bottom-right (600, 340))
 	# or on passive long counter (0, 4) -> (160, 180) and wall (8, 0) -> (416, 52)
 	# are safely rejected without moving player or selecting a target.
-	_send_left_click(ui, Vector2(120, 100))
+	_send_left_click(ui, Vector2(140, 100))
 	_send_left_click(ui, Vector2(600, 340))
 	_send_left_click(ui, Vector2(160, 180))
 	_send_left_click(ui, Vector2(416, 52))
@@ -419,7 +448,11 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 	await physics_frame
 
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
+
+	_check("buy 1 telur for typing test", run.request_ingredient_purchase(&"telur", 1, &"storage_box"))
+	_check("buy 1 beras for typing test", run.request_ingredient_purchase(&"beras", 1, &"storage_box"))
 
 	# Select stove in PLANNING: keyboard input must be ignored outside SERVING.
 	_send_left_click(ui, Vector2(192, 52))
@@ -430,11 +463,24 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 		kitchen.get_command_prefix() == ""
 	)
 
-	# Start SERVING and select stove ("goreng").
+	# Start SERVING: empty-hand stove hides goreng until fryable ingredient is held.
 	game_root.start_service_requested()
 	_send_left_click(ui, Vector2(192, 52))
 	_check(
-		"stove selected in SERVING with allowed command goreng",
+		"empty-hand stove in SERVING hides goreng command",
+		kitchen.get_selected_target_id() == &"stove"
+		and kitchen.get_allowed_commands_for_selected_target().is_empty()
+		and not ui.allowed_commands_label.visible
+		and not ui.prefix_prompt_label.visible
+	)
+
+	# Take RAW telur so stove exposes contextual command goreng.
+	_send_left_click(ui, Vector2(256, 52))
+	ui.shop_cancel_button.pressed.emit()
+	_type_word(ui, "telur")
+	_send_left_click(ui, Vector2(192, 52))
+	_check(
+		"stove selected in SERVING with held RAW telur exposes allowed command goreng",
 		kitchen.get_selected_target_id() == &"stove"
 		and kitchen.get_allowed_commands_for_selected_target() == ["goreng"]
 		and ui.prefix_prompt_label.text == "Ketik: goreng"
@@ -469,36 +515,49 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 	_send_key(ui, "e".unicode_at(0), KEY_E, true)
 	_check("key echo ignored", kitchen.get_command_prefix() == "gor")
 
-	# 4 & 6. Invalid key 'z' while prefix is "gor" shows feedback; Escape clears prefix/feedback.
+	# 4 & 6. Invalid key 'z' while prefix is "gor" shakes dialogue without verbose error text; Escape clears prefix/shake.
 	_send_key(ui, "z".unicode_at(0), KEY_Z)
 	_check(
-		"invalid key z with active prefix shows feedback and shake",
+		"invalid key z with active prefix shakes silently without Huruf tidak cocok",
 		kitchen.get_command_prefix() == "gor"
-		and ui.context_message_label.visible
-		and ui.context_message_label.text == "Huruf tidak cocok"
+		and ui.get_feedback_code() == &"invalid_key"
+		and not ui.context_message_label.visible
+		and ui.context_message_label.text == ""
+		and ui.is_shaking()
+	)
+	var tile_before_escape := kitchen.get_player_tile()
+	_send_key(ui, 0, KEY_ESCAPE)
+	_check(
+		"Escape clears command prefix, selected target, and invalid-key shake without moving",
+		kitchen.get_command_prefix() == ""
+		and kitchen.get_selected_target_id() == &""
+		and kitchen.get_player_tile() == tile_before_escape
+		and not ui.interaction_dialogue.visible
+		and not ui.context_message_label.visible
+		and ui.context_message_label.text == ""
+		and not ui.is_shaking()
+		and not ui.is_pause_open()
+	)
+
+	# Re-select stove, test invalid key 'z' with empty prefix shakes without error text, then Escape clears selection.
+	_send_left_click(ui, Vector2(192, 52))
+	_send_key(ui, "z".unicode_at(0), KEY_Z)
+	_check(
+		"invalid key z with empty prefix shakes without showing error text",
+		ui.get_feedback_code() == &"invalid_key"
+		and not ui.context_message_label.visible
 		and ui.is_shaking()
 	)
 	_send_key(ui, 0, KEY_ESCAPE)
 	_check(
-		"Escape clears command prefix and clears invalid-key feedback/shake",
-		kitchen.get_command_prefix() == ""
-		and ui.prefix_prompt_label.text == "Ketik: goreng"
-		and not ui.remaining_prompt_label.visible
+		"Escape with empty prefix clears stale invalid-key feedback and selection",
+		kitchen.get_selected_target_id() == &""
+		and not ui.interaction_dialogue.visible
 		and not ui.context_message_label.visible
 		and ui.context_message_label.text == ""
 		and not ui.is_shaking()
 	)
-
-	# Invalid key 'z' when prefix is already empty, followed by Escape, also clears feedback.
-	_send_key(ui, "z".unicode_at(0), KEY_Z)
-	_check("invalid key z with empty prefix shows feedback", ui.context_message_label.visible)
-	_send_key(ui, 0, KEY_ESCAPE)
-	_check(
-		"Escape with empty prefix clears stale invalid-key feedback",
-		not ui.context_message_label.visible
-		and ui.context_message_label.text == ""
-		and not ui.is_shaking()
-	)
+	_send_left_click(ui, Vector2(192, 52))
 
 	# Focused LineEdit blocks keyboard input from reaching KitchenController.
 	var line_edit := LineEdit.new()
@@ -530,19 +589,27 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 		kitchen.get_command_prefix() == ""
 		and kitchen.get_executed_command_count() == exec_before + 1
 		and kitchen.get_last_executed_command() == "goreng"
-		and ui.prefix_prompt_label.text == "Ketik: goreng"
+		and kitchen.get_allowed_commands_for_selected_target().is_empty()
+		and not ui.prefix_prompt_label.visible
 		and not ui.remaining_prompt_label.visible
 	)
 
-	# 5, 7, 8, 9. Select rice_cooker at (224, 52) ("masak, nasi"):
+	# Trash cooked telur, retrieve & wash beras, then select rice_cooker at (224, 52) ("masak"):
 	# Test uppercase input ("M", "A"), live preview ("Ketik: [ma]", "Ketik berikutnya: sak"),
 	# Backspace editing, and target-switch prefix reset.
+	_send_left_click(ui, Vector2(384, 52))
+	_send_left_click(ui, Vector2(256, 52))
+	ui.shop_cancel_button.pressed.emit()
+	_type_word(ui, "beras")
+	_send_left_click(ui, Vector2(160, 52))
+	_type_word(ui, "cuci")
 	_send_left_click(ui, Vector2(224, 52))
 	_check(
-		"rice_cooker selected with masak, nasi and idle instruction",
+		"rice_cooker selected with WASHED beras exposes masak and single-command prompt",
 		kitchen.get_selected_target_id() == &"rice_cooker"
-		and ui.allowed_commands_label.text == "masak, nasi"
-		and ui.prefix_prompt_label.text == "Ketik perintah"
+		and kitchen.get_allowed_commands_for_selected_target() == ["masak"]
+		and ui.allowed_commands_label.text == "masak"
+		and ui.prefix_prompt_label.text == "Ketik: masak"
 		and not ui.remaining_prompt_label.visible
 	)
 	_send_key(ui, "M".unicode_at(0), KEY_M)
@@ -550,7 +617,7 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 	_check(
 		"uppercase and keycode-only input normalized to ma with Ketik berikutnya: sak",
 		kitchen.get_command_prefix() == "ma"
-		and ui.allowed_commands_label.text == "[ma]sak, nasi"
+		and ui.allowed_commands_label.text == "[ma]sak"
 		and ui.prefix_prompt_label.text == "Ketik: [ma]"
 		and ui.remaining_prompt_label.visible
 		and ui.remaining_prompt_label.text == "Ketik berikutnya: sak"
@@ -569,7 +636,7 @@ func _test_keyboard_input_and_focus_blocking() -> void:
 		"switching target from rice_cooker to stove clears active prefix and preview",
 		kitchen.get_selected_target_id() == &"stove"
 		and kitchen.get_command_prefix() == ""
-		and ui.prefix_prompt_label.text == "Ketik: goreng"
+		and not ui.prefix_prompt_label.visible
 		and not ui.remaining_prompt_label.visible
 	)
 
@@ -584,17 +651,21 @@ func _test_dialogue_display_and_clamping() -> void:
 	await process_frame
 	await physics_frame
 
+	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
+	_check("stock ayam in storage_box", run.request_ingredient_purchase(&"ayam", 1, &"storage_box"))
+	_check("stock sapi in storage_box", run.request_ingredient_purchase(&"sapi", 1, &"storage_box"))
+	_check("stock sayur in storage_box", run.request_ingredient_purchase(&"sayur", 1, &"storage_box"))
 	game_root.start_service_requested()
 
 	# Click top-row station storage_box at (256, 52):
 	_send_left_click(ui, Vector2(256, 52))
-	ui.shop_cancel_button.pressed.emit()
 	_check(
-		"dialogue shows Kotak Bahan and 6 ingredient commands",
+		"dialogue shows Kotak Bahan and stocked ingredient + beli commands",
 		ui.interaction_dialogue.visible
+		and not ui.is_ingredient_shop_open()
 		and ui.target_title_label.text == "Kotak Bahan"
-		and ui.allowed_commands_label.text == "ayam, beras, sapi, sayur, telur, tempe"
+		and ui.allowed_commands_label.text == "ayam, beli, sapi, sayur"
 		and ui.prefix_prompt_label.text == "Ketik perintah"
 		and not ui.remaining_prompt_label.visible
 	)
@@ -604,7 +675,7 @@ func _test_dialogue_display_and_clamping() -> void:
 	_send_key(ui, "a".unicode_at(0), KEY_A)
 	_check(
 		"shared prefix sa shows both sapi and sayur remaining suffixes without guessing",
-		ui.allowed_commands_label.text == "ayam, beras, [sa]pi, [sa]yur, telur, tempe"
+		ui.allowed_commands_label.text == "ayam, beli, [sa]pi, [sa]yur"
 		and ui.prefix_prompt_label.text == "Ketik: [sa]"
 		and ui.remaining_prompt_label.visible
 		and ui.remaining_prompt_label.text == "Ketik berikutnya: pi / yur"
@@ -612,12 +683,12 @@ func _test_dialogue_display_and_clamping() -> void:
 	_send_key(ui, "y".unicode_at(0), KEY_Y)
 	_check(
 		"typing y disambiguates to sayur with Ketik berikutnya: ur",
-		ui.allowed_commands_label.text == "ayam, beras, sapi, [say]ur, telur, tempe"
+		ui.allowed_commands_label.text == "ayam, beli, sapi, [say]ur"
 		and ui.prefix_prompt_label.text == "Ketik: [say]"
 		and ui.remaining_prompt_label.text == "Ketik berikutnya: ur"
 	)
 	_send_key(ui, 0, KEY_ESCAPE)
-
+	_send_left_click(ui, Vector2(256, 52))
 	var box_rect := ui.interaction_dialogue.get_rect()
 	_check(
 		"dialogue near top-left station clamped inside world_visible_rect and clear of HUD",
@@ -627,19 +698,29 @@ func _test_dialogue_display_and_clamping() -> void:
 		and box_rect.end.y <= ui.world_visible_rect.end.y
 	)
 
-	# Select stove at (192, 52) ("goreng") and verify dialogue shrinks from wide storage_box width:
+	# Take ayam, select stove at (192, 52) ("goreng") and verify dialogue shrinks horizontally:
+	_type_word(ui, "ayam")
 	_send_left_click(ui, Vector2(192, 52))
 	var stove_rect := ui.interaction_dialogue.get_rect()
 	_check(
 		"dialogue shrinks horizontally when switching from storage_box to stove",
 		stove_rect.size.x < box_rect.size.x
+		and ui.allowed_commands_label.text == "goreng"
 		and stove_rect.position.x >= ui.world_visible_rect.position.x
 		and stove_rect.end.x <= ui.world_visible_rect.end.x
 		and stove_rect.position.y >= ui.world_visible_rect.position.y
 		and stove_rect.end.y <= ui.world_visible_rect.end.y
 	)
 
-	# Click online_station at (352, 180):
+	# Click online_station at (352, 180): waits at t=0, opens at t=10s.
+	_send_left_click(ui, Vector2(352, 180))
+	_check(
+		"online_station shows waiting state at t=0 before periodic offer opens",
+		ui.target_title_label.text == "Stasiun Online"
+		and ui.target_status_label.text.begins_with("Menunggu tawaran")
+		and ui.allowed_commands_label.text == ""
+	)
+	game_root._process(10.0)
 	_send_left_click(ui, Vector2(352, 180))
 	var online_rect := ui.interaction_dialogue.get_rect()
 	_check(
@@ -652,13 +733,14 @@ func _test_dialogue_display_and_clamping() -> void:
 		and online_rect.position.x > box_rect.position.x
 	)
 
-	# Typing invalid key 'z' triggers feedback message and shake without leaving bounds.
+	# Typing invalid key 'z' triggers shake without verbose error text or leaving bounds.
 	_send_key(ui, "z".unicode_at(0), KEY_Z)
 	var shake_rect := ui.interaction_dialogue.get_rect()
 	_check(
-		"invalid key shows Indonesian feedback and shakes within world_visible_rect",
-		ui.context_message_label.visible
-		and ui.context_message_label.text == "Huruf tidak cocok"
+		"invalid key shakes silently within world_visible_rect without Huruf tidak cocok",
+		ui.get_feedback_code() == &"invalid_key"
+		and not ui.context_message_label.visible
+		and ui.context_message_label.text == ""
 		and ui.is_shaking()
 		and shake_rect.position.x >= ui.world_visible_rect.position.x
 		and shake_rect.end.x <= ui.world_visible_rect.end.x
@@ -698,12 +780,21 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	game_root.start_service_requested()
 	_check("entered SERVING for M1 kitchen loop", game_root.is_serving())
 
-	# Empty storage retrieval fails cleanly.
+	# Out-of-stock ingredient is hidden from contextual commands and rejected on backend.
 	_send_left_click(ui, Vector2(256, 52))
-	ui.shop_cancel_button.pressed.emit()
+	_check(
+		"unstocked ayam is omitted from storage_box allowed commands",
+		kitchen.get_allowed_commands_for_selected_target() == ["beli", "beras", "sayur", "telur"]
+	)
 	_type_word(ui, "ayam")
 	_check(
-		"empty ingredient retrieval emits out_of_stock without mutating hand",
+		"typing hidden ayam fails prefix without mutating hand",
+		kitchen.get_held_item_view().is_empty()
+		and kitchen.get_command_prefix() == ""
+	)
+	kitchen._perform_typed_command(&"ayam")
+	_check(
+		"empty ingredient retrieval backend emits out_of_stock without mutating hand",
 		kitchen.get_held_item_view().is_empty()
 		and ui.context_message_label.visible
 		and ui.context_message_label.text == "Bahan habis"
@@ -726,8 +817,14 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and held_vis.get_node_or_null("PartSprite_0") != null
 	)
 
-	# Held-item capacity restriction: retrieving telur while holding beras fails cleanly.
+	# Held-item capacity restriction: storage hides ingredient commands while holding item,
+	# and direct backend retrieval fails cleanly with hand_full.
+	_check(
+		"storage_box hides ingredient commands while holding beras",
+		kitchen.get_allowed_commands_for_selected_target() == ["beli"]
+	)
 	_type_word(ui, "telur")
+	kitchen._perform_typed_command(&"telur")
 	_check(
 		"retrieving second ingredient while hand full fails with hand_full and keeps stock",
 		kitchen.get_held_item_view()["parts"][0]["ingredient_id"] == &"beras"
@@ -735,9 +832,14 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and ui.context_message_label.text == "Tangan penuh"
 	)
 
-	# Invalid processing: RAW beras cannot masak at rice_cooker or goreng at stove.
+	# Invalid processing: RAW beras hides masak/goreng and backend rejects cleanly.
 	_send_left_click(ui, Vector2(224, 52))
+	_check(
+		"RAW beras hides masak at rice_cooker",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_word(ui, "masak")
+	kitchen._perform_typed_command(&"masak")
 	_check(
 		"RAW beras cannot masak at rice_cooker",
 		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.RAW
@@ -745,7 +847,12 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and ui.context_message_label.text == "Nggak bisa sekarang"
 	)
 	_send_left_click(ui, Vector2(192, 52))
+	_check(
+		"RAW beras hides goreng at stove",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_word(ui, "goreng")
+	kitchen._perform_typed_command(&"goreng")
 	_check(
 		"RAW beras cannot goreng at stove",
 		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.RAW
@@ -767,14 +874,19 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	var cooker_view := kitchen.get_cooker_output_view(&"rice_cooker")
 	var cooker_node := world.registry.get_object(&"rice_cooker")
 	var cooker_vis := cooker_node.get_node_or_null("CookerOutputVisual") as Node2D
+	var cooker_portion_label := cooker_node.get_node_or_null("CookerPortionLabel") as Label
 	_check(
-		"rice_cooker masak deposits COOKED_RICE output and frees hand",
+		"rice_cooker masak deposits 5 COOKED_RICE portions and frees hand",
 		kitchen.get_held_item_view().is_empty()
 		and not held_vis.visible
 		and not cooker_view.is_empty()
+		and int(cooker_view.get("portions", 0)) == 5
 		and int(cooker_view["parts"][0]["state"]) == SharedTypes.PrepState.COOKED_RICE
 		and cooker_vis != null
 		and cooker_vis.visible
+		and cooker_portion_label != null
+		and cooker_portion_label.visible
+		and cooker_portion_label.text == "5"
 		and ui.context_message_label.text == "Nasi dimasak"
 	)
 
@@ -806,7 +918,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Stage clean plate on WorkTable via StagingTarget (251, 116).
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	var staged_plate := kitchen.get_work_table_view(&"work_table")
 	var table_node := world.registry.get_object(&"work_table")
 	var staged_vis := table_node.get_node_or_null("StagedVisual") as Node2D
@@ -821,19 +933,22 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and staged_vis.get_node_or_null("PlateIndicator") != null
 	)
 
-	# Retrieve cooked rice from rice_cooker using `nasi`.
-	_send_left_click(ui, Vector2(224, 52))
+	# Retrieve cooked rice from rice_cooker using `nasi` (5 -> 4 portions remaining).
+	_click_world_pos(ui, Vector2(224, 52))
 	_type_word(ui, "nasi")
 	_check(
-		"rice_cooker nasi retrieves COOKED_RICE and clears cooker output",
+		"rice_cooker nasi retrieves COOKED_RICE and decrements portions from 5 to 4",
 		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.COOKED_RICE
-		and kitchen.get_cooker_output_view(&"rice_cooker").is_empty()
-		and not cooker_vis.visible
+		and int(kitchen.get_cooker_output_view(&"rice_cooker").get("portions", 0)) == 4
+		and cooker_vis.visible
+		and cooker_portion_label != null
+		and cooker_portion_label.visible
+		and cooker_portion_label.text == "4"
 		and ui.context_message_label.text == "Nasi diambil"
 	)
 
 	# Clicking StagingTarget merges COOKED_RICE onto staged plate.
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	_check(
 		"COOKED_RICE merges onto staged plate without completing recipe yet",
 		kitchen.get_held_item_view().is_empty()
@@ -843,7 +958,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Retrieve telur from storage_box, verify raw egg texture, attempt invalid chop, fry on stove.
-	_send_left_click(ui, Vector2(256, 52))
+	_click_world_pos(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "telur")
 	var raw_egg_spr := held_vis.get_node_or_null("PartSprite_0") as Sprite2D
@@ -856,7 +971,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Clicking ChoppingTarget (266, 116) does NOT stage telur; invalid potong preserves RAW telur.
-	_send_left_click(ui, Vector2(266, 116))
+	_click_world_pos(ui, Vector2(266, 116))
 	_type_word(ui, "potong")
 	_check(
 		"ChoppingTarget does not auto-stage held telur and rejects invalid potong",
@@ -866,7 +981,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Fry telur at stove (`goreng`), verify cooked egg.png texture.
-	_send_left_click(ui, Vector2(192, 52))
+	_click_world_pos(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
 	var cooked_egg_spr := held_vis.get_node_or_null("PartSprite_0") as Sprite2D
 	_check(
@@ -877,15 +992,18 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and ui.context_message_label.text == "Bahan digoreng"
 	)
 
-	# Duplicate command prevention: pressing 'g' again starts prefix "g" without re-cooking.
+	# Duplicate command prevention: COOKED telur hides goreng and rejects duplicate 'g'.
+	var count_after_goreng := kitchen.get_executed_command_count()
 	_send_key(ui, "g".unicode_at(0), KEY_G)
 	_check(
-		"pressing g after goreng starts fresh prefix instead of duplicate execution",
-		kitchen.get_command_prefix() == "g"
+		"COOKED telur hides goreng and rejects duplicate g cleanly",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+		and kitchen.get_command_prefix() == ""
+		and kitchen.get_executed_command_count() == count_after_goreng
 	)
 
 	# Merge cooked telur onto staged plate -> completes nasi_telor!
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	var assembled := kitchen.get_work_table_view(&"work_table")
 	_check(
 		"merging cooked telur onto plated rice assembles exact nasi_telor",
@@ -898,7 +1016,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 	)
 
 	# Pick up completed nasi_telor into hand.
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	var final_dish := kitchen.get_held_item_view()
 	_check(
 		"picking up assembled nasi_telor moves exact dish to hand and clears WorkTable",
@@ -937,14 +1055,14 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	_send_left_click(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "sayur")
-	_send_left_click(ui, Vector2(266, 116))
+	_click_world_pos(ui, Vector2(266, 116))
 	_type_word(ui, "potong")
 	_check(
 		"sayur chop at work_table_chop transitions RAW -> CHOPPED without staging",
 		int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.CHOPPED
 		and kitchen.get_work_table_view(&"work_table").is_empty()
 	)
-	_send_left_click(ui, Vector2(192, 52))
+	_click_world_pos(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
 	_check(
 		"CHOPPED sayur transitions to CHOPPED_AND_COOKED at stove",
@@ -953,20 +1071,20 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Trash loose item clears hand.
-	_send_left_click(ui, Vector2(384, 52))
+	_click_world_pos(ui, Vector2(384, 52))
 	_check("trash discards loose held item", kitchen.get_held_item_view().is_empty())
 
 	# 2. Loose + loose merge rejection without ingredient loss:
-	_send_left_click(ui, Vector2(256, 52))
+	_click_world_pos(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "telur")
-	_send_left_click(ui, Vector2(192, 52))
+	_click_world_pos(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
-	_send_left_click(ui, Vector2(251, 116))
-	_send_left_click(ui, Vector2(256, 52))
+	_click_world_pos(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "beras")
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	_check(
 		"loose + loose merge rejected without losing staged or held ingredient",
 		not kitchen.get_work_table_view(&"work_table").is_empty()
@@ -977,17 +1095,22 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Wash & cook held beras; verify cooker_full rejects 2nd masak; clear work_table loose telur.
-	_send_left_click(ui, Vector2(160, 52))
+	_click_world_pos(ui, Vector2(160, 52))
 	_type_word(ui, "cuci")
-	_send_left_click(ui, Vector2(224, 52))
+	_click_world_pos(ui, Vector2(224, 52))
 	_type_word(ui, "masak")
-	_send_left_click(ui, Vector2(256, 52))
+	_click_world_pos(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "beras")
-	_send_left_click(ui, Vector2(160, 52))
+	_click_world_pos(ui, Vector2(160, 52))
 	_type_word(ui, "cuci")
-	_send_left_click(ui, Vector2(224, 52))
+	_click_world_pos(ui, Vector2(224, 52))
+	_check(
+		"occupied rice_cooker hides masak while holding WASHED beras",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_word(ui, "masak")
+	kitchen._perform_typed_command(&"masak")
 	_check(
 		"second masak when cooker occupied rejects with cooker_full and preserves held rice",
 		not kitchen.get_held_item_view().is_empty()
@@ -996,8 +1119,8 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Trash second rice, pick up staged cooked telur, verify read-only views cannot mutate state.
-	_send_left_click(ui, Vector2(384, 52))
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(384, 52))
+	_click_world_pos(ui, Vector2(251, 116))
 	var ro_held := kitchen.get_held_item_view()
 	ro_held["parts"][0]["state"] = SharedTypes.PrepState.RAW
 	ro_held["plate_id"] = &"fake_plate"
@@ -1008,9 +1131,9 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Trash cooked telur, then assemble nasi_telor in REVERSE order (telur first, then rice).
-	_send_left_click(ui, Vector2(384, 52))
-	_send_left_click(ui, Vector2(288, 52))
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(384, 52))
+	_click_world_pos(ui, Vector2(288, 52))
+	_click_world_pos(ui, Vector2(251, 116))
 	var ro_table := kitchen.get_work_table_view(&"work_table")
 	ro_table["matched_recipe_id"] = &"fake_recipe"
 	_check(
@@ -1019,20 +1142,20 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Prepare cooked telur and merge FIRST onto staged plate.
-	_send_left_click(ui, Vector2(256, 52))
+	_click_world_pos(ui, Vector2(256, 52))
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "telur")
 	# Attempt invalid merge of RAW telur onto staged plate (must reject without losing telur).
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	_check(
 		"invalid merge of RAW telur onto staged plate rejected without resource loss",
 		not kitchen.get_held_item_view().is_empty()
 		and (kitchen.get_work_table_view(&"work_table")["parts"] as Array).is_empty()
 		and ui.context_message_label.text == "Tidak bisa digabung"
 	)
-	_send_left_click(ui, Vector2(192, 52))
+	_click_world_pos(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	_check(
 		"cooked telur merged first onto plate",
 		kitchen.get_held_item_view().is_empty()
@@ -1040,18 +1163,18 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Retrieve cooked rice with `nasi` and merge SECOND -> exact nasi_telor!
-	_send_left_click(ui, Vector2(224, 52))
+	_click_world_pos(ui, Vector2(224, 52))
 	_type_word(ui, "nasi")
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	_check(
 		"reverse plating order (telur then rice) also assembles exact nasi_telor",
 		kitchen.get_work_table_view(&"work_table").get("matched_recipe_id", &"") == &"nasi_telor"
 	)
 
 	# Pick up plated nasi_telor and trash it -> food discarded, same plate_id survives clean.
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	var plate_id_before: StringName = kitchen.get_held_item_view().get("plate_id", &"")
-	_send_left_click(ui, Vector2(384, 52))
+	_click_world_pos(ui, Vector2(384, 52))
 	_check(
 		"trashing plated dish discards food and preserves exact reusable plate_id",
 		kitchen.get_held_item_view().get("plate_id", &"") == plate_id_before
@@ -1061,10 +1184,10 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Return clean plate, drain all 4 plates from PlateRack, verify empty PlateRack rejection.
-	_send_left_click(ui, Vector2(288, 52))
+	_click_world_pos(ui, Vector2(288, 52))
 	for i in range(4):
-		_send_left_click(ui, Vector2(288, 52))
-		_send_left_click(ui, Vector2(251, 116))
+		_click_world_pos(ui, Vector2(288, 52))
+		_click_world_pos(ui, Vector2(251, 116))
 		if i < 3:
 			# Stage holds 1 item; move the first 3 plates to WASHER_DIRTY to drain rack.
 			var p_view := kitchen.get_work_table_view(&"work_table")
@@ -1080,7 +1203,7 @@ func _test_m1_edge_cases_and_readonly() -> void:
 		int(kitchen.get_plate_rack_view(&"plate_rack")["clean_count"]) == 0
 		and washer_spr.region_rect == WorldMap.REGION_WASHER_FILLED
 	)
-	_send_left_click(ui, Vector2(288, 52))
+	_click_world_pos(ui, Vector2(288, 52))
 	_check(
 		"empty PlateRack click emits no_plates and keeps hand empty",
 		kitchen.get_held_item_view().is_empty()
@@ -1088,7 +1211,7 @@ func _test_m1_edge_cases_and_readonly() -> void:
 	)
 
 	# Washer cuci washes 1 dirty plate into held clean plate and updates count.
-	_send_left_click(ui, Vector2(160, 52))
+	_click_world_pos(ui, Vector2(160, 52))
 	_type_word(ui, "cuci")
 	_check(
 		"washer cuci washes 1 dirty plate into held clean plate",
@@ -1096,6 +1219,78 @@ func _test_m1_edge_cases_and_readonly() -> void:
 		and (kitchen.get_held_item_view().get("parts", []) as Array).is_empty()
 		and int(kitchen.get_washer_view()["dirty_plate_count"]) == 2
 		and kitchen.get_plate_count() == 4
+	)
+
+	game_root.free()
+	await process_frame
+
+
+func _test_p5a_beef_held_and_cooked_visuals() -> void:
+	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
+	var game_root := packed.instantiate() as GameRoot
+	root.add_child(game_root)
+	await process_frame
+	await physics_frame
+
+	var world := game_root.get_node("World") as WorldMap
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var run := game_root.get_run_controller() as RunController
+	var ui := game_root.get_node("UI") as GameUI
+
+	_check("stock sapi in storage_box", run.request_ingredient_purchase(&"sapi", 1, &"storage_box"))
+	game_root.start_service_requested()
+
+	# Take raw sapi from storage_box -> verify raw cow.png on held visual and staged visual.
+	_send_left_click(ui, Vector2(256, 52))
+	_type_word(ui, "sapi")
+	var held_vis := world.player.get_node("VisualAnchor/HeldItemVisual") as Node2D
+	var held_raw_sprite := held_vis.get_node_or_null("PartSprite_0") as Sprite2D
+	_check(
+		"held raw sapi uses raw cow.png without fallback",
+		held_vis.visible
+		and held_raw_sprite != null
+		and held_raw_sprite.texture != null
+		and held_raw_sprite.texture.resource_path == "res://assets/art/ingredients/raw cow.png"
+		and held_vis.get_node_or_null("PartFallback_0") == null
+	)
+
+	_click_world_pos(ui, Vector2(251, 116))
+	var table_node := world.registry.get_object(&"work_table")
+	var staged_vis := table_node.get_node_or_null("StagedVisual") as Node2D
+	var staged_raw_sprite := staged_vis.get_node_or_null("PartSprite_0") as Sprite2D
+	_check(
+		"staged raw sapi uses raw cow.png without fallback",
+		staged_vis.visible
+		and staged_raw_sprite != null
+		and staged_raw_sprite.texture != null
+		and staged_raw_sprite.texture.resource_path == "res://assets/art/ingredients/raw cow.png"
+		and staged_vis.get_node_or_null("PartFallback_0") == null
+	)
+
+	# Pick up raw sapi and cook at stove -> verify cooked meat.png on held & staged visuals.
+	_click_world_pos(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(192, 52))
+	_type_word(ui, "goreng")
+	var held_cooked_sprite := held_vis.get_node_or_null("PartSprite_0") as Sprite2D
+	_check(
+		"held cooked sapi uses cooked meat.png without fallback",
+		kitchen.get_held_item_view().get("parts", [])[0]["state"] == SharedTypes.PrepState.COOKED
+		and held_vis.visible
+		and held_cooked_sprite != null
+		and held_cooked_sprite.texture != null
+		and held_cooked_sprite.texture.resource_path == "res://assets/art/ingredients/cooked meat.png"
+		and held_vis.get_node_or_null("PartFallback_0") == null
+	)
+
+	_click_world_pos(ui, Vector2(251, 116))
+	var staged_cooked_sprite := staged_vis.get_node_or_null("PartSprite_0") as Sprite2D
+	_check(
+		"staged cooked sapi uses cooked meat.png without fallback",
+		staged_vis.visible
+		and staged_cooked_sprite != null
+		and staged_cooked_sprite.texture != null
+		and staged_cooked_sprite.texture.resource_path == "res://assets/art/ingredients/cooked meat.png"
+		and staged_vis.get_node_or_null("PartFallback_0") == null
 	)
 
 	game_root.free()
@@ -1150,8 +1345,8 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 	_check("WorkTable chopping board zone selects work_table_chop cleanly", chop_ok)
 
 	# Stage plate via center click, ensure clicking plate center never enters chop mode.
-	_send_left_click(ui, Vector2(288, 52))
-	_send_left_click(ui, center)
+	_click_world_pos(ui, Vector2(288, 52))
+	_click_world_pos(ui, center)
 	var staged_vis := world.registry.get_object(&"work_table").get_node_or_null(
 		"StagedVisual"
 	) as Node2D
@@ -1163,10 +1358,9 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 		and staged_vis != null
 		and staged_vis.position.is_equal_approx(Vector2(-5, -4))
 	)
-	_send_left_click(ui, Vector2(256, 52))
-	ui.shop_cancel_button.pressed.emit()
+	_click_world_pos(ui, Vector2(256, 52))
 	_type_word(ui, "sayur")
-	_send_left_click(ui, center + Vector2(10, 0))
+	_click_world_pos(ui, center + Vector2(10, 0))
 	_type_word(ui, "potong")
 	_check(
 		"chopping sayur on cutting board remains functional while plate is staged",
@@ -1225,6 +1419,7 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 		and ui.result_title_label.is_visible_in_tree()
 		and ui.settlement_summary_label.is_visible_in_tree()
 		and ui.settlement_summary_label.text.contains("Kas Awal:")
+		and ui.settlement_summary_label.text.contains("Potensi Besok:")
 		and ui.settlement_summary_label.text.contains("Perkiraan Besok:")
 		and ui.continue_button.is_visible_in_tree()
 		and not ui.continue_button.disabled

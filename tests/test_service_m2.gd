@@ -57,6 +57,16 @@ func _select_world_target(ui: GameUI, world: WorldMap, target_id: StringName) ->
 	if node == null:
 		return
 	var canvas_pos := world.get_canvas_transform() * node.global_position
+	if ui.interaction_dialogue != null and ui.interaction_dialogue.visible:
+		if ui.interaction_dialogue.get_global_rect().has_point(canvas_pos):
+			var clear_pos := Vector2(352, 276)
+			if ui.interaction_dialogue.get_global_rect().has_point(clear_pos):
+				clear_pos = Vector2(160, 148)
+			var clear_ev := InputEventMouseButton.new()
+			clear_ev.pressed = true
+			clear_ev.button_index = MOUSE_BUTTON_LEFT
+			clear_ev.position = clear_pos
+			ui._unhandled_input(clear_ev)
 	var ev := InputEventMouseButton.new()
 	ev.pressed = true
 	ev.button_index = MOUSE_BUTTON_LEFT
@@ -67,12 +77,14 @@ func _select_world_target(ui: GameUI, world: WorldMap, target_id: StringName) ->
 
 
 func _cook_plated_nasi_telor(ui: GameUI, world: WorldMap) -> void:
-	_select_world_target(ui, world, &"storage_box")
-	_type_word(ui, "beras")
-	_select_world_target(ui, world, &"washer")
-	_type_word(ui, "cuci")
-	_select_world_target(ui, world, &"rice_cooker")
-	_type_word(ui, "masak")
+	var kitchen := ui._kitchen_controller
+	if kitchen == null or kitchen.get_cooker_output_view(&"rice_cooker").is_empty():
+		_select_world_target(ui, world, &"storage_box")
+		_type_word(ui, "beras")
+		_select_world_target(ui, world, &"washer")
+		_type_word(ui, "cuci")
+		_select_world_target(ui, world, &"rice_cooker")
+		_type_word(ui, "masak")
 	_select_world_target(ui, world, &"plate_rack")
 	_select_world_target(ui, world, &"work_table_stage")
 	_select_world_target(ui, world, &"rice_cooker")
@@ -87,12 +99,14 @@ func _cook_plated_nasi_telor(ui: GameUI, world: WorldMap) -> void:
 
 
 func _cook_plated_nasi_ayam(ui: GameUI, world: WorldMap) -> void:
-	_select_world_target(ui, world, &"storage_box")
-	_type_word(ui, "beras")
-	_select_world_target(ui, world, &"washer")
-	_type_word(ui, "cuci")
-	_select_world_target(ui, world, &"rice_cooker")
-	_type_word(ui, "masak")
+	var kitchen := ui._kitchen_controller
+	if kitchen == null or kitchen.get_cooker_output_view(&"rice_cooker").is_empty():
+		_select_world_target(ui, world, &"storage_box")
+		_type_word(ui, "beras")
+		_select_world_target(ui, world, &"washer")
+		_type_word(ui, "cuci")
+		_select_world_target(ui, world, &"rice_cooker")
+		_type_word(ui, "masak")
 	_select_world_target(ui, world, &"plate_rack")
 	_select_world_target(ui, world, &"work_table_stage")
 	_select_world_target(ui, world, &"rice_cooker")
@@ -281,14 +295,22 @@ func _test_full_dine_in_serve_eat_clean_wash_and_fifo_loop() -> void:
 
 	_select_world_target(ui, world, &"dining_table_01")
 	_check(
-		"selecting OCCUPIED_WAITING dining_table_01 shows order prompt & timer",
+		"selecting OCCUPIED_WAITING dining_table_01 with empty hand shows order prompt and hides saji",
 		ui.interaction_dialogue.visible
 		and ui.target_title_label.text == "Meja Makan 1"
 		and ui.context_message_label.text.contains("Nasi Telor")
-		and ui.allowed_commands_label.text.contains("saji")
+		and kitchen.get_allowed_commands_for_selected_target().is_empty()
+		and not ui.allowed_commands_label.visible
 	)
 
 	_type_word(ui, "bersihkan")
+	_check(
+		"typing hidden bersihkan on OCCUPIED_WAITING table rejects prefix cleanly",
+		ui.get_feedback_code() == &"invalid_key"
+		and int(service.get_table_view(&"dining_table_01")["state"])
+		== SharedTypes.TableState.OCCUPIED_WAITING
+	)
+	kitchen._perform_typed_command(&"bersihkan")
 	_check(
 		"bersihkan on OCCUPIED_WAITING table rejected with invalid_action",
 		ui.get_feedback_code() == &"invalid_action"
@@ -301,7 +323,12 @@ func _test_full_dine_in_serve_eat_clean_wash_and_fifo_loop() -> void:
 	_select_world_target(ui, world, &"stove")
 	_type_word(ui, "goreng")
 	_select_world_target(ui, world, &"dining_table_01")
+	_check(
+		"holding unplated cooked sayur hides saji on OCCUPIED_WAITING table",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_word(ui, "saji")
+	kitchen._perform_typed_command(&"saji")
 	_check(
 		"saji with non-matching dish emits wrong_order, keeps item, and does not pay",
 		ui.get_feedback_code() == &"wrong_order"
@@ -328,10 +355,15 @@ func _test_full_dine_in_serve_eat_clean_wash_and_fifo_loop() -> void:
 		and kitchen.get_plate_count() == 4
 	)
 
-	# Second nasi_telor served to same table while OCCUPIED_EATING must reject cleanly.
+	# Second nasi_telor while table is OCCUPIED_EATING hides saji and rejects cleanly.
 	_cook_plated_nasi_telor(ui, world)
 	_select_world_target(ui, world, &"dining_table_01")
+	_check(
+		"OCCUPIED_EATING table hides saji even when holding matching dish",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_word(ui, "saji")
+	kitchen._perform_typed_command(&"saji")
 	_check(
 		"duplicate UI saji during OCCUPIED_EATING rejects without consuming dish or double-paying",
 		ui.get_feedback_code() == &"invalid_action"

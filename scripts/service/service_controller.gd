@@ -18,6 +18,16 @@ const DEFAULT_PATIENCE_SECONDS: float = 100.0
 const DEFAULT_SPAWN_INTERVAL_SECONDS: float = 20.0
 const DEFAULT_EAT_SECONDS: float = 20.0
 const DEFAULT_ONLINE_DEADLINE_SECONDS: float = 60.0
+const DEFAULT_ONLINE_OFFER_INITIAL_DELAY_SECONDS: float = 10.0
+const DEFAULT_ONLINE_OFFER_INTERVAL_SECONDS: float = 15.0
+const DEFAULT_ONLINE_OFFER_ACTIVE_DURATION_SECONDS: float = 15.0
+
+enum OnlineOfferState {
+	NOT_SERVING,
+	WAITING,
+	AVAILABLE,
+	UNAVAILABLE,
+}
 
 const PICKUP_SPOT_IDS: Array[StringName] = [
 	&"pickup_spot_01",
@@ -58,8 +68,11 @@ var _drivers: Dictionary[StringName, Dictionary] = {}
 var _pickup_spot_to_driver: Dictionary[StringName, StringName] = {}
 var _outside_driver_queue: Array[StringName] = []
 var _online_offer: Dictionary = {
+	"state": OnlineOfferState.NOT_SERVING,
 	"preview_recipe_id": &"",
 	"offer_generation_number": 0,
+	"next_offer_at": 0.0,
+	"offer_expires_at": 0.0,
 }
 
 var _completed_order_ids: Array[StringName] = []
@@ -176,11 +189,7 @@ func prepare_service_day(day_index: int, plan: Dictionary) -> void:
 	if not _custom_seed_set:
 		_rng.seed = hash("ketik_saji_service_day_%d" % _day_index)
 
-	var preview_id := _pick_weighted_recipe_id()
-	_online_offer = {
-		"preview_recipe_id": preview_id,
-		"offer_generation_number": 1 if preview_id != &"" else 0,
-	}
+	_online_offer = _make_empty_online_offer()
 
 	_day_prepared = true
 	_service_active = false
@@ -197,6 +206,15 @@ func begin_service(now: float) -> void:
 	_last_service_now = maxf(0.0, now)
 	_next_spawn_at = _last_service_now
 	_service_active = true
+	var initial_delay := _get_online_offer_initial_delay_seconds()
+	_online_offer = {
+		"state": OnlineOfferState.WAITING,
+		"preview_recipe_id": &"",
+		"offer_generation_number": 0,
+		"next_offer_at": _last_service_now + initial_delay,
+		"offer_expires_at": 0.0,
+		"wait_total_seconds": initial_delay,
+	}
 	_tick_service_spawns_and_timers(_last_service_now)
 	orders_changed.emit()
 	queues_changed.emit()
@@ -228,6 +246,9 @@ func is_drained() -> bool:
 
 func freeze_and_build_day_report(day_index: int) -> Dictionary:
 	_service_active = false
+	_online_offer["state"] = OnlineOfferState.NOT_SERVING
+	_online_offer["preview_recipe_id"] = &""
+	_online_offer["offer_expires_at"] = 0.0
 	return {
 		"day_index": day_index,
 		"arrived_dine_in_count": _arrived_dine_in_count,
@@ -254,10 +275,7 @@ func reset_dirt_and_day_customers() -> void:
 	_outside_driver_queue.clear()
 	_reset_pickup_spots()
 	_next_driver_seq = 0
-	_online_offer = {
-		"preview_recipe_id": &"",
-		"offer_generation_number": 0,
-	}
+	_online_offer = _make_empty_online_offer()
 
 	for table: Dictionary in _tables.values():
 		table["state"] = SharedTypes.TableState.CLEAN_VACANT
@@ -274,6 +292,7 @@ func reset_dirt_and_day_customers() -> void:
 func try_serve_table(table_id: StringName, item_id: StringName) -> bool:
 	if (
 		not _service_active
+		or _is_game_paused()
 		or table_id == &""
 		or item_id == &""
 		or not _tables.has(table_id)
@@ -340,6 +359,7 @@ func try_serve_table(table_id: StringName, item_id: StringName) -> bool:
 func try_serve_driver(driver_id: StringName, item_id: StringName) -> bool:
 	if (
 		not _service_active
+		or _is_game_paused()
 		or driver_id == &""
 		or item_id == &""
 		or not _drivers.has(driver_id)
@@ -403,6 +423,7 @@ func try_serve_driver(driver_id: StringName, item_id: StringName) -> bool:
 	_promote_outside_drivers(_last_service_now)
 
 	_credit_order_with_invariant_guard(order_id, recipe_id, SharedTypes.OrderKind.ONLINE)
+	_update_online_offer_lifecycle(_last_service_now)
 
 	orders_changed.emit()
 	queues_changed.emit()
@@ -412,7 +433,7 @@ func try_serve_driver(driver_id: StringName, item_id: StringName) -> bool:
 
 
 func try_clean_table(table_id: StringName) -> bool:
-	if not _service_active or not _tables.has(table_id):
+	if not _service_active or _is_game_paused() or not _tables.has(table_id):
 		return false
 	var table: Dictionary = _tables[table_id]
 	if table.get("state", -1) != SharedTypes.TableState.DIRTY:
@@ -438,8 +459,11 @@ func try_clean_table(table_id: StringName) -> bool:
 
 
 func try_accept_online_offer() -> bool:
-	if _service_active:
-		_sync_service_now_from_clock()
+	if _is_game_paused():
+		return false
+	if not _service_active or not _day_prepared:
+		return false
+	_sync_service_now_from_clock()
 	if not get_online_acceptance_enabled():
 		return false
 
@@ -486,10 +510,15 @@ func try_accept_online_offer() -> bool:
 		}
 		_outside_driver_queue.append(driver_id)
 
-	_online_offer["preview_recipe_id"] = _pick_weighted_recipe_id()
-	_online_offer["offer_generation_number"] = int(
-		_online_offer.get("offer_generation_number", 0)
-	) + 1
+	var interval := _get_online_offer_interval_seconds()
+	_online_offer["preview_recipe_id"] = &""
+	_online_offer["offer_expires_at"] = 0.0
+	_online_offer["next_offer_at"] = _last_service_now + interval
+	_online_offer["wait_total_seconds"] = interval
+	if _is_online_service_restricted():
+		_online_offer["state"] = OnlineOfferState.UNAVAILABLE
+	else:
+		_online_offer["state"] = OnlineOfferState.WAITING
 
 	orders_changed.emit()
 	queues_changed.emit()
@@ -601,13 +630,35 @@ func get_driver_views() -> Array[Dictionary]:
 
 
 func get_online_offer_view() -> Dictionary:
+	var offer_state := int(_online_offer.get("state", OnlineOfferState.NOT_SERVING))
+	var preview_id := StringName(&"")
+	var offer_seconds_remaining := 0.0
+	var next_offer_in_seconds := 0.0
+	if offer_state == OnlineOfferState.AVAILABLE:
+		preview_id = StringName(_online_offer.get("preview_recipe_id", &""))
+		offer_seconds_remaining = maxf(
+			0.0, float(_online_offer.get("offer_expires_at", 0.0)) - _last_service_now
+		)
+	elif offer_state == OnlineOfferState.WAITING:
+		next_offer_in_seconds = maxf(
+			0.0, float(_online_offer.get("next_offer_at", 0.0)) - _last_service_now
+		)
+
 	return {
-		"preview_recipe_id": _online_offer.get("preview_recipe_id", &""),
+		"offer_state": offer_state,
+		"offer_state_name": _online_offer_state_name(offer_state),
+		"preview_recipe_id": preview_id,
 		"offer_generation_number": int(_online_offer.get("offer_generation_number", 0)),
 		"acceptance_enabled": get_online_acceptance_enabled(),
 		"disabled_reason": _get_online_disabled_reason(),
 		"online_open_count": _online_orders_open.size(),
 		"concurrent_limit": _day_queue_initial,
+		"offer_seconds_remaining": offer_seconds_remaining,
+		"offer_total_seconds": _get_online_offer_active_duration_seconds(),
+		"next_offer_in_seconds": next_offer_in_seconds,
+		"wait_total_seconds": float(
+			_online_offer.get("wait_total_seconds", _get_online_offer_interval_seconds())
+		),
 	}
 
 
@@ -618,19 +669,22 @@ func get_online_acceptance_enabled() -> bool:
 func _get_online_disabled_reason() -> StringName:
 	if not _service_active or not _day_prepared:
 		return &"not_serving"
-	var preview_id := StringName(_online_offer.get("preview_recipe_id", &""))
-	if (
-		_selected_recipe_ids.is_empty()
-		or preview_id == &""
-		or not _selected_recipe_ids.has(preview_id)
-	):
+	if _selected_recipe_ids.is_empty():
 		return &"empty_menu"
-	if not _has_valid_recipe_price(preview_id):
+	if _online_offer_has_invalid_menu_prices():
 		return &"invalid_price"
 	if _day_queue_remaining <= 2:
 		return &"cutoff_reached"
 	if _online_orders_open.size() >= _day_queue_initial:
 		return &"concurrent_cap_reached"
+	var offer_state := int(_online_offer.get("state", OnlineOfferState.NOT_SERVING))
+	if offer_state != OnlineOfferState.AVAILABLE:
+		return &"offer_waiting"
+	var preview_id := StringName(_online_offer.get("preview_recipe_id", &""))
+	if preview_id == &"" or not _selected_recipe_ids.has(preview_id):
+		return &"offer_waiting"
+	if not _has_valid_recipe_price(preview_id):
+		return &"invalid_price"
 	return &""
 
 
@@ -672,6 +726,30 @@ func _get_online_deadline_seconds() -> float:
 	return DEFAULT_ONLINE_DEADLINE_SECONDS
 
 
+func _get_online_offer_initial_delay_seconds() -> float:
+	if (
+		_economy_config != null
+		and _economy_config.online_offer_initial_delay_seconds >= 0.0
+	):
+		return _economy_config.online_offer_initial_delay_seconds
+	return DEFAULT_ONLINE_OFFER_INITIAL_DELAY_SECONDS
+
+
+func _get_online_offer_interval_seconds() -> float:
+	if _economy_config != null and _economy_config.online_offer_interval_seconds > 0.0:
+		return _economy_config.online_offer_interval_seconds
+	return DEFAULT_ONLINE_OFFER_INTERVAL_SECONDS
+
+
+func _get_online_offer_active_duration_seconds() -> float:
+	if (
+		_economy_config != null
+		and _economy_config.online_offer_active_duration_seconds > 0.0
+	):
+		return _economy_config.online_offer_active_duration_seconds
+	return DEFAULT_ONLINE_OFFER_ACTIVE_DURATION_SECONDS
+
+
 func _has_valid_recipe_price(recipe_id: StringName) -> bool:
 	return recipe_id != &"" and int(_dine_in_prices.get(recipe_id, 0)) > 0
 
@@ -699,6 +777,16 @@ func _credit_order_with_invariant_guard(
 			% [order_id, recipe_id]
 		)
 		push_error(_last_invariant_error)
+
+
+func _is_game_paused() -> bool:
+	if (
+		_game_root != null
+		and is_instance_valid(_game_root)
+		and _game_root.has_method(&"is_paused")
+	):
+		return bool(_game_root.is_paused())
+	return false
 
 
 func _get_live_clock_now() -> float:
@@ -775,6 +863,9 @@ func _tick_service_spawns_and_timers(now: float) -> Dictionary:
 		changed["orders"] = true
 		changed["queues"] = true
 		changed["drivers"] = true
+		changed["online"] = true
+
+	if _update_online_offer_lifecycle(now):
 		changed["online"] = true
 
 	return changed
@@ -1099,3 +1190,114 @@ func _get_sorted_order_ids() -> Array[StringName]:
 	ids.assign(_orders.keys())
 	ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 	return ids
+
+
+func _make_empty_online_offer() -> Dictionary:
+	return {
+		"state": OnlineOfferState.NOT_SERVING,
+		"preview_recipe_id": &"",
+		"offer_generation_number": 0,
+		"next_offer_at": 0.0,
+		"offer_expires_at": 0.0,
+		"wait_total_seconds": _get_online_offer_interval_seconds(),
+	}
+
+
+func _online_offer_state_name(state: int) -> StringName:
+	match state:
+		OnlineOfferState.NOT_SERVING:
+			return &"not_serving"
+		OnlineOfferState.WAITING:
+			return &"waiting"
+		OnlineOfferState.AVAILABLE:
+			return &"available"
+		OnlineOfferState.UNAVAILABLE:
+			return &"unavailable"
+	return &"not_serving"
+
+
+func _online_offer_has_invalid_menu_prices() -> bool:
+	for recipe_id in _selected_recipe_ids:
+		if not _has_valid_recipe_price(recipe_id):
+			return true
+	return false
+
+
+func _is_online_service_restricted() -> bool:
+	if _selected_recipe_ids.is_empty():
+		return true
+	if _online_offer_has_invalid_menu_prices():
+		return true
+	if _day_queue_remaining <= 2:
+		return true
+	if _online_orders_open.size() >= _day_queue_initial:
+		return true
+	return false
+
+
+func _update_online_offer_lifecycle(now: float) -> bool:
+	var prev_state := int(_online_offer.get("state", OnlineOfferState.NOT_SERVING))
+	var prev_preview := StringName(_online_offer.get("preview_recipe_id", &""))
+	var prev_gen := int(_online_offer.get("offer_generation_number", 0))
+
+	if not _service_active or not _day_prepared:
+		_online_offer["state"] = OnlineOfferState.NOT_SERVING
+		_online_offer["preview_recipe_id"] = &""
+		_online_offer["offer_expires_at"] = 0.0
+		return (
+			prev_state != OnlineOfferState.NOT_SERVING
+			or prev_preview != &""
+		)
+
+	if _is_online_service_restricted():
+		_online_offer["state"] = OnlineOfferState.UNAVAILABLE
+		_online_offer["preview_recipe_id"] = &""
+		_online_offer["offer_expires_at"] = 0.0
+		return (
+			prev_state != OnlineOfferState.UNAVAILABLE
+			or prev_preview != &""
+		)
+
+	var state := prev_state
+	if state == OnlineOfferState.NOT_SERVING or state == OnlineOfferState.UNAVAILABLE:
+		var interval := _get_online_offer_interval_seconds()
+		if float(_online_offer.get("next_offer_at", 0.0)) <= now:
+			_online_offer["next_offer_at"] = now + interval
+			_online_offer["wait_total_seconds"] = interval
+		_online_offer["state"] = OnlineOfferState.WAITING
+		_online_offer["preview_recipe_id"] = &""
+		_online_offer["offer_expires_at"] = 0.0
+		state = OnlineOfferState.WAITING
+
+	if state == OnlineOfferState.AVAILABLE:
+		if now >= float(_online_offer.get("offer_expires_at", 0.0)):
+			var interval := _get_online_offer_interval_seconds()
+			_online_offer["state"] = OnlineOfferState.WAITING
+			_online_offer["preview_recipe_id"] = &""
+			_online_offer["offer_expires_at"] = 0.0
+			_online_offer["next_offer_at"] = now + interval
+			_online_offer["wait_total_seconds"] = interval
+			state = OnlineOfferState.WAITING
+
+	if state == OnlineOfferState.WAITING:
+		if now >= float(_online_offer.get("next_offer_at", 0.0)):
+			var active_duration := _get_online_offer_active_duration_seconds()
+			var picked_id := _pick_weighted_recipe_id()
+			if picked_id != &"":
+				_online_offer["state"] = OnlineOfferState.AVAILABLE
+				_online_offer["preview_recipe_id"] = picked_id
+				_online_offer["offer_expires_at"] = now + active_duration
+				_online_offer["offer_generation_number"] = prev_gen + 1
+			else:
+				_online_offer["state"] = OnlineOfferState.UNAVAILABLE
+				_online_offer["preview_recipe_id"] = &""
+				_online_offer["offer_expires_at"] = 0.0
+
+	var new_state := int(_online_offer.get("state", OnlineOfferState.NOT_SERVING))
+	var new_preview := StringName(_online_offer.get("preview_recipe_id", &""))
+	var new_gen := int(_online_offer.get("offer_generation_number", 0))
+	return (
+		new_state != prev_state
+		or new_preview != prev_preview
+		or new_gen != prev_gen
+	)

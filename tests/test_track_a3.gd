@@ -161,11 +161,13 @@ func _test_ingredients() -> Array[IngredientDef]:
 		and sayur.cooked_texture == null
 	)
 	_check(
-		"sapi leaves unconfirmed meat textures unassigned",
+		"sapi maps raw cow.png and cooked meat.png",
 		sapi != null
-		and sapi.icon == null
-		and sapi.raw_texture == null
-		and sapi.cooked_texture == null
+		and sapi.icon != null
+		and sapi.icon.resource_path == "res://assets/art/ingredients/raw cow.png"
+		and sapi.raw_texture == sapi.icon
+		and sapi.cooked_texture != null
+		and sapi.cooked_texture.resource_path == "res://assets/art/ingredients/cooked meat.png"
 	)
 
 	return list
@@ -239,6 +241,20 @@ func _test_economy_config(
 	_check("day 3 unlocked count == 3", cfg.get_unlocked_recipe_ids(3).size() == 3)
 	_check("confirmed timings unchanged", is_equal_approx(cfg.diner_patience_seconds, 100.0)
 		and is_equal_approx(cfg.online_deadline_seconds, 60.0))
+	_check(
+		"P5 diminishing curve and periodic online defaults valid",
+		PackedInt32Array(cfg.menu_demand_bonus_curve) == PackedInt32Array([0, 4, 7, 8, 9])
+		and cfg.potential_demand_conversion_percent == 80
+		and is_equal_approx(cfg.online_offer_initial_delay_seconds, 10.0)
+		and is_equal_approx(cfg.online_offer_interval_seconds, 15.0)
+		and is_equal_approx(cfg.online_offer_active_duration_seconds, 15.0)
+		and cfg.get_menu_demand_bonus(1) == 0
+		and cfg.get_menu_demand_bonus(2) == 4
+		and cfg.get_menu_demand_bonus(3) == 7
+		and cfg.get_menu_demand_bonus(4) == 8
+		and cfg.get_menu_demand_bonus(5) == 9
+		and cfg.get_menu_demand_bonus(6) == 9
+	)
 
 
 func _test_validation_negatives(

@@ -103,11 +103,12 @@ func _test_starter_fixtures_and_ui_information() -> void:
 	)
 
 	_check(
-		"m4c_fixture_shop_button_visible_in_planning",
-		ui.fixture_shop_button != null and ui.fixture_shop_button.visible
+		"m4c_fixture_shop_button_retired_under_slot_first_flow",
+		ui.fixture_shop_button != null
+		and not ui.fixture_shop_button.visible
+		and ui.fixture_shop_button.disabled
 	)
-	ui.fixture_shop_button.pressed.emit()
-	_check("m4c_fixture_shop_opens_on_button", ui.is_fixture_shop_open())
+	_check("m4c_fixture_shop_opens_on_slot", ui.open_fixture_shop(&"slot_utility_01"))
 	_check("m4c_fixture_shop_blocks_modal", ui.is_modal_blocking())
 
 	var stove_row: Dictionary = ui.get_fixture_shop_row(&"stove")
@@ -115,21 +116,24 @@ func _test_starter_fixtures_and_ui_information() -> void:
 	_check("m4c_stove_row_exists", not stove_row.is_empty())
 	_check("m4c_fridge_row_exists", not fridge_row.is_empty())
 	var stove_title := (stove_row.get("title_label") as Label).text
-	var stove_benefit := (stove_row.get("benefit_label") as Label).text
-	var fridge_downside := (fridge_row.get("downside_label") as Label).text
+	var stove_desc := (stove_row.get("description_label") as Label).text
+	var fridge_desc := (fridge_row.get("description_label") as Label).text
 	_check(
-		"m4c_stove_shows_name_category_price",
-		stove_title.contains("Kompor")
-		and stove_title.contains("Alat Masak")
-		and stove_title.contains("Rp60000")
+		"m4c_stove_shows_name_price_without_category",
+		stove_title == "Kompor: Rp 60k"
+		and not stove_row.has("benefit_label")
+		and not stove_row.has("downside_label")
+		and not ui.fixture_cash_label.visible
+		and not ui.fixture_power_label.visible
+		and not ui.fixture_slots_row.visible
 	)
 	_check(
-		"m4c_stove_shows_benefit",
-		stove_benefit.contains("Manfaat:") and stove_benefit.contains("kompor")
+		"m4c_stove_shows_short_purpose_description",
+		stove_desc == "Untuk memasak"
 	)
 	_check(
-		"m4c_fridge_shows_complexity_debt_electricity",
-		fridge_downside.contains("Complexity Debt") and fridge_downside.contains("Rp4000/hari")
+		"m4c_fridge_shows_inline_electricity",
+		fridge_desc.contains("listrik: Rp 4k/hari")
 	)
 
 	_send_key(ui, 0, KEY_ESCAPE)
@@ -197,17 +201,18 @@ func _test_purchase_validation_and_rejections() -> void:
 	)
 
 	ui.open_fixture_shop(&"slot_table_01")
-	ui.select_fixture_shop_utility(&"stove")
-	var ui_incompat: bool = ui.submit_fixture_shop()
-	_check("m4c_ui_rejects_incompatible_slot", not ui_incompat)
+	var blocked_stove := ui.select_fixture_shop_utility(&"stove")
+	var ui_incompat: bool = ui.submit_fixture_shop(&"stove", &"slot_table_01")
+	_check("m4c_ui_rejects_incompatible_slot", not blocked_stove and not ui_incompat)
 	_check(
 		"m4c_ui_shows_incompatible_error",
 		ui.fixture_error_label.visible
 		and ui.fixture_error_label.text.contains("tidak cocok")
 	)
+	ui.close_fixture_shop()
 
 	# 3. Valid purchase via UI into slot_utility_01 (Stove Rp60,000, cash 100k -> 40k)
-	ui.select_fixture_shop_slot(&"slot_utility_01")
+	ui.open_fixture_shop(&"slot_utility_01")
 	ui.select_fixture_shop_utility(&"stove")
 	var ui_ok: bool = ui.submit_fixture_shop()
 	_check("m4c_ui_valid_stove_purchase", ui_ok)
@@ -237,7 +242,8 @@ func _test_purchase_validation_and_rejections() -> void:
 	)
 
 	# 5. Insufficient cash rejection (cash is Rp40,000, fridge costs Rp80,000 in slot_utility_02)
-	ui.select_fixture_shop_slot(&"slot_utility_02")
+	ui.close_fixture_shop()
+	ui.open_fixture_shop(&"slot_utility_02")
 	ui.select_fixture_shop_utility(&"fridge")
 	var broke_ok: bool = ui.submit_fixture_shop()
 	_check("m4c_reject_insufficient_cash", not broke_ok)
@@ -486,11 +492,19 @@ func _test_other_dynamic_fixtures_and_electricity_persistence() -> void:
 	_check("m4c_serving_started_for_multi_fixture_test", game_root.is_serving())
 	await physics_frame
 
-	# Take 1 beras from fridge_01 at (3, 2) via UI click (verifying ingredient shop opens too)
+	# Select fridge_01 at (3, 2) via UI click (does not auto-open shop), open via `beli`,
+	# close shop, then retrieve 1 beras cleanly.
 	var f_node := world.registry.get_object(&"fridge_01") as Node2D
 	var f_canvas_pos: Vector2 = world.get_canvas_transform() * f_node.global_position
 	_send_left_click(ui, f_canvas_pos)
-	_check("m4c_clicking_fridge_01_opens_ingredient_shop", ui.is_ingredient_shop_open())
+	_check(
+		"m4c_clicking_fridge_01_selects_without_auto_opening_shop",
+		kitchen.get_selected_target_id() == &"fridge_01"
+		and not ui.is_ingredient_shop_open()
+		and kitchen.get_allowed_commands_for_selected_target() == ["beli", "beras"]
+	)
+	_type_word(ui, "beli")
+	_check("m4c_typing_beli_on_fridge_01_opens_ingredient_shop", ui.is_ingredient_shop_open())
 	ui.close_ingredient_shop()
 	_type_word(ui, "beras")
 	_check("m4c_took_beras_from_fridge_01", not kitchen.get_held_item_view().is_empty())
@@ -502,23 +516,35 @@ func _test_other_dynamic_fixtures_and_electricity_persistence() -> void:
 	# Cook washed beras in rice_cooker_01 at (8, 2)
 	kitchen.on_interactable_clicked(&"rice_cooker_01")
 	_type_word(ui, "masak")
+	var rc01_node := world.registry.get_object(&"rice_cooker_01")
+	var rc01_label := rc01_node.get_node_or_null("CookerPortionLabel") as Label
+	var starter_rc_node := world.registry.get_object(&"rice_cooker")
+	var starter_rc_label := starter_rc_node.get_node_or_null("CookerPortionLabel") as Label
 	_check(
-		"m4c_rice_cooker_01_has_cooked_output",
-		not kitchen.get_cooker_output_view(&"rice_cooker_01").is_empty()
+		"m4c_rice_cooker_01_has_5_cooked_portions",
+		int(kitchen.get_cooker_output_view(&"rice_cooker_01").get("portions", 0)) == 5
+		and rc01_label != null
+		and rc01_label.visible
+		and rc01_label.text == "5"
 	)
 	_check(
 		"m4c_starter_rice_cooker_remains_empty",
 		kitchen.get_cooker_output_view(&"rice_cooker").is_empty()
+		and (starter_rc_label == null or not starter_rc_label.visible)
 	)
 
-	# Scoop cooked rice from rice_cooker_01 with empty hand
+	# Scoop cooked rice from rice_cooker_01 with empty hand (5 -> 4)
 	kitchen.on_interactable_clicked(&"rice_cooker_01")
 	_type_word(ui, "nasi")
 	var scooped_rice: Dictionary = kitchen.get_held_item_view()
 	_check(
-		"m4c_scooped_rice_from_rice_cooker_01",
+		"m4c_scooped_rice_from_rice_cooker_01_leaves_4_portions",
 		not scooped_rice.is_empty()
 		and (scooped_rice.get("parts", []) as Array).size() == 1
+		and int(kitchen.get_cooker_output_view(&"rice_cooker_01").get("portions", 0)) == 4
+		and rc01_label != null
+		and rc01_label.text == "4"
+		and kitchen.get_cooker_output_view(&"rice_cooker").is_empty()
 	)
 
 	# End Day 1 service and inspect RESULTS settlement
@@ -592,7 +618,6 @@ func _test_fixture_shop_responsive_layout() -> void:
 	var overlay_rect: Rect2 = ui.fixture_shop_overlay.get_global_rect()
 	var popup_rect: Rect2 = ui.fixture_shop_popup.get_global_rect()
 	var hud_rect: Rect2 = ui.left_hud_region.get_global_rect()
-	var slots_rect: Rect2 = ui.fixture_slots_row.get_global_rect()
 	var list_rect: Rect2 = ui.fixture_list.get_global_rect()
 	var cancel_rect: Rect2 = ui.fixture_cancel_button.get_global_rect()
 	var confirm_rect: Rect2 = ui.fixture_confirm_button.get_global_rect()
@@ -612,10 +637,6 @@ func _test_fixture_shop_responsive_layout() -> void:
 		and not hud_rect.intersects(popup_rect)
 	)
 	_check(
-		"m4c_layout_640x360_slot_buttons_fit_inside_popup",
-		popup_rect.encloses(slots_rect)
-	)
-	_check(
 		"m4c_layout_640x360_equipment_list_fits_horizontally",
 		list_rect.position.x >= popup_rect.position.x
 		and list_rect.end.x <= popup_rect.end.x
@@ -627,32 +648,25 @@ func _test_fixture_shop_responsive_layout() -> void:
 
 	var all_rows_fit_x := true
 	var all_descriptions_wrap := true
-	for u_id: StringName in run.get_utility_ids():
+	for u_id: StringName in [&"stove", &"rice_cooker", &"fridge", &"box", &"washer", &"plate_rack"]:
 		var row: Dictionary = ui.get_fixture_shop_row(u_id)
 		if row.is_empty():
 			all_rows_fit_x = false
 			continue
 		var r_panel := row["panel"] as Control
 		var r_btn := row["select_button"] as Control
-		var r_downside := row["downside_label"] as Label
-		var r_benefit := row["benefit_label"] as Label
-		var r_avail := row["availability_label"] as Label
+		var r_desc := row["description_label"] as Label
 		var panel_g := r_panel.get_global_rect()
 		var btn_g := r_btn.get_global_rect()
-		var down_g := r_downside.get_global_rect()
+		var desc_g := r_desc.get_global_rect()
 		if panel_g.position.x < popup_rect.position.x or panel_g.end.x > popup_rect.end.x:
 			all_rows_fit_x = false
 		if btn_g.position.x < popup_rect.position.x or btn_g.end.x > popup_rect.end.x:
 			all_rows_fit_x = false
-		if (
-			r_downside.autowrap_mode == TextServer.AUTOWRAP_OFF
-			or r_benefit.autowrap_mode == TextServer.AUTOWRAP_OFF
-			or r_avail.autowrap_mode == TextServer.AUTOWRAP_OFF
-			or down_g.end.x > btn_g.position.x
-		):
+		if r_desc.autowrap_mode == TextServer.AUTOWRAP_OFF or desc_g.end.x > btn_g.position.x:
 			all_descriptions_wrap = false
 
-	_check("m4c_layout_640x360_all_7_rows_fit_horizontally", all_rows_fit_x)
+	_check("m4c_layout_640x360_all_6_utility_rows_fit_horizontally", all_rows_fit_x)
 	_check("m4c_layout_640x360_long_descriptions_wrap_properly", all_descriptions_wrap)
 
 	var scroll := ui.fixture_list.get_parent() as ScrollContainer
@@ -677,7 +691,6 @@ func _test_fixture_shop_responsive_layout() -> void:
 	var small_vp: Rect2 = ui.get_viewport().get_visible_rect()
 	var small_popup: Rect2 = ui.fixture_shop_popup.get_global_rect()
 	var small_hud: Rect2 = ui.left_hud_region.get_global_rect()
-	var small_slots: Rect2 = ui.fixture_slots_row.get_global_rect()
 	var small_list: Rect2 = ui.fixture_list.get_global_rect()
 	var small_cancel: Rect2 = ui.fixture_cancel_button.get_global_rect()
 	var small_confirm: Rect2 = ui.fixture_confirm_button.get_global_rect()
@@ -691,15 +704,13 @@ func _test_fixture_shop_responsive_layout() -> void:
 	)
 	_check(
 		"m4c_layout_480x270_controls_fit_inside_resized_popup",
-		small_popup.encloses(small_slots)
-		and small_list.position.x >= small_popup.position.x
+		small_list.position.x >= small_popup.position.x
 		and small_list.end.x <= small_popup.end.x
 		and small_popup.encloses(small_cancel)
 		and small_popup.encloses(small_confirm)
 	)
 
 	# Verify shop interactions still work after viewport resize
-	ui.select_fixture_shop_slot(&"slot_utility_01")
 	ui.select_fixture_shop_utility(&"box")
 	var bought_after_resize: bool = ui.submit_fixture_shop()
 	_check(

@@ -68,7 +68,9 @@ func _test_data_driven_ingredient_commands() -> void:
 	await physics_frame
 
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
+	var empty_units: Dictionary = kitchen._storage_units.duplicate(true)
 
 	var loaded_ids := kitchen.get_ingredient_ids()
 	var expected_commands: Array[String] = []
@@ -92,44 +94,68 @@ func _test_data_driven_ingredient_commands() -> void:
 		]
 	)
 
+	# Stock storage_box with 3 ingredients (unsorted purchase order) and enter SERVING:
+	run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
+	run.request_ingredient_purchase(&"ayam", 1, &"storage_box")
+	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
 	game_root.start_service_requested()
 	kitchen.on_interactable_clicked(&"storage_box")
 	var first_cmds := kitchen.get_allowed_commands_for_selected_target()
 	var second_cmds := kitchen.get_allowed_commands_for_selected_target()
 	_check(
-		"storage_box commands match loaded ingredients in deterministic alphabetical order",
-		first_cmds == expected_commands and second_cmds == expected_commands
+		"storage_box commands match beli and stocked ingredients in deterministic alphabetical order",
+		first_cmds == ["ayam", "beli", "beras", "sayur"]
+		and second_cmds == ["ayam", "beli", "beras", "sayur"]
 	)
 
-	# Verify non-storage station commands and order remain preserved.
-	kitchen.on_interactable_clicked(&"stove")
-	var stove_cmds := kitchen.get_allowed_commands_for_selected_target()
-	kitchen.on_interactable_clicked(&"rice_cooker")
-	var cooker_cmds := kitchen.get_allowed_commands_for_selected_target()
-	kitchen.on_interactable_clicked(&"washer")
-	var washer_cmds := kitchen.get_allowed_commands_for_selected_target()
-	kitchen.on_interactable_clicked(&"work_table_chop")
-	var chop_cmds := kitchen.get_allowed_commands_for_selected_target()
+	# Verify non-storage station commands and order under eligible contexts:
+	game_root._process(10.0)
 	kitchen.on_interactable_clicked(&"online_station")
 	var online_cmds := kitchen.get_allowed_commands_for_selected_target()
+	kitchen._try_take_raw_ingredient(&"storage_box", &"sayur")
+	kitchen.on_interactable_clicked(&"work_table_chop")
+	var chop_cmds := kitchen.get_allowed_commands_for_selected_target()
+	kitchen.on_interactable_clicked(&"stove")
+	var stove_cmds := kitchen.get_allowed_commands_for_selected_target()
+	kitchen.on_interactable_clicked(&"trash")
+	kitchen._try_take_raw_ingredient(&"storage_box", &"beras")
+	kitchen.on_interactable_clicked(&"washer")
+	var washer_cmds := kitchen.get_allowed_commands_for_selected_target()
+	kitchen._perform_typed_command(&"cuci")
+	kitchen.on_interactable_clicked(&"rice_cooker")
+	var cooker_masak_cmds := kitchen.get_allowed_commands_for_selected_target()
+	kitchen._perform_typed_command(&"masak")
+	var cooker_nasi_cmds := kitchen.get_allowed_commands_for_selected_target()
 	_check(
-		"non-ingredient station commands and order remain unchanged",
+		"non-ingredient station commands and order remain preserved in valid contexts",
 		stove_cmds == ["goreng"]
-		and cooker_cmds == ["masak", "nasi"]
+		and cooker_masak_cmds == ["masak"]
+		and cooker_nasi_cmds == ["nasi"]
 		and washer_cmds == ["cuci"]
 		and chop_cmds == ["potong"]
 		and online_cmds == ["terima"]
 	)
 
-	# Mutate loaded _ingredients_by_id in-memory to prove list is not hardcoded.
+	# Mutate loaded _ingredients_by_id & test stocked FRIDGE to prove list is not hardcoded.
 	var backup_catalog: Dictionary[StringName, IngredientDef] = (
 		kitchen._ingredients_by_id.duplicate()
 	)
+	var full_slots: Array[Dictionary] = []
+	for id in loaded_ids:
+		full_slots.append({"ingredient_id": id, "quantity": 1})
+	full_slots.append({"ingredient_id": &"gula", "quantity": 1})
+	kitchen._storage_units[&"test_fridge"] = {
+		"utility_id": &"fridge",
+		"slot_count": full_slots.size(),
+		"slot_capacity": 5,
+		"slots": full_slots,
+	}
+	kitchen._fixture_kinds[&"test_fridge"] = SharedTypes.FixtureKind.FRIDGE
 	var extra_ing := IngredientDef.new()
 	extra_ing.ingredient_id = &"gula"
 	extra_ing.display_name = "Gula"
 	kitchen._ingredients_by_id[&"gula"] = extra_ing
-	kitchen.on_interactable_clicked(&"storage_box")
+	kitchen._selected_target_id = &"test_fridge"
 	var expanded_cmds := kitchen.get_allowed_commands_for_selected_target()
 	_check(
 		"adding loaded ingredient dynamically updates sorted storage commands",
@@ -162,10 +188,19 @@ func _test_data_driven_ingredient_commands() -> void:
 	)
 	kitchen.clear_command_prefix()
 
-	# Also verify FRIDGE fixture kind branch derives from _ingredients_by_id.
+	# Also verify FRIDGE fixture kind branch derives from _ingredients_by_id with cabai.
 	kitchen._ingredients_by_id = backup_catalog.duplicate()
 	kitchen._ingredients_by_id[&"cabai"] = extra_ing
-	kitchen._fixture_kinds[&"test_fridge"] = SharedTypes.FixtureKind.FRIDGE
+	var fridge_slots: Array[Dictionary] = []
+	for id in loaded_ids:
+		fridge_slots.append({"ingredient_id": id, "quantity": 1})
+	fridge_slots.append({"ingredient_id": &"cabai", "quantity": 1})
+	kitchen._storage_units[&"test_fridge"] = {
+		"utility_id": &"fridge",
+		"slot_count": fridge_slots.size(),
+		"slot_capacity": 5,
+		"slots": fridge_slots,
+	}
 	kitchen._selected_target_id = &"test_fridge"
 	var fridge_cmds := kitchen.get_allowed_commands_for_selected_target()
 	_check(
@@ -181,6 +216,7 @@ func _test_data_driven_ingredient_commands() -> void:
 		]
 	)
 	kitchen._fixture_kinds.erase(&"test_fridge")
+	kitchen._storage_units = empty_units
 	kitchen._ingredients_by_id = backup_catalog
 
 	# Verify real stock take command behavior on storage_box remains unchanged.

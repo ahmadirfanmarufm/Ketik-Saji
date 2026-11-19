@@ -57,6 +57,16 @@ func _init() -> void:
 	quit(0 if _fails == 0 else 1)
 
 
+func _click_world_pos(ui: GameUI, pos: Vector2) -> void:
+	if ui.interaction_dialogue != null and ui.interaction_dialogue.visible:
+		if ui.interaction_dialogue.get_global_rect().has_point(pos):
+			var clear_pt := Vector2(352, 276)
+			if ui.interaction_dialogue.get_global_rect().has_point(clear_pt):
+				clear_pt = Vector2(160, 148)
+			_send_left_click(ui, clear_pt)
+	_send_left_click(ui, pos)
+
+
 func _send_left_click(ui: GameUI, pos: Vector2) -> void:
 	var press_ev := InputEventMouseButton.new()
 	press_ev.button_index = MOUSE_BUTTON_LEFT
@@ -110,34 +120,60 @@ func _test_ingredient_shop_planning_and_validation() -> void:
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
 
-	# 1. Clicking storage_box in PLANNING moves adjacent, selects target, and opens Belanja Bahan.
+	# 1. Clicking storage_box in PLANNING moves adjacent, selects target, shows beli,
+	#    and typing beli opens Belanja Bahan.
 	_send_left_click(ui, Vector2(256, 52))
+	_check(
+		"storage_box click in PLANNING selects storage_box with beli without auto-opening shop",
+		not ui.is_ingredient_shop_open()
+		and kitchen.get_selected_target_id() == &"storage_box"
+		and kitchen.get_allowed_commands_for_selected_target() == ["beli"]
+	)
+	_type_word(ui, "beli")
 	await process_frame
 	var popup_rect := ui.ingredient_shop_popup.get_global_rect()
 	var beras_row := ui.get_shop_ingredient_controls(&"beras")
 	var sapi_row := ui.get_shop_ingredient_controls(&"sapi")
 	var sayur_row := ui.get_shop_ingredient_controls(&"sayur")
 	var tempe_row := ui.get_shop_ingredient_controls(&"tempe")
+	var sapi_row_node := (sapi_row["price_label"] as Label).get_parent() as Node
+	var sapi_tex_rect: TextureRect = null
+	for child: Node in sapi_row_node.get_children():
+		if child is TextureRect:
+			sapi_tex_rect = child as TextureRect
+			break
+	var sapi_has_fallback := false
+	for child: Node in sapi_row_node.get_children():
+		if child is ColorRect:
+			sapi_has_fallback = true
+			break
 	_check(
-		"storage_box click in PLANNING opens centered Belanja Bahan with all 6 ingredients",
+		"typing beli on storage_box in PLANNING opens centered Belanja Bahan with all 6 ingredients",
 		ui.is_ingredient_shop_open()
 		and ui.is_modal_blocking()
 		and ui.left_hud_region.visible
 		and ui.world_visible_rect.encloses(popup_rect)
 		and kitchen.get_selected_target_id() == &"storage_box"
-		and ui.shop_cash_label.text == "Kas: Rp100000"
-		and ui.shop_capacity_label.text == "Sisa kapasitas: 15"
+		and not ui.shop_cash_label.visible
+		and not ui.shop_capacity_label.visible
+		and not ui.shop_delivery_hint_label.visible
+		and not ui.shop_pending_label.visible
+		and not beras_row.has("stock_label")
 		and not beras_row.is_empty()
 		and not sapi_row.is_empty()
 		and not sayur_row.is_empty()
 		and not tempe_row.is_empty()
-		and (beras_row["price_label"] as Label).text == "Rp2000"
-		and (sapi_row["price_label"] as Label).text == "Rp10000"
+		and sapi_tex_rect != null
+		and sapi_tex_rect.texture != null
+		and sapi_tex_rect.texture.resource_path == "res://assets/art/ingredients/raw cow.png"
+		and not sapi_has_fallback
+		and (beras_row["price_label"] as Label).text == "Rp 2k"
+		and (sapi_row["price_label"] as Label).text == "Rp 10k"
 	)
 
 	# 2. Modal blocks world clicks and buka typing while open.
 	var tile_before := kitchen.get_player_tile()
-	_send_left_click(ui, Vector2(320, 148))
+	_send_left_click(ui, Vector2(352, 276))
 	_type_word(ui, "buka")
 	_check(
 		"shop modal blocks world clicks and gameplay typing",
@@ -169,6 +205,7 @@ func _test_ingredient_shop_planning_and_validation() -> void:
 
 	# 4. Capacity (including 3-slot distinct-ingredient cap) and insufficient cash rejections.
 	_send_left_click(ui, Vector2(256, 52))
+	_type_word(ui, "beli")
 	await process_frame
 	sayur_row = ui.get_shop_ingredient_controls(&"sayur")
 	_check("select 1 beras", ui.adjust_shop_quantity(&"beras", 1))
@@ -215,7 +252,7 @@ func _test_ingredient_shop_planning_and_validation() -> void:
 		not ui.is_ingredient_shop_open()
 		and not second_checkout
 		and int(run.get_run_view()["cash"]) == 90000
-		and ui.cash_label.text == "Kas: Rp90000"
+		and ui.cash_label.text == "Kas: Rp 90k"
 		and slots[0]["ingredient_id"] == &"beras"
 		and int(slots[0]["quantity"]) == 2
 		and slots[1]["ingredient_id"] == &"telur"
@@ -239,18 +276,21 @@ func _test_ingredient_shop_serving_live_and_cooking() -> void:
 
 	# Buy Day 1 nasi_telor ingredients purely via UI shop in PLANNING (beras x1, telur x1).
 	_send_left_click(ui, Vector2(256, 52))
+	_type_word(ui, "beli")
 	await process_frame
 	ui.adjust_shop_quantity(&"beras", 1)
 	ui.adjust_shop_quantity(&"telur", 1)
 	ui.shop_checkout_button.pressed.emit()
 
-	# Start SERVING via typed `buka` (player stays at (3,1), click floor to clear target first).
-	_send_left_click(ui, Vector2(320, 148))
+	# Start SERVING via typed `buka` (click free floor outside storage dialogue to clear target).
+	_send_left_click(ui, Vector2(352, 276))
 	_type_word(ui, "buka")
 	_check("entered SERVING via buka after UI shopping", game_root.is_serving())
 
-	# Open shop in SERVING by clicking storage_box, confirm service clock keeps ticking.
+	# Open shop in SERVING by selecting storage_box and typing `beli`, confirm clock keeps ticking.
 	_send_left_click(ui, Vector2(256, 52))
+	_check("clicking storage_box in SERVING does not auto-open shop", not ui.is_ingredient_shop_open())
+	_type_word(ui, "beli")
 	await process_frame
 	var elapsed_before := game_root.get_service_elapsed()
 	game_root._process(10.0)
@@ -278,6 +318,7 @@ func _test_ingredient_shop_serving_live_and_cooking() -> void:
 	# Re-open shop at +50s -> shows pending countdown; advance another +50s -> arrives live.
 	game_root._process(50.0)
 	_send_left_click(ui, Vector2(256, 52))
+	_type_word(ui, "beli")
 	await process_frame
 	var rem_secs := ceili(float(pending[0]["due_at"]) - game_root.get_service_elapsed())
 	_check(
@@ -287,32 +328,33 @@ func _test_ingredient_shop_serving_live_and_cooking() -> void:
 	)
 	game_root._process(50.0)
 	ui._process(0.016)
-	var ayam_row := ui.get_shop_ingredient_controls(&"ayam")
+	var third_slot_lbl := ui.shop_slots_row.get_child(2).get_child(0) as Label
 	_check(
 		"shop refreshes live when 100s delivery arrives while open",
 		kitchen.get_pending_delivery_views().is_empty()
-		and ui.shop_pending_label.text == "Kiriman tertunda: tidak ada"
-		and (ayam_row["stock_label"] as Label).text == "Stok: 1"
+		and not ui.shop_pending_label.visible
+		and ui.shop_pending_label.text == ""
+		and third_slot_lbl != null
+		and third_slot_lbl.text == "Ayam 1/5"
 	)
 
 	# Cancel closes shop keeping player at storage_box so kitchen cooking works end-to-end.
 	ui.shop_cancel_button.pressed.emit()
 	_type_word(ui, "beras")
-	_send_left_click(ui, Vector2(160, 52))
+	_click_world_pos(ui, Vector2(160, 52))
 	_type_word(ui, "cuci")
-	_send_left_click(ui, Vector2(224, 52))
+	_click_world_pos(ui, Vector2(224, 52))
 	_type_word(ui, "masak")
-	_send_left_click(ui, Vector2(288, 52))
-	_send_left_click(ui, Vector2(251, 116))
-	_send_left_click(ui, Vector2(224, 52))
+	_click_world_pos(ui, Vector2(288, 52))
+	_click_world_pos(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(224, 52))
 	_type_word(ui, "nasi")
-	_send_left_click(ui, Vector2(251, 116))
-	_send_left_click(ui, Vector2(256, 52))
-	ui.shop_cancel_button.pressed.emit()
+	_click_world_pos(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(256, 52))
 	_type_word(ui, "telur")
-	_send_left_click(ui, Vector2(192, 52))
+	_click_world_pos(ui, Vector2(192, 52))
 	_type_word(ui, "goreng")
-	_send_left_click(ui, Vector2(251, 116))
+	_click_world_pos(ui, Vector2(251, 116))
 	_check(
 		"full M1 nasi_telor dish assembled strictly from Belanja Bahan stock",
 		kitchen.get_work_table_view(&"work_table").get("matched_recipe_id", &"") == &"nasi_telor"
@@ -598,6 +640,7 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 	var ui := game_root.get_node("UI") as GameUI
 
 	_send_left_click(ui, Vector2(256, 52))
+	_type_word(ui, "beli")
 	await process_frame
 	ui.adjust_shop_quantity(&"beras", 1)
 	ui.adjust_shop_quantity(&"telur", 1)
@@ -614,12 +657,13 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 		and int(plan_slots[2]["quantity"]) == 1
 	)
 
-	_send_left_click(ui, Vector2(320, 148))
+	_send_left_click(ui, Vector2(352, 276))
 	_type_word(ui, "buka")
 	_check("buka starts SERVING with Planning stock retained", game_root.is_serving())
 
 	# Retrieve purchased rice, close via Escape when shop opens on storage_box click.
 	_send_left_click(ui, Vector2(256, 52))
+	_type_word(ui, "beli")
 	await process_frame
 	_check("storage_box click in SERVING shows Ambil Bahan button", ui.shop_retrieve_button.visible)
 	_send_key(ui, 0, KEY_ESCAPE)
@@ -648,23 +692,25 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 	_send_left_click(ui, Vector2(224, 52))
 	_type_word(ui, "masak")
 	_check(
-		"washed beras cooked via masak -> rice_cooker output COOKED_RICE and hand cleared",
+		"washed beras cooked via masak -> rice_cooker output COOKED_RICE (5 portions)",
 		kitchen.get_held_item_view().is_empty()
+		and int(kitchen.get_cooker_output_view(&"rice_cooker").get("portions", 0)) == 5
 		and int(kitchen.get_cooker_output_view(&"rice_cooker")["parts"][0]["state"])
 			== SharedTypes.PrepState.COOKED_RICE
 	)
 	_type_word(ui, "nasi")
 	_check(
-		"nasi retrieves COOKED_RICE from rice_cooker and clears cooker output",
+		"nasi retrieves COOKED_RICE from rice_cooker and leaves 4 portions",
 		kitchen.get_held_item_view()["parts"][0]["ingredient_id"] == &"beras"
 		and int(kitchen.get_held_item_view()["parts"][0]["state"])
 			== SharedTypes.PrepState.COOKED_RICE
-		and kitchen.get_cooker_output_view(&"rice_cooker").is_empty()
+		and int(kitchen.get_cooker_output_view(&"rice_cooker").get("portions", 0)) == 4
 	)
 	_send_left_click(ui, Vector2(384, 52))
 
 	# Retrieve purchased egg -> goreng at stove -> COOKED; repeated goreng rejected cleanly.
 	_send_left_click(ui, Vector2(256, 52))
+	_type_word(ui, "beli")
 	await process_frame
 	ui.shop_retrieve_button.pressed.emit()
 	_type_word(ui, "telur")
@@ -676,7 +722,12 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 		and int(kitchen.get_held_item_view()["parts"][0]["state"]) == SharedTypes.PrepState.COOKED
 		and int(kitchen.get_storage_unit_view(&"storage_box")["slots"][2]["quantity"]) == 0
 	)
+	_check(
+		"already COOKED telur hides goreng at stove",
+		kitchen.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_word(ui, "goreng")
+	kitchen._perform_typed_command(&"goreng")
 	_check(
 		"repeated goreng on already COOKED telur rejected without consuming item",
 		kitchen.get_held_item_view()["parts"][0]["ingredient_id"] == &"telur"
@@ -687,6 +738,7 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 
 	# Retrieve purchased chicken -> goreng at stove -> COOKED.
 	_send_left_click(ui, Vector2(256, 52))
+	_type_word(ui, "beli")
 	await process_frame
 	ui.shop_retrieve_button.pressed.emit()
 	_type_word(ui, "ayam")
@@ -714,6 +766,7 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 
 	_type_word(u2, "buka")
 	_send_left_click(u2, Vector2(256, 52))
+	_type_word(u2, "beli")
 	await process_frame
 	u2.adjust_shop_quantity(&"beras", 1)
 	u2.adjust_shop_quantity(&"telur", 1)
@@ -732,8 +785,13 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 		and pending_lbl.text.begins_with("Kirim ")
 	)
 
-	# Before 100s delivery: cannot retrieve, and empty-hand stove/cooker show clear guidance.
+	# Before 100s delivery: pending storage hides ingredient commands, and backend rejects cleanly.
+	_check(
+		"pending storage_box with 0 stock hides ingredient commands",
+		k2.get_allowed_commands_for_selected_target() == ["beli"]
+	)
 	_type_word(u2, "beras")
+	k2._perform_typed_command(&"beras")
 	_check(
 		"retrieving pending beras before 100s rejects with delivery_pending",
 		k2.get_held_item_view().is_empty()
@@ -741,7 +799,12 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 		and u2.context_message_label.text == "Bahan masih dikirim"
 	)
 	_send_left_click(u2, Vector2(192, 52))
+	_check(
+		"empty-hand stove hides goreng command",
+		k2.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_word(u2, "goreng")
+	k2._perform_typed_command(&"goreng")
 	_check(
 		"empty-hand goreng at stove rejects with hand_empty",
 		k2.get_held_item_view().is_empty()
@@ -749,13 +812,19 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 		and u2.context_message_label.text == "Ambil bahan dulu"
 	)
 	_send_left_click(u2, Vector2(224, 52))
+	_check(
+		"empty-hand empty rice_cooker hides masak and nasi",
+		k2.get_allowed_commands_for_selected_target().is_empty()
+	)
 	_type_word(u2, "masak")
+	k2._perform_typed_command(&"masak")
 	_check(
 		"empty-hand masak at rice_cooker rejects with hand_empty",
 		k2.get_held_item_view().is_empty()
 		and u2.get_feedback_code() == &"hand_empty"
 	)
 	_type_word(u2, "nasi")
+	k2._perform_typed_command(&"nasi")
 	_check(
 		"empty rice_cooker nasi emits cooker_empty",
 		k2.get_held_item_view().is_empty()
@@ -773,8 +842,6 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 	)
 
 	_send_left_click(u2, Vector2(256, 52))
-	await process_frame
-	u2.shop_retrieve_button.pressed.emit()
 	_type_word(u2, "beras")
 	_send_left_click(u2, Vector2(160, 52))
 	_type_word(u2, "cuci")
@@ -789,8 +856,6 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 	_send_left_click(u2, Vector2(384, 52))
 
 	_send_left_click(u2, Vector2(256, 52))
-	await process_frame
-	u2.shop_retrieve_button.pressed.emit()
 	_type_word(u2, "telur")
 	_send_left_click(u2, Vector2(192, 52))
 	_type_word(u2, "goreng")
@@ -802,8 +867,6 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 	_send_left_click(u2, Vector2(384, 52))
 
 	_send_left_click(u2, Vector2(256, 52))
-	await process_frame
-	u2.shop_retrieve_button.pressed.emit()
 	_type_word(u2, "ayam")
 	_send_left_click(u2, Vector2(192, 52))
 	_type_word(u2, "goreng")
