@@ -8,6 +8,8 @@ extends Resource
 @export var recipe_id: StringName = &""
 @export var display_name: String = ""
 @export var icon_key: StringName = &""
+@export var icon: Texture2D = null
+@export_multiline var description: String = ""
 @export var required_parts: Array[RecipePartDef] = []
 
 

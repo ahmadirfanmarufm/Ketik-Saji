@@ -7,6 +7,9 @@
 [ext_resource type="Script" uid="uid://d1wtcyganh2n4" path="res://scripts/economy/run_controller.gd" id="5_run"]
 [ext_resource type="PackedScene" path="res://scenes/ui/game_ui.tscn" id="6_ui"]
 [ext_resource type="Texture2D" uid="uid://cebm8jteebukm" path="res://assets/art/tiles/Warung-Tileset.png" id="7_tileset"]
+[ext_resource type="Texture2D" uid="uid://c8pq74d0tx7bl" path="res://assets/art/road/Sidewalk(trotoar).png" id="8_sidewalk"]
+[ext_resource type="Texture2D" uid="uid://bbr3n7o0uobgv" path="res://assets/art/road/Road.png" id="9_road"]
+[ext_resource type="Script" uid="uid://c1kbugsnl7xc1" path="res://scripts/audio/game_audio.gd" id="10_audio"]
 
 [node name="GameRoot" type="Node2D" unique_id=450135891]
 script = ExtResource("2_root")
@@ -16,12 +19,13 @@ z_index = -10
 texture_filter = 1
 
 [node name="OuterBackdrop" type="Polygon2D" parent="WorldBackdrop" unique_id=901000101]
-polygon = PackedVector2Array(-64, -64, 768, -64, 768, 448, -64, 448)
+position = Vector2(-390, 63)
 color = Color(0.11, 0.13, 0.17, 1)
+polygon = PackedVector2Array(-64, -64, 768, -64, 768, 448, -64, 448)
 
 [node name="WarungWallFrame" type="Polygon2D" parent="WorldBackdrop" unique_id=901000102]
-polygon = PackedVector2Array(140, 0, 432, 0, 432, 326, 140, 326)
 color = Color(0.24, 0.15, 0.09, 1)
+polygon = PackedVector2Array(140, 0, 432, 0, 432, 326, 140, 326)
 
 [node name="RearKitchenWallLeft" type="Sprite2D" parent="WorldBackdrop" unique_id=901000103]
 texture_filter = 1
@@ -56,8 +60,80 @@ region_enabled = true
 region_rect = Rect2(160, 64, 32, 32)
 
 [node name="RearTopBeam" type="Polygon2D" parent="WorldBackdrop" unique_id=901000107]
-polygon = PackedVector2Array(140, 0, 432, 0, 432, 4, 140, 4)
 color = Color(0.24, 0.15, 0.09, 1)
+polygon = PackedVector2Array(140, 0, 432, 0, 432, 4, 140, 4)
+
+[node name="LeftSidewalkTopA" type="Sprite2D" parent="WorldBackdrop" unique_id=901000108]
+texture_filter = 1
+position = Vector2(432, 4)
+texture = ExtResource("8_sidewalk")
+centered = false
+
+[node name="LeftSidewalkTopB" type="Sprite2D" parent="WorldBackdrop" unique_id=901000109]
+texture_filter = 1
+position = Vector2(432, -28)
+texture = ExtResource("8_sidewalk")
+centered = false
+
+[node name="RoadTop" type="Sprite2D" parent="WorldBackdrop" unique_id=901000110]
+texture_filter = 1
+position = Vector2(464, -28)
+texture = ExtResource("9_road")
+centered = false
+
+[node name="RightSidewalkTopA" type="Sprite2D" parent="WorldBackdrop" unique_id=901000111]
+texture_filter = 1
+position = Vector2(496, 4)
+texture = ExtResource("8_sidewalk")
+centered = false
+flip_h = true
+
+[node name="RightSidewalkTopB" type="Sprite2D" parent="WorldBackdrop" unique_id=901000112]
+texture_filter = 1
+position = Vector2(496, -28)
+texture = ExtResource("8_sidewalk")
+centered = false
+flip_h = true
+
+[node name="LeftSidewalkBottomA" type="Sprite2D" parent="WorldBackdrop" unique_id=901000113]
+texture_filter = 1
+position = Vector2(432, 324)
+texture = ExtResource("8_sidewalk")
+centered = false
+
+[node name="LeftSidewalkBottomB" type="Sprite2D" parent="WorldBackdrop" unique_id=901000114]
+texture_filter = 1
+position = Vector2(432, 356)
+texture = ExtResource("8_sidewalk")
+centered = false
+
+[node name="RoadBottom" type="Sprite2D" parent="WorldBackdrop" unique_id=901000115]
+texture_filter = 1
+position = Vector2(464, 292)
+texture = ExtResource("9_road")
+centered = false
+
+[node name="RoadBottomCap" type="Sprite2D" parent="WorldBackdrop" unique_id=901000116]
+texture_filter = 1
+position = Vector2(464, 356)
+texture = ExtResource("9_road")
+centered = false
+region_enabled = true
+region_rect = Rect2(0, 0, 32, 32)
+
+[node name="RightSidewalkBottomA" type="Sprite2D" parent="WorldBackdrop" unique_id=901000117]
+texture_filter = 1
+position = Vector2(496, 324)
+texture = ExtResource("8_sidewalk")
+centered = false
+flip_h = true
+
+[node name="RightSidewalkBottomB" type="Sprite2D" parent="WorldBackdrop" unique_id=901000118]
+texture_filter = 1
+position = Vector2(496, 356)
+texture = ExtResource("8_sidewalk")
+centered = false
+flip_h = true
 
 [node name="World" parent="." unique_id=1520841377 instance=ExtResource("1_world")]
 position = Vector2(144, 36)
@@ -70,5 +146,8 @@ script = ExtResource("4_service")
 
 [node name="RunController" type="Node" parent="." unique_id=701000103]
 script = ExtResource("5_run")
+
+[node name="AudioController" type="Node" parent="." unique_id=701000105]
+script = ExtResource("10_audio")
 
 [node name="UI" parent="." unique_id=701000104 instance=ExtResource("6_ui")]

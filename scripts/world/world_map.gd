@@ -14,6 +14,13 @@ const ALLOWED_FIXTURE_KINDS_META: StringName = &"allowed_fixture_kinds"
 const INVALID_CELL: Vector2i = Vector2i(-1, -1)
 
 const TILESET_SOURCE_ID: int = 0
+const SIDEWALK_SOURCE_ID: int = 1
+const ROAD_SOURCE_ID: int = 2
+const TILE_SIDEWALK: Vector2i = Vector2i(0, 0)
+const SIDEWALK_ALT_DEFAULT: int = 0
+const SIDEWALK_ALT_FLIPPED: int = 1
+const TILE_ROAD_TOP: Vector2i = Vector2i(0, 0)
+const TILE_ROAD_BOTTOM: Vector2i = Vector2i(0, 1)
 const TILE_LANE_TOP_LEFT: Vector2i = Vector2i(0, 0)
 const TILE_LANE_TOP_MID: Vector2i = Vector2i(1, 0)
 const TILE_LANE_TOP_RIGHT: Vector2i = Vector2i(2, 0)
@@ -44,6 +51,8 @@ const REGION_ONLINE_STATION: Rect2 = Rect2(480, 128, 32, 64)
 const REGION_LONG_COUNTER: Rect2 = Rect2(416, 32, 96, 32)
 const REGION_INTERIOR_WALL: Rect2 = Rect2(160, 64, 32, 32)
 const DINING_TABLE_SCENE: PackedScene = preload("res://scenes/world/dining_table.tscn")
+const PLATE_TEXTURE: Texture2D = preload("res://assets/art/dishes/plate.png")
+const DIRTY_PLATE_TEXTURE: Texture2D = preload("res://assets/art/ui/icons/plate-dirty.png")
 
 const DRIVER_HITBOX_SIZE: Vector2 = Vector2(28, 28)
 const DRIVER_OVERFLOW_STEP: Vector2 = Vector2(0, -24)
@@ -294,12 +303,14 @@ func get_fixture_region_rect(fixture_kind: int) -> Rect2:
 	return Rect2()
 
 
-## Synchronizes a food item container (held or staged) with plate and part sprites.
+## Synchronizes a food item container (held or staged) with completed dish icon,
+## ordinary plate sprite, and ingredient part sprites.
 static func sync_food_item_visual(
 	container: Node2D,
 	has_item: bool,
 	is_plated: bool,
-	part_textures: Array[Texture2D]
+	part_textures: Array[Texture2D],
+	dish_icon: Texture2D = null
 ) -> void:
 	if container == null:
 		return
@@ -313,18 +324,21 @@ static func sync_food_item_visual(
 	if not has_item:
 		return
 
+	if dish_icon != null:
+		var dish_spr := Sprite2D.new()
+		dish_spr.name = "DishSprite"
+		dish_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		dish_spr.texture = dish_icon
+		dish_spr.scale = Vector2(0.75, 0.75)
+		container.add_child(dish_spr)
+		return
+
 	if is_plated:
-		var plate := Polygon2D.new()
+		var plate := Sprite2D.new()
 		plate.name = "PlateIndicator"
-		plate.polygon = PackedVector2Array([
-			Vector2(-9, -3),
-			Vector2(9, -3),
-			Vector2(10, 0),
-			Vector2(8, 3),
-			Vector2(-8, 3),
-			Vector2(-10, 0),
-		])
-		plate.color = Color(0.95, 0.95, 0.95, 1.0)
+		plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		plate.texture = PLATE_TEXTURE
+		plate.scale = Vector2(0.75, 0.75)
 		container.add_child(plate)
 
 	var count := part_textures.size()
@@ -358,6 +372,51 @@ static func sync_food_item_visual(
 			container.add_child(fallback)
 
 
+## Returns stable IDs for all independent three-tile long counter slots.
+func get_long_counter_slot_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	if kitchen_work_tables == null:
+		return ids
+	for child in kitchen_work_tables.get_children():
+		if not child.has_meta(WORLD_ID_META):
+			continue
+		var wid := StringName(child.get_meta(WORLD_ID_META, &""))
+		if wid != &"" and wid != &"work_table":
+			ids.append(wid)
+	return ids
+
+
+## Synchronizes passive visuals on the six independent three-tile long counter slots.
+func sync_counter_slot_visuals(slot_views: Dictionary) -> void:
+	if registry == null:
+		return
+	for slot_id in get_long_counter_slot_ids():
+		var slot_node := registry.get_object(slot_id)
+		if slot_node == null:
+			continue
+		var info: Dictionary = slot_views.get(slot_id, {})
+		var has_item := not info.is_empty()
+		var is_plated := bool(info.get("is_plated", false))
+		var part_textures: Array[Texture2D] = []
+		var raw_textures: Variant = info.get("textures", [])
+		if raw_textures is Array:
+			for tex_v: Variant in (raw_textures as Array):
+				if tex_v is Texture2D:
+					part_textures.append(tex_v as Texture2D)
+		var dish_icon := info.get("dish_icon", null) as Texture2D
+		var staged_vis := slot_node.get_node_or_null("StagedVisual") as Node2D
+		if staged_vis == null:
+			if not has_item:
+				continue
+			staged_vis = Node2D.new()
+			staged_vis.name = "StagedVisual"
+			staged_vis.z_index = 1
+			staged_vis.position = Vector2(0, -4)
+			staged_vis.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			slot_node.add_child(staged_vis)
+		sync_food_item_visual(staged_vis, has_item, is_plated, part_textures, dish_icon)
+
+
 ## Synchronizes passive kitchen station visuals (WorkTable staged item, PlateRack
 ## clean count, RiceCooker output, and Washer fill) from read-only views.
 func sync_kitchen_visuals(
@@ -368,7 +427,8 @@ func sync_kitchen_visuals(
 	cooker_texture: Texture2D,
 	plate_clean_count: int,
 	washer_dirty_count: int,
-	cooker_portions: int = -1
+	cooker_portions: int = -1,
+	work_table_dish_icon: Texture2D = null
 ) -> void:
 	if registry == null:
 		return
@@ -387,7 +447,8 @@ func sync_kitchen_visuals(
 			staged_vis,
 			work_table_has_item,
 			work_table_is_plated,
-			work_table_textures
+			work_table_textures,
+			work_table_dish_icon
 		)
 
 	var rack_node := registry.get_object(&"plate_rack")
@@ -539,7 +600,8 @@ func sync_online_station_visual(
 	preview_recipe_id: StringName,
 	acceptance_enabled: bool,
 	recipe_label: String = "",
-	part_textures: Array[Texture2D] = []
+	part_textures: Array[Texture2D] = [],
+	dish_icon: Texture2D = null
 ) -> void:
 	if registry == null:
 		return
@@ -564,11 +626,14 @@ func sync_online_station_visual(
 
 	preview_vis.visible = true
 	var display_name := recipe_label if not recipe_label.is_empty() else String(preview_recipe_id)
-	var cache_key := "%s|%s|%d" % [String(preview_recipe_id), display_name, part_textures.size()]
+	var icon_tag := 1 if dish_icon != null else 0
+	var cache_key := "%s|%s|%d|%d" % [
+		String(preview_recipe_id), display_name, part_textures.size(), icon_tag
+	]
 	if _last_online_preview_key != cache_key:
 		_last_online_preview_key = cache_key
 		var dish_node := preview_vis.get_node_or_null("PreviewDish") as Node2D
-		sync_food_item_visual(dish_node, true, true, part_textures)
+		sync_food_item_visual(dish_node, true, true, part_textures, dish_icon)
 		var label_node := preview_vis.get_node_or_null("PreviewLabel") as Label
 		if label_node != null:
 			label_node.text = display_name
@@ -858,7 +923,8 @@ func get_driver_visual_node(driver_id: StringName) -> Node2D:
 ## `ServiceController.get_driver_views()` without duplicating controller state.
 func sync_driver_visuals(
 	driver_views: Array[Dictionary],
-	recipe_names: Dictionary = {}
+	recipe_names: Dictionary = {},
+	recipe_icons: Dictionary = {}
 ) -> void:
 	if driver_objects == null or registry == null or grid == null:
 		return
@@ -885,11 +951,11 @@ func sync_driver_visuals(
 		var state := int(view.get("state", SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE))
 		var spot_id := StringName(view.get("spot_id_or_empty", view.get("spot_id", &"")))
 		if state == SharedTypes.DriverState.AT_PICKUP_SPOT and spot_id != &"":
-			_sync_in_spot_driver_visual(driver_id, spot_id, view, recipe_names)
+			_sync_in_spot_driver_visual(driver_id, spot_id, view, recipe_names, recipe_icons)
 		else:
 			var q_idx := int(view.get("queue_index", -1))
 			var pos_idx := q_idx if q_idx >= 0 else overflow_index
-			_sync_overflow_driver_visual(driver_id, pos_idx, view, recipe_names)
+			_sync_overflow_driver_visual(driver_id, pos_idx, view, recipe_names, recipe_icons)
 			overflow_index += 1
 
 
@@ -975,13 +1041,15 @@ func _update_driver_visual_badge(
 	area: Area2D,
 	view: Dictionary,
 	recipe_names: Dictionary,
-	in_spot: bool
+	in_spot: bool,
+	recipe_icons: Dictionary = {}
 ) -> void:
 	var sprite := area.get_node_or_null("Sprite2D") as Sprite2D
 	if sprite != null:
 		sprite.modulate = Color.WHITE if in_spot else Color(0.68, 0.72, 0.78, 0.85)
 
 	var recipe_id := StringName(view.get("recipe_id", &""))
+	_sync_order_dish_icon(area, recipe_icons.get(recipe_id, null) as Texture2D, Vector2(0, -40))
 	var dish_text: String = String(recipe_names.get(recipe_id, String(recipe_id)))
 	var sec_rem: float = maxf(0.0, float(view.get("seconds_remaining", 0.0)))
 	var total_secs: float = maxf(0.1, float(view.get("total_seconds", 60.0)))
@@ -1023,7 +1091,8 @@ func _sync_in_spot_driver_visual(
 	driver_id: StringName,
 	spot_id: StringName,
 	view: Dictionary,
-	recipe_names: Dictionary
+	recipe_names: Dictionary,
+	recipe_icons: Dictionary = {}
 ) -> void:
 	var spot_node := registry.get_object(spot_id)
 	if spot_node == null:
@@ -1057,14 +1126,15 @@ func _sync_in_spot_driver_visual(
 
 	_driver_visual_states[driver_id] = SharedTypes.DriverState.AT_PICKUP_SPOT
 	_driver_visual_spots[driver_id] = spot_id
-	_update_driver_visual_badge(area, view, recipe_names, true)
+	_update_driver_visual_badge(area, view, recipe_names, true, recipe_icons)
 
 
 func _sync_overflow_driver_visual(
 	driver_id: StringName,
 	queue_index: int,
 	view: Dictionary,
-	recipe_names: Dictionary
+	recipe_names: Dictionary,
+	recipe_icons: Dictionary = {}
 ) -> void:
 	var overflow_anchor := registry.get_object(&"driver_overflow")
 	var base_pos := overflow_anchor.position if overflow_anchor != null else Vector2(368, 240)
@@ -1084,7 +1154,7 @@ func _sync_overflow_driver_visual(
 	)
 	_driver_visual_states[driver_id] = SharedTypes.DriverState.OUTSIDE_DRIVER_QUEUE
 	_driver_visual_spots[driver_id] = &""
-	_update_driver_visual_badge(area, view, recipe_names, false)
+	_update_driver_visual_badge(area, view, recipe_names, false, recipe_icons)
 
 
 func _remove_driver_visual(driver_id: StringName, animate_exit: bool = false) -> void:
@@ -1109,13 +1179,14 @@ func _remove_driver_visual(driver_id: StringName, animate_exit: bool = false) ->
 func sync_dine_in_visuals(
 	customer_views: Array[Dictionary],
 	table_views: Array[Dictionary],
-	recipe_names: Dictionary = {}
+	recipe_names: Dictionary = {},
+	recipe_icons: Dictionary = {}
 ) -> void:
 	if registry == null:
 		return
 
 	if dine_in_waiting_anchors != null:
-		_sync_customer_visuals(customer_views, recipe_names)
+		_sync_customer_visuals(customer_views, recipe_names, recipe_icons)
 	_sync_dining_table_visuals(table_views)
 
 
@@ -1163,7 +1234,8 @@ func get_departing_visual_count() -> int:
 
 func _sync_customer_visuals(
 	customer_views: Array[Dictionary],
-	recipe_names: Dictionary
+	recipe_names: Dictionary,
+	recipe_icons: Dictionary = {}
 ) -> void:
 	var seen_ids: Dictionary[StringName, bool] = {}
 	for view: Dictionary in customer_views:
@@ -1184,7 +1256,7 @@ func _sync_customer_visuals(
 			_customer_tweens,
 			_get_customer_child_bases()
 		)
-		_update_customer_visual_badge(marker, view, recipe_names)
+		_update_customer_visual_badge(marker, view, recipe_names, recipe_icons)
 
 	var active_left := not seen_ids.is_empty()
 	var existing_ids := _customer_visual_nodes.keys()
@@ -1280,7 +1352,8 @@ func _resolve_customer_visual_position(view: Dictionary) -> Vector2:
 func _update_customer_visual_badge(
 	marker: Node2D,
 	view: Dictionary,
-	recipe_names: Dictionary
+	recipe_names: Dictionary,
+	recipe_icons: Dictionary = {}
 ) -> void:
 	var state: int = int(view.get("state", -1))
 	var label := marker.get_node_or_null("StatusLabel") as Label
@@ -1288,6 +1361,7 @@ func _update_customer_visual_badge(
 	var ratio := 1.0
 
 	if state == SharedTypes.CustomerState.EATING:
+		_sync_order_dish_icon(marker, null, Vector2(0, -43))
 		var eat_rem: float = float(view.get("eat_seconds_remaining", 0.0))
 		var eat_total: float = maxf(0.1, float(view.get("eat_total_seconds", 20.0)))
 		ratio = clampf(eat_rem / eat_total, 0.0, 1.0)
@@ -1297,6 +1371,7 @@ func _update_customer_visual_badge(
 			bar_fill.color = Color(0.4, 0.78, 0.96, 1.0)
 	else:
 		var recipe_id := StringName(view.get("recipe_id", &""))
+		_sync_order_dish_icon(marker, recipe_icons.get(recipe_id, null) as Texture2D, Vector2(0, -43))
 		var dish_text: String = String(recipe_names.get(recipe_id, String(recipe_id)))
 		var wait_rem: float = float(view.get("wait_seconds_remaining", 0.0))
 		var wait_total: float = maxf(0.1, float(view.get("wait_total_seconds", 100.0)))
@@ -1334,6 +1409,7 @@ func _get_customer_child_bases() -> Dictionary:
 		"FallbackBody": Vector2.ZERO,
 		"TimerBg": Vector2(-14, -22),
 		"StatusLabel": Vector2(-24, -34),
+		"OrderDishIcon": Vector2(0, -43),
 	}
 
 
@@ -1342,7 +1418,28 @@ func _get_driver_child_bases() -> Dictionary:
 		"Sprite2D": Vector2.ZERO,
 		"TimerBg": Vector2(-14, -19),
 		"StatusLabel": Vector2(-28, -31),
+		"OrderDishIcon": Vector2(0, -40),
 	}
+
+
+func _sync_order_dish_icon(host: Node2D, tex: Texture2D, base_pos: Vector2) -> void:
+	if host == null:
+		return
+	var icon := host.get_node_or_null("OrderDishIcon") as Sprite2D
+	if tex == null:
+		if icon != null:
+			icon.visible = false
+		return
+	if icon == null:
+		icon = Sprite2D.new()
+		icon.name = "OrderDishIcon"
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.scale = Vector2(0.5625, 0.5625)
+		icon.z_index = 2
+		icon.position = base_pos
+		host.add_child(icon)
+	icon.texture = tex
+	icon.visible = true
 
 
 func _find_host_visual_sprite(host: Node2D) -> Node2D:
@@ -1501,28 +1598,14 @@ func _create_table_dirty_visual() -> Node2D:
 	container.name = "TableDirtyVisual"
 	container.z_index = 1
 	container.position = Vector2(0, -4)
+	container.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
-	var messy_plate := Polygon2D.new()
-	messy_plate.name = "DirtyPlate"
-	messy_plate.polygon = PackedVector2Array([
-		Vector2(-7, -3),
-		Vector2(7, -3),
-		Vector2(8, 2),
-		Vector2(-8, 2),
-	])
-	messy_plate.color = Color(0.62, 0.48, 0.34, 1.0)
-	container.add_child(messy_plate)
-
-	var badge := Label.new()
-	badge.name = "DirtyLabel"
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge.position = Vector2(-16, -15)
-	badge.custom_minimum_size = Vector2(32, 10)
-	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	badge.text = "Kotor"
-	badge.add_theme_font_size_override("font_size", 7)
-	badge.modulate = Color(1.0, 0.55, 0.38, 1.0)
-	container.add_child(badge)
+	var dirty_plate := Sprite2D.new()
+	dirty_plate.name = "DirtyPlate"
+	dirty_plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	dirty_plate.texture = DIRTY_PLATE_TEXTURE
+	dirty_plate.scale = Vector2(0.75, 0.75)
+	container.add_child(dirty_plate)
 	return container
 
 
@@ -1566,8 +1649,39 @@ func _populate_floor_tiles() -> void:
 	_fill_flat_zone(dining_rect, TILE_DINING_FLOOR)
 	_fill_flat_zone(Rect2i(8, 0, 1, 4), TILE_KITCHEN_FLOOR)
 	_fill_flat_zone(Rect2i(8, 4, 1, 5), TILE_DINING_FLOOR)
-	var exterior_road_rect := waiting_lane_rect.merge(online_rect)
-	_fill_bordered_lane(exterior_road_rect)
+	if (
+		floor_layer.tile_set.has_source(SIDEWALK_SOURCE_ID)
+		and floor_layer.tile_set.has_source(ROAD_SOURCE_ID)
+	):
+		_fill_road_and_sidewalk()
+	else:
+		var exterior_road_rect := waiting_lane_rect.merge(online_rect)
+		_fill_bordered_lane(exterior_road_rect)
+
+
+func _fill_road_and_sidewalk() -> void:
+	for y in range(waiting_lane_rect.position.y, waiting_lane_rect.end.y):
+		for x in range(waiting_lane_rect.position.x, waiting_lane_rect.end.x):
+			floor_layer.set_cell(
+				Vector2i(x, y),
+				SIDEWALK_SOURCE_ID,
+				TILE_SIDEWALK,
+				SIDEWALK_ALT_DEFAULT
+			)
+	for y in range(online_rect.position.y, online_rect.end.y):
+		var road_coords := TILE_ROAD_TOP if (y % 2 == 0) else TILE_ROAD_BOTTOM
+		floor_layer.set_cell(
+			Vector2i(online_rect.position.x, y),
+			ROAD_SOURCE_ID,
+			road_coords
+		)
+		for x in range(online_rect.position.x + 1, online_rect.end.x):
+			floor_layer.set_cell(
+				Vector2i(x, y),
+				SIDEWALK_SOURCE_ID,
+				TILE_SIDEWALK,
+				SIDEWALK_ALT_FLIPPED
+			)
 
 
 func _fill_flat_zone(rect: Rect2i, atlas_coords: Vector2i) -> void:

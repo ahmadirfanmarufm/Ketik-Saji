@@ -1,0 +1,10 @@
+{
+  "HTML": "three states, valid action set, embedded assets/font, no external script/styles",
+  "font": "family/metadata, original archive bytes, visible UI glyph coverage and selected label widths verified",
+  "JavaScript": "node --check passed",
+  "examples": "daily ledger reconciles; win and lose differences correct",
+  "prior_assets": "all retained unchanged",
+  "relative_links": "pass",
+  "rendered_preview": "not verified: local Chromium could not open required socket",
+  "game_runtime": "not modified or tested for this handoff"
+}

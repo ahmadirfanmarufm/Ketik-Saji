@@ -9,15 +9,20 @@ extends Node2D
 signal phase_changed(phase: int, day_index: int)
 signal pause_changed(paused: bool)
 
+const RESTAURANT_WORLD_SCENE: PackedScene = preload("res://scenes/world/restaurant_world.tscn")
+
 var _phase: SharedTypes.Phase = SharedTypes.Phase.PLANNING
 var _service_elapsed: float = 0.0
 var _closing_in_progress: bool = false
 var _paused: bool = false
 var _initialized: bool = false
+var _in_main_menu: bool = false
+var _restarting_run: bool = false
 
 var _kitchen_controller: Node = null
 var _service_controller: Node = null
 var _run_controller: Node = null
+var _audio_controller: GameAudio = null
 
 
 func _ready() -> void:
@@ -36,10 +41,20 @@ func _ready() -> void:
 		_service_controller = get_node_or_null("ServiceController")
 	if _run_controller == null:
 		_run_controller = get_node_or_null("RunController")
+	if _audio_controller == null:
+		_audio_controller = get_node_or_null("AudioController") as GameAudio
 
 	_wire_controllers()
 	if _run_controller != null and _run_controller.has_method(&"start_new_run"):
 		_run_controller.start_new_run()
+	if (
+		is_inside_tree()
+		and get_tree() != null
+		and get_tree().current_scene == self
+		and get_node_or_null("UI/UIRoot/MainMenuOverlay") != null
+	):
+		_in_main_menu = true
+	_sync_bgm_stage(false)
 
 
 func _exit_tree() -> void:
@@ -255,10 +270,93 @@ func get_run_controller() -> Node:
 	return _run_controller
 
 
+func get_audio_controller() -> GameAudio:
+	return _audio_controller
+
+
+func is_in_main_menu() -> bool:
+	return _in_main_menu
+
+
+## Transitions from Main Menu to fresh Day 1 Planning, fading BGM out over 5s.
+func request_start_play_from_menu() -> bool:
+	if not _in_main_menu:
+		return false
+	_in_main_menu = false
+	_sync_bgm_stage(true)
+	phase_changed.emit(_phase, get_day_index())
+	return true
+
+
+## Resets the full run cleanly back to Day 1 Planning (e.g. Day 7 LOST Coba lagi),
+## preserving AudioController and Settings BGM volume across the reset.
+func request_restart_run() -> bool:
+	if _restarting_run:
+		return false
+	_restarting_run = true
+	_in_main_menu = false
+	_reset_run_world_and_controllers()
+	_sync_bgm_stage(true)
+	_restarting_run = false
+	phase_changed.emit(_phase, get_day_index())
+	return true
+
+
+## Returns cleanly to Main Menu with a fresh run state and BGM active.
+func request_return_to_main_menu() -> bool:
+	if _restarting_run:
+		return false
+	_restarting_run = true
+	_in_main_menu = true
+	_reset_run_world_and_controllers()
+	_sync_bgm_stage(true)
+	_restarting_run = false
+	phase_changed.emit(_phase, get_day_index())
+	return true
+
+
+func _reset_run_world_and_controllers() -> void:
+	set_paused(false)
+	_closing_in_progress = false
+	_service_elapsed = 0.0
+	_phase = SharedTypes.Phase.PLANNING
+
+	var old_world := get_node_or_null("World")
+	if old_world != null:
+		var old_idx := old_world.get_index()
+		remove_child(old_world)
+		old_world.free()
+		var fresh_world := RESTAURANT_WORLD_SCENE.instantiate() as Node2D
+		if fresh_world != null:
+			fresh_world.name = "World"
+			fresh_world.position = Vector2(144, 36)
+			add_child(fresh_world)
+			move_child(fresh_world, mini(old_idx, get_child_count() - 1))
+
+	if _kitchen_controller != null and _kitchen_controller.has_method(&"reset_for_new_run"):
+		_kitchen_controller.reset_for_new_run()
+	if _service_controller != null and _service_controller.has_method(&"reset_for_new_run"):
+		_service_controller.reset_for_new_run()
+
+	_wire_controllers()
+	if _run_controller != null and _run_controller.has_method(&"reset_for_new_run"):
+		_run_controller.reset_for_new_run()
+	elif _run_controller != null and _run_controller.has_method(&"start_new_run"):
+		_run_controller.start_new_run()
+
+
 func _wire_controllers() -> void:
 	var world_map := get_node_or_null("World") as WorldMap
 	if _kitchen_controller != null and _kitchen_controller.has_method(&"bind_world"):
 		_kitchen_controller.bind_world(world_map, self)
+	if (
+		_kitchen_controller != null
+		and _kitchen_controller.has_signal(&"action_feedback")
+		and not _kitchen_controller.is_connected(
+			&"action_feedback", _on_kitchen_action_feedback_audio
+		)
+	):
+		_kitchen_controller.connect(&"action_feedback", _on_kitchen_action_feedback_audio)
 	if _kitchen_controller != null and _kitchen_controller.has_method(&"bind_service"):
 		_kitchen_controller.bind_service(_service_controller)
 	if _service_controller != null and _service_controller.has_method(&"bind_systems"):
@@ -318,7 +416,24 @@ func _set_phase(next_phase: SharedTypes.Phase) -> void:
 	):
 		set_paused(false)
 	_phase = next_phase
+	_sync_bgm_stage(true)
 	phase_changed.emit(_phase, get_day_index())
+
+
+func _sync_bgm_stage(fade_out: bool) -> void:
+	if _audio_controller == null or not is_instance_valid(_audio_controller):
+		return
+	var wants_bgm := _in_main_menu or (_phase == SharedTypes.Phase.SERVING)
+	_audio_controller.set_music_stage(wants_bgm, fade_out)
+
+
+func _on_kitchen_action_feedback_audio(code: StringName) -> void:
+	if _audio_controller == null or not is_instance_valid(_audio_controller):
+		return
+	if code == &"invalid_key":
+		_audio_controller.play_error_sfx()
+	elif code == &"order_served":
+		_audio_controller.play_serve_sfx()
 
 
 func _resolve_day_7_outcome() -> SharedTypes.DayOutcome:

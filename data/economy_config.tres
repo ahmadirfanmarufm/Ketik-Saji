@@ -1,27 +1,101 @@
 [gd_resource type="Resource" script_class="EconomyConfig" format=3]
 
-[ext_resource type="Script" path="res://scripts/economy/recipe_economy_entry.gd" id="1_2diot"]
-[ext_resource type="Script" path="res://scripts/economy/economy_config.gd" id="2_7288y"]
+[ext_resource type="Script" path="res://scripts/economy/recipe_economy_entry.gd" id="1_entry"]
+[ext_resource type="Script" path="res://scripts/economy/economy_config.gd" id="2_cfg"]
 
-[sub_resource type="Resource" id="Resource_h72pw"]
-script = ExtResource("1_2diot")
+[sub_resource type="Resource" id="Resource_rec1"]
+script = ExtResource("1_entry")
 recipe_id = &"nasi_telor"
+unlock_day = 1
 dine_in_price = 20000
+arrival_contribution = 3
 
-[sub_resource type="Resource" id="Resource_xdm2v"]
-script = ExtResource("1_2diot")
-recipe_id = &"nasi_ayam"
+[sub_resource type="Resource" id="Resource_rec2"]
+script = ExtResource("1_entry")
+recipe_id = &"nasi_tempe"
 unlock_day = 2
-dine_in_price = 28000
+dine_in_price = 18000
+arrival_contribution = 3
 
-[sub_resource type="Resource" id="Resource_7tdgm"]
-script = ExtResource("1_2diot")
-recipe_id = &"nasi_komplit"
+[sub_resource type="Resource" id="Resource_rec3"]
+script = ExtResource("1_entry")
+recipe_id = &"nasi_ayam"
 unlock_day = 3
-dine_in_price = 36000
+dine_in_price = 29000
+arrival_contribution = 2
+
+[sub_resource type="Resource" id="Resource_rec4"]
+script = ExtResource("1_entry")
+recipe_id = &"nasi_telur_tempe"
+unlock_day = 3
+dine_in_price = 25000
+arrival_contribution = 3
+
+[sub_resource type="Resource" id="Resource_rec5"]
+script = ExtResource("1_entry")
+recipe_id = &"nasi_ayam_telur"
+unlock_day = 4
+dine_in_price = 35000
+arrival_contribution = 2
+
+[sub_resource type="Resource" id="Resource_rec6"]
+script = ExtResource("1_entry")
+recipe_id = &"egg_salad"
+unlock_day = 4
+dine_in_price = 22000
+arrival_contribution = 3
+
+[sub_resource type="Resource" id="Resource_rec7"]
+script = ExtResource("1_entry")
+recipe_id = &"chicken_salad"
+unlock_day = 5
+dine_in_price = 30000
+arrival_contribution = 2
+
+[sub_resource type="Resource" id="Resource_rec8"]
+script = ExtResource("1_entry")
+recipe_id = &"nasi_daging_sapi"
+unlock_day = 5
+dine_in_price = 38000
+arrival_contribution = 2
+
+[sub_resource type="Resource" id="Resource_rec9"]
+script = ExtResource("1_entry")
+recipe_id = &"nasi_ayam_komplit"
+unlock_day = 6
+dine_in_price = 45000
+arrival_contribution = 1
+
+[sub_resource type="Resource" id="Resource_rec10"]
+script = ExtResource("1_entry")
+recipe_id = &"nasi_sapi_telur"
+unlock_day = 6
+dine_in_price = 45000
+arrival_contribution = 1
+
+[sub_resource type="Resource" id="Resource_rec11"]
+script = ExtResource("1_entry")
+recipe_id = &"beef_salad"
+unlock_day = 7
+dine_in_price = 39000
+arrival_contribution = 2
+
+[sub_resource type="Resource" id="Resource_rec12"]
+script = ExtResource("1_entry")
+recipe_id = &"nasi_sapi_komplit"
+unlock_day = 7
+dine_in_price = 55000
+arrival_contribution = 1
+
+[sub_resource type="Resource" id="Resource_rec13"]
+script = ExtResource("1_entry")
+recipe_id = &"nasi_gila"
+unlock_day = 7
+dine_in_price = 70000
+arrival_contribution = 1
 
 [resource]
-script = ExtResource("2_7288y")
+script = ExtResource("2_cfg")
 ingredient_buy_prices = Dictionary[StringName, int]({
 &"ayam": 6000,
 &"beras": 2000,
@@ -30,4 +104,4 @@ ingredient_buy_prices = Dictionary[StringName, int]({
 &"telur": 3000,
 &"tempe": 2000
 })
-recipe_entries = Array[ExtResource("1_2diot")]([SubResource("Resource_h72pw"), SubResource("Resource_xdm2v"), SubResource("Resource_7tdgm")])
+recipe_entries = Array[ExtResource("1_entry")]([SubResource("Resource_rec1"), SubResource("Resource_rec2"), SubResource("Resource_rec3"), SubResource("Resource_rec4"), SubResource("Resource_rec5"), SubResource("Resource_rec6"), SubResource("Resource_rec7"), SubResource("Resource_rec8"), SubResource("Resource_rec9"), SubResource("Resource_rec10"), SubResource("Resource_rec11"), SubResource("Resource_rec12"), SubResource("Resource_rec13")])

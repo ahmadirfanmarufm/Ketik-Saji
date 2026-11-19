@@ -91,6 +91,52 @@ func _ready() -> void:
 		_rng.seed = hash("ketik_saji_service_day_1")
 
 
+func reset_for_new_run() -> void:
+	_day_prepared = false
+	_service_active = false
+	_day_index = 1
+	_last_service_now = 0.0
+	_next_spawn_at = 0.0
+	_next_customer_seq = 0
+	_next_order_seq = 0
+	_next_driver_seq = 0
+	_day_queue_initial = 0
+	_day_queue_remaining = 0
+	_outside_dine_in_queue.clear()
+	_in_shop_dine_in_count = 0
+	_arrived_dine_in_count = 0
+	_selected_recipe_ids.clear()
+	_dine_in_prices.clear()
+	_customers.clear()
+	_orders.clear()
+	_online_orders_open.clear()
+	_tables.clear()
+	_drivers.clear()
+	_reset_pickup_spots()
+	_outside_driver_queue.clear()
+	_online_offer = {
+		"state": OnlineOfferState.NOT_SERVING,
+		"preview_recipe_id": &"",
+		"offer_generation_number": 0,
+		"next_offer_at": 0.0,
+		"offer_expires_at": 0.0,
+	}
+	_completed_order_ids.clear()
+	_failed_order_ids.clear()
+	_completed_dine_in_count = 0
+	_failed_dine_in_count = 0
+	_completed_online_count = 0
+	_failed_online_count = 0
+	_last_invariant_error = ""
+	if not _custom_seed_set:
+		_rng.seed = hash("ketik_saji_service_day_1")
+	orders_changed.emit()
+	queues_changed.emit()
+	tables_changed.emit()
+	drivers_changed.emit()
+	online_offer_changed.emit()
+
+
 ## Binds sibling controllers used for dining-table serving, cleaning, and payouts.
 func bind_systems(
 	kitchen: KitchenController,

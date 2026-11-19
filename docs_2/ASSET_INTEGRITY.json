@@ -1,0 +1,1041 @@
+{
+  "version": "FINAL-v006",
+  "date": "2026-11-19",
+  "source_archive_sha256": {
+    "ketik-saji-ui-art.zip": "4b745e0af760329736f17e1e0a5e4f9458230d1604a1bbdfcdb517fde85de070",
+    "mega mendung pixelated.zip": "e023460a2331332c2d8ac03fedfd4625492da83407fc83f94b33d48722dccedb",
+    "SFX.zip": "23c5ed9cfefdd8b90746b8c6b021460b55e953a73d6d8fcc38a86347af14a900",
+    "grapesoda_2.zip": "8bc5dd29e5c903d12121ede66f657b51b55342905170474ded7c126f5f4efbdf",
+    "Plate + Menu(1).zip": "724329829dac0891a7a4765fb3ed2a2cb30662b8a2e780f5435af353f99c5219",
+    "Menu Salad + Nasi gila(1).zip": "c18cb439c97e6c9591421d30481e6394725332b1558b43e9069110053cc07cfb"
+  },
+  "files": [
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "others/board-backdrop-popup-general.png",
+      "package_path": "provided_assets/ui/others/board-backdrop-popup-general.png",
+      "bytes": 1167,
+      "sha256": "e92eeea9b2797b82d5542264c34623282ec34920553962b06ed5ac070f76f50a",
+      "canvas_px": [
+        192,
+        128
+      ],
+      "alpha_bbox": [
+        5,
+        4,
+        188,
+        128
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "others/board-backdrop-popup-menu.png",
+      "package_path": "provided_assets/ui/others/board-backdrop-popup-menu.png",
+      "bytes": 1119,
+      "sha256": "88baaa9d6b509d604118f2e890fd02cb7f7492694f45ac1c05ceb2fba85ae06c",
+      "canvas_px": [
+        160,
+        128
+      ],
+      "alpha_bbox": [
+        5,
+        4,
+        154,
+        128
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "others/board-target-customer.png",
+      "package_path": "provided_assets/ui/others/board-target-customer.png",
+      "bytes": 677,
+      "sha256": "2f5549a54c95c994b7efb8e840f99675e891cf3ad068b7bea1c4d7525476ffd9",
+      "canvas_px": [
+        160,
+        64
+      ],
+      "alpha_bbox": [
+        5,
+        6,
+        154,
+        59
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "others/bubble-speech.png",
+      "package_path": "provided_assets/ui/others/bubble-speech.png",
+      "bytes": 238,
+      "sha256": "6d2ffab113c765023e8813b0e54833fea7f8ae4852ec2f449a32f1d9ef15ae9b",
+      "canvas_px": [
+        48,
+        32
+      ],
+      "alpha_bbox": [
+        4,
+        4,
+        44,
+        32
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "others/panel-coin.png",
+      "package_path": "provided_assets/ui/others/panel-coin.png",
+      "bytes": 359,
+      "sha256": "3a714f69986753258b4a3f02e085d017f192df6e36a6993a19d954d0ff4562cb",
+      "canvas_px": [
+        96,
+        32
+      ],
+      "alpha_bbox": [
+        5,
+        5,
+        92,
+        28
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "others/panel-electric.png",
+      "package_path": "provided_assets/ui/others/panel-electric.png",
+      "bytes": 377,
+      "sha256": "3b817861202aab82719d081ac4d1cbbbd89213c102141dc0f2023f037ad4317d",
+      "canvas_px": [
+        144,
+        32
+      ],
+      "alpha_bbox": [
+        5,
+        5,
+        139,
+        28
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "others/paper-calendar.png",
+      "package_path": "provided_assets/ui/others/paper-calendar.png",
+      "bytes": 629,
+      "sha256": "bc9f6ca57d04af88738dd3a52593328a7094d024578af941835315d3fec56436",
+      "canvas_px": [
+        96,
+        64
+      ],
+      "alpha_bbox": [
+        13,
+        0,
+        88,
+        55
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "others/progress-bar.png",
+      "package_path": "provided_assets/ui/others/progress-bar.png",
+      "bytes": 853,
+      "sha256": "b1b74e8157e137cf622a9754e89365128327c6355e9a2585eb8d5154cc62e239",
+      "canvas_px": [
+        480,
+        16
+      ],
+      "alpha_bbox": [
+        4,
+        2,
+        476,
+        14
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font main menu/Keluar.png",
+      "package_path": "provided_assets/ui/font main menu/Keluar.png",
+      "bytes": 2600,
+      "sha256": "c8c504bdb27e0e8e3dd4df4713c531669a51aacd86ec23b823cb401dd51a5547",
+      "canvas_px": [
+        227,
+        59
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        227,
+        59
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font main menu/pengaturan.png",
+      "package_path": "provided_assets/ui/font main menu/pengaturan.png",
+      "bytes": 3919,
+      "sha256": "741fb06ca35345420a3f7ee70f5fc36b2a38d2d2e31c905a635e03f179f3f3bc",
+      "canvas_px": [
+        355,
+        68
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        355,
+        68
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font main menu/Play.png",
+      "package_path": "provided_assets/ui/font main menu/Play.png",
+      "bytes": 1763,
+      "sha256": "fbc275f893878dd6c19208e048d7a1f8f11a8959a451b385db8d39bab23d71a0",
+      "canvas_px": [
+        171,
+        85
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        171,
+        85
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "buttons/button-long.png",
+      "package_path": "provided_assets/ui/buttons/button-long.png",
+      "bytes": 470,
+      "sha256": "3536f50dcd670d12ca021619a1ba6580a708f81a90885eb3f9c5e53e3aa47028",
+      "canvas_px": [
+        80,
+        32
+      ],
+      "alpha_bbox": [
+        3,
+        2,
+        77,
+        30
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "buttons/button.png",
+      "package_path": "provided_assets/ui/buttons/button.png",
+      "bytes": 346,
+      "sha256": "bc4604748737b10b6ffe120926b03ec22ddf09eefca694f3a458c161ee727856",
+      "canvas_px": [
+        32,
+        32
+      ],
+      "alpha_bbox": [
+        2,
+        2,
+        30,
+        30
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "buttons/checkbox-checked.png",
+      "package_path": "provided_assets/ui/buttons/checkbox-checked.png",
+      "bytes": 386,
+      "sha256": "2a7b901e9913eed1544986f54e879472f71b82e364a104dc3e41d02259634031",
+      "canvas_px": [
+        32,
+        32
+      ],
+      "alpha_bbox": [
+        2,
+        0,
+        31,
+        30
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "buttons/checkbox-uncheck.png",
+      "package_path": "provided_assets/ui/buttons/checkbox-uncheck.png",
+      "bytes": 276,
+      "sha256": "119cb9de7df1fdafa45dec85e45cd7444fa9c087ba655e01d6e86b6dff26813b",
+      "canvas_px": [
+        32,
+        32
+      ],
+      "alpha_bbox": [
+        2,
+        2,
+        30,
+        30
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "buttons/container-item-disabled.png",
+      "package_path": "provided_assets/ui/buttons/container-item-disabled.png",
+      "bytes": 398,
+      "sha256": "b7760a21cd071801752461e92b717b1ed4d4ca74638a2b5e85159aa0de4e5c6b",
+      "canvas_px": [
+        304,
+        48
+      ],
+      "alpha_bbox": [
+        6,
+        4,
+        299,
+        42
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "buttons/container-item-smal-disabled.png",
+      "package_path": "provided_assets/ui/buttons/container-item-smal-disabled.png",
+      "bytes": 366,
+      "sha256": "bf24968b2bfb04a0b2efe8f609effe85ec297b011e0dff1b519956b93d7f91dc",
+      "canvas_px": [
+        192,
+        48
+      ],
+      "alpha_bbox": [
+        6,
+        4,
+        186,
+        42
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "buttons/container-item-small.png",
+      "package_path": "provided_assets/ui/buttons/container-item-small.png",
+      "bytes": 371,
+      "sha256": "b88abba7ac4de7ee27104709a456752338057a61711a3e8cda4e87c59dc423cb",
+      "canvas_px": [
+        192,
+        48
+      ],
+      "alpha_bbox": [
+        6,
+        4,
+        186,
+        42
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "buttons/container-item.png",
+      "package_path": "provided_assets/ui/buttons/container-item.png",
+      "bytes": 393,
+      "sha256": "f72cb71ceeddd0ea732d908966aaf53031d897b763ddada94a510a0ff3aff58c",
+      "canvas_px": [
+        304,
+        48
+      ],
+      "alpha_bbox": [
+        6,
+        4,
+        299,
+        42
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "buttons/textbox.png",
+      "package_path": "provided_assets/ui/buttons/textbox.png",
+      "bytes": 726,
+      "sha256": "52a66960c4a7fbf73fa1a0cf770b1d07233a9513036ee9ed9bfd6b182d2241c2",
+      "canvas_px": [
+        160,
+        64
+      ],
+      "alpha_bbox": [
+        5,
+        6,
+        155,
+        59
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "icons/coins36x36.png",
+      "package_path": "provided_assets/ui/icons/coins36x36.png",
+      "bytes": 502,
+      "sha256": "f4392c90c3e72b6f4b7d715f8ac6f53f80bb0fc920e52ae9890276371ff7eb31",
+      "canvas_px": [
+        32,
+        32
+      ],
+      "alpha_bbox": [
+        2,
+        4,
+        28,
+        29
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "icons/eating.png",
+      "package_path": "provided_assets/ui/icons/eating.png",
+      "bytes": 504,
+      "sha256": "50aed26f221dc8a38358424454487e9dfccd84849fc1ca30fe6763b07d0e099b",
+      "canvas_px": [
+        48,
+        32
+      ],
+      "alpha_bbox": [
+        1,
+        5,
+        47,
+        28
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "icons/electric.png",
+      "package_path": "provided_assets/ui/icons/electric.png",
+      "bytes": 297,
+      "sha256": "3615925001963f5410151ec7065a53e380074f9f51839d260615207795a60fac",
+      "canvas_px": [
+        32,
+        32
+      ],
+      "alpha_bbox": [
+        5,
+        3,
+        27,
+        30
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "icons/menu.png",
+      "package_path": "provided_assets/ui/icons/menu.png",
+      "bytes": 475,
+      "sha256": "42165f794308acef1425ad190a36d190429424f5cd079c0c7ed74ab2d879f286",
+      "canvas_px": [
+        32,
+        32
+      ],
+      "alpha_bbox": [
+        3,
+        3,
+        31,
+        30
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "icons/ojol.png",
+      "package_path": "provided_assets/ui/icons/ojol.png",
+      "bytes": 649,
+      "sha256": "9cfc3cae475577f1adb50f0809e51f6585af8986d3663bd62a3b9b49c10c234b",
+      "canvas_px": [
+        48,
+        32
+      ],
+      "alpha_bbox": [
+        4,
+        4,
+        44,
+        30
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "icons/plate-dirty.png",
+      "package_path": "provided_assets/ui/icons/plate-dirty.png",
+      "bytes": 645,
+      "sha256": "c8200f1892a0c595785866fd216af252ef2192abac2191683c83828326cf8f77",
+      "canvas_px": [
+        32,
+        32
+      ],
+      "alpha_bbox": [
+        0,
+        8,
+        32,
+        30
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "icons/quit.png",
+      "package_path": "provided_assets/ui/icons/quit.png",
+      "bytes": 324,
+      "sha256": "4d7ab6682bcbd189a18af7e8ae7f69dda36c7fa15822939dc7007025e59dd345",
+      "canvas_px": [
+        32,
+        32
+      ],
+      "alpha_bbox": [
+        2,
+        1,
+        30,
+        31
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "icons/waiting.png",
+      "package_path": "provided_assets/ui/icons/waiting.png",
+      "bytes": 668,
+      "sha256": "8aa4555a500f84f6b603524aa0ce71e5eac1ba3d38f3a857159392e6841616da",
+      "canvas_px": [
+        32,
+        32
+      ],
+      "alpha_bbox": [
+        3,
+        3,
+        29,
+        29
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font board/belanja-bahan-board.png",
+      "package_path": "provided_assets/ui/font board/belanja-bahan-board.png",
+      "bytes": 3485,
+      "sha256": "c5c1f952083a0c5f61726abeda6362858ce8c5c49069a9237bad96e15a5c02df",
+      "canvas_px": [
+        581,
+        87
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        581,
+        87
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font board/belanja-peralatan-board.png",
+      "package_path": "provided_assets/ui/font board/belanja-peralatan-board.png",
+      "bytes": 4168,
+      "sha256": "2c2761a7670aaee0c3545407163acab4b474039f12cd5c6db9dd9f1301d4170a",
+      "canvas_px": [
+        737,
+        87
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        737,
+        87
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font board/edit-menu-board.png",
+      "package_path": "provided_assets/ui/font board/edit-menu-board.png",
+      "bytes": 2554,
+      "sha256": "e64cbd539784ae82281f4eed32c6e762c818e9a037e2e77e327488237f546e6b",
+      "canvas_px": [
+        406,
+        75
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        406,
+        75
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font board/hari-ke.png",
+      "package_path": "provided_assets/ui/font board/hari-ke.png",
+      "bytes": 1592,
+      "sha256": "667304547f788fb35985322a6d0177734553f4ebddeede119cc5f6ebbb583cfa",
+      "canvas_px": [
+        116,
+        25
+      ],
+      "alpha_bbox": [
+        0,
+        1,
+        116,
+        25
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font board/ketik.png",
+      "package_path": "provided_assets/ui/font board/ketik.png",
+      "bytes": 2918,
+      "sha256": "12ea0155ba8a27c0932caaecf13d13ad7964ec09831627cf8c71fe5fac623db0",
+      "canvas_px": [
+        128,
+        43
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        43
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font board/resep-board.png",
+      "package_path": "provided_assets/ui/font board/resep-board.png",
+      "bytes": 2185,
+      "sha256": "392d31d8357fc4a45161660bc981c26f9974d400863ebca189c595e45e34f162",
+      "canvas_px": [
+        237,
+        87
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        237,
+        87
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font board/target-tamu.png",
+      "package_path": "provided_assets/ui/font board/target-tamu.png",
+      "bytes": 5204,
+      "sha256": "626bf7c474af2b029771f8ea4ff64af6ebeba98c7a23f00b5bfda8b047e9273c",
+      "canvas_px": [
+        299,
+        54
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        299,
+        54
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font button/batal.png",
+      "package_path": "provided_assets/ui/font button/batal.png",
+      "bytes": 1050,
+      "sha256": "6d5297c239632f519a36acddabe5cdc0dc5327bfe9c5caf625e8075e62b3f2fe",
+      "canvas_px": [
+        171,
+        51
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        171,
+        51
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font button/beli-alat.png",
+      "package_path": "provided_assets/ui/font button/beli-alat.png",
+      "bytes": 2671,
+      "sha256": "968459642f63c254a527e5f5d1df87f0464c3b9e93dc0e66d24d32608ce97ace",
+      "canvas_px": [
+        196,
+        40
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        196,
+        40
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font button/beli.png",
+      "package_path": "provided_assets/ui/font button/beli.png",
+      "bytes": 940,
+      "sha256": "48cdd9c26dda29ce9fdaf14561d7d93aff274d7b57dcfc5aaada4aa05171bbda",
+      "canvas_px": [
+        116,
+        51
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        116,
+        51
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font button/edit-menu.png",
+      "package_path": "provided_assets/ui/font button/edit-menu.png",
+      "bytes": 2842,
+      "sha256": "5f244c87f411bcef05ea7125735ead9c76b5c36aa00db97c01304c3af76a5aca",
+      "canvas_px": [
+        232,
+        44
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        232,
+        44
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "font button/simpan.png",
+      "package_path": "provided_assets/ui/font button/simpan.png",
+      "bytes": 1418,
+      "sha256": "bac3973aac9f1dd544ae879dd069c434ef4ca181d92706430ed18e2eefe0fe4b",
+      "canvas_px": [
+        226,
+        66
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        226,
+        66
+      ]
+    },
+    {
+      "source_archive": "ketik-saji-ui-art.zip",
+      "source_entry": "menu-game.png",
+      "package_path": "provided_assets/ui/menu-game.png",
+      "bytes": 162996,
+      "sha256": "16f0fa5e490c1e221a0837f69534c5768c8c6f21aa72859b174f4e669e3a5ef3",
+      "canvas_px": [
+        511,
+        1080
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        483,
+        1080
+      ]
+    },
+    {
+      "source_archive": "mega mendung pixelated.zip",
+      "source_entry": "mega mendung 1.png",
+      "package_path": "provided_assets/decor/mega mendung 1.png",
+      "bytes": 16793,
+      "sha256": "1b87faa834a8f499eed63b328836c2a25408ff4a37be221ef21a468a47d25b8a",
+      "canvas_px": [
+        735,
+        489
+      ],
+      "alpha_bbox": [
+        20,
+        12,
+        708,
+        476
+      ]
+    },
+    {
+      "source_archive": "mega mendung pixelated.zip",
+      "source_entry": "mega mendung 2.png",
+      "package_path": "provided_assets/decor/mega mendung 2.png",
+      "bytes": 12626,
+      "sha256": "e4817e4dcf3a3662aca5434010dee63b368b269957af62b498e568a58e68d00b",
+      "canvas_px": [
+        736,
+        490
+      ],
+      "alpha_bbox": [
+        20,
+        84,
+        716,
+        404
+      ]
+    },
+    {
+      "source_archive": "SFX.zip",
+      "source_entry": "to use/Backsound.opus",
+      "package_path": "provided_assets/audio/Backsound.opus",
+      "bytes": 2557641,
+      "sha256": "f32d982f0abddbb429aacfe76ac6e497fadffb791bed2d686a67d8fcabb30ec3"
+    },
+    {
+      "source_archive": "SFX.zip",
+      "source_entry": "to use/click1.ogg",
+      "package_path": "provided_assets/audio/click1.ogg",
+      "bytes": 4983,
+      "sha256": "59175ac17cd49a68dd736285738441287636112a84a6f7ce0d89921bda5a5360"
+    },
+    {
+      "source_archive": "SFX.zip",
+      "source_entry": "to use/click2.ogg",
+      "package_path": "provided_assets/audio/click2.ogg",
+      "bytes": 4656,
+      "sha256": "c394b46bc6737f7f7edfbfa3031ce621b7a43d498d456d6198364eee9cd3e306"
+    },
+    {
+      "source_archive": "SFX.zip",
+      "source_entry": "to use/click3.ogg",
+      "package_path": "provided_assets/audio/click3.ogg",
+      "bytes": 4880,
+      "sha256": "e3e7fc7ccd9c5cfdf77bffa05aee10d4973812076c76dc889ba2b16ea434127f"
+    },
+    {
+      "source_archive": "SFX.zip",
+      "source_entry": "to use/click4.ogg",
+      "package_path": "provided_assets/audio/click4.ogg",
+      "bytes": 4558,
+      "sha256": "9c02bbfc872b50eb8750adf4b7c343120f19f5d2f04ab06a7a8948368a77b872"
+    },
+    {
+      "source_archive": "SFX.zip",
+      "source_entry": "to use/click5.ogg",
+      "package_path": "provided_assets/audio/click5.ogg",
+      "bytes": 4532,
+      "sha256": "52d41e0bb012731bf2a391d53ffb52265ef21589c7701e66b391d5e36a65b293"
+    },
+    {
+      "source_archive": "SFX.zip",
+      "source_entry": "to use/impactGlass_heavy_000.ogg",
+      "package_path": "provided_assets/audio/impactGlass_heavy_000.ogg",
+      "bytes": 7403,
+      "sha256": "b44b39a940e8948e74b9bd3776bff980df43cf220abdaf0d467dc4c43c0244a5"
+    },
+    {
+      "source_archive": "SFX.zip",
+      "source_entry": "to use/impactMining_000.ogg",
+      "package_path": "provided_assets/audio/impactMining_000.ogg",
+      "bytes": 12035,
+      "sha256": "36b4ea107222d073c67ca64dde26944975609202d5090b2f2021213c1a7e35cd"
+    },
+    {
+      "source_attachment": "image(10).png",
+      "package_path": "references/targets/image(10).png",
+      "bytes": 892994,
+      "sha256": "16493d29ddab610ed8fb7522d60450439994f31db646eee9e176de5768b2e14a",
+      "canvas_px": [
+        1600,
+        900
+      ]
+    },
+    {
+      "source_attachment": "image(20261119-152343).png",
+      "package_path": "references/targets/image(20261119-152343).png",
+      "bytes": 974085,
+      "sha256": "da99da5145dcd52138547689407a462dc9a0dc6d4a726bfa76162cd670a2bf99",
+      "canvas_px": [
+        1600,
+        900
+      ]
+    },
+    {
+      "source_attachment": "image(20261119-152353).png",
+      "package_path": "references/targets/image(20261119-152353).png",
+      "bytes": 414266,
+      "sha256": "0aa0e4404094086b2653893d375d44451ec8100e5f62a58258d66781f6992f8c",
+      "canvas_px": [
+        426,
+        822
+      ]
+    },
+    {
+      "source_attachment": "image(8).png",
+      "package_path": "references/targets/image(8).png",
+      "bytes": 1946873,
+      "sha256": "6ecead6ae8e910945d537397b3f9ca1cb74930545fac6ac35ca98aae5ad3e5c0",
+      "canvas_px": [
+        1600,
+        900
+      ]
+    },
+    {
+      "source_attachment": "image(9).png",
+      "package_path": "references/targets/image(9).png",
+      "bytes": 1010791,
+      "sha256": "9245053b981dc113ee4129a86bb991c1fb240bcfd36f5d01e0f4c47c744c8fd6",
+      "canvas_px": [
+        1600,
+        900
+      ]
+    },
+    {
+      "source_attachment": "image(20261119-153901).png",
+      "package_path": "references/gameplay/image(20261119-153901).png",
+      "bytes": 4384,
+      "sha256": "e164b120b3a827e5e37af7b13aaf8a086cc2b5230530984470e791244fc1a1e5",
+      "canvas_px": [
+        422,
+        206
+      ],
+      "role": "Counter capacity reference: one item per tile"
+    },
+    {
+      "source_url": "https://dl.dafont.com/dl/?f=grapesoda_2",
+      "author_page": "https://fontenddev.com/fonts/grape-soda/",
+      "source_archive": "grapesoda_2.zip",
+      "source_entry": "GrapeSoda.ttf",
+      "package_path": "provided_assets/fonts/GrapeSoda.ttf",
+      "bytes": 42684,
+      "sha256": "1dde59970f29bcf27cee88ec3b49e2b64f872660e1b60c56db4fd5da5896c2ff",
+      "family": "GrapeSoda",
+      "subfamily": "Medium",
+      "glyph_count": 359,
+      "units_per_em": 1024
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "plate.png",
+      "package_path": "provided_assets/dishes/plate.png",
+      "bytes": 333,
+      "sha256": "81820c51ee977d1578b4ff1f59be376c264531bac4d53195670d892d108f0857",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "Nasi-Ayam.png",
+      "package_path": "provided_assets/dishes/Nasi-Ayam.png",
+      "bytes": 481,
+      "sha256": "5f02806ed6e974ca6a4ccc7f19e8bf8e878039f082371c59f32131a5429fad4a",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "Nasi-AyamTelur.png",
+      "package_path": "provided_assets/dishes/Nasi-AyamTelur.png",
+      "bytes": 539,
+      "sha256": "f84b14c0d1a62095d1d62834fc7ffc00742ffe497d48163ba498f583464eb824",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "Nasi-AyamTelurTempe.png",
+      "package_path": "provided_assets/dishes/Nasi-AyamTelurTempe.png",
+      "bytes": 602,
+      "sha256": "e0bbbe940bf45067036b60b4a66726823d0e11d283867500f3a3d2ca47447540",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "Nasi-Beef.png",
+      "package_path": "provided_assets/dishes/Nasi-Beef.png",
+      "bytes": 547,
+      "sha256": "6e2ed89434479a181abfbd78f426cd2e3bda83af9d4dba6360f3048e3ff156f2",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "Nasi-BeefTelur.png",
+      "package_path": "provided_assets/dishes/Nasi-BeefTelur.png",
+      "bytes": 602,
+      "sha256": "2899ed56894dbb779135a270a233acc8455ae53ce51f957e9ad7154211712fb8",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "Nasi-BeefTelurTempe.png",
+      "package_path": "provided_assets/dishes/Nasi-BeefTelurTempe.png",
+      "bytes": 641,
+      "sha256": "b84ea8906e77dd6710d9ec1ef9af9f4c4c1609bde881f3a12badc8378b9bf8a5",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "Nasi-Telur.png",
+      "package_path": "provided_assets/dishes/Nasi-Telur.png",
+      "bytes": 447,
+      "sha256": "395d6befa21f264f1ad4111217d1caa5cdaa5dfc4fccfc73edd5ac36e9cd0da5",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "Nasi-TelurTempe.png",
+      "package_path": "provided_assets/dishes/Nasi-TelurTempe.png",
+      "bytes": 477,
+      "sha256": "6d62ada9fff86efc26be44f43e3f2f0ede94b8b3e1bb906b3441091d990ef50e",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Plate + Menu(1).zip",
+      "source_entry": "Nasi-Tempe.png",
+      "package_path": "provided_assets/dishes/Nasi-Tempe.png",
+      "bytes": 505,
+      "sha256": "fa974667074ba33c38a560b2d5ee8321d84a1b8d1f40aeb7521a38f28429a76e",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Menu Salad + Nasi gila(1).zip",
+      "source_entry": "Egg-Salad.png",
+      "package_path": "provided_assets/dishes/Egg-Salad.png",
+      "bytes": 550,
+      "sha256": "9194eb2beea0a97eb21df61961ec3110a1ee2f9443d80e82676c9823e1d50f28",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Menu Salad + Nasi gila(1).zip",
+      "source_entry": "Nasi-Gila(Semua ingredients).png",
+      "package_path": "provided_assets/dishes/Nasi-Gila(Semua ingredients).png",
+      "bytes": 745,
+      "sha256": "a04f81fc8434382138bef72492377a372074316ca5602182b7d369fbeecd4aaa",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Menu Salad + Nasi gila(1).zip",
+      "source_entry": "Beef-Salad.png",
+      "package_path": "provided_assets/dishes/Beef-Salad.png",
+      "bytes": 617,
+      "sha256": "f371fb67bd5eca4f9babcbe62f33a2089dedfb3ae9daa00ea6e0f0f50cedc8cf",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_archive": "Menu Salad + Nasi gila(1).zip",
+      "source_entry": "Chicken-Salad.png",
+      "package_path": "provided_assets/dishes/Chicken-Salad.png",
+      "bytes": 559,
+      "sha256": "bb786491c34cc353e0af94894f21148fd4da49c5ec52b303e4ee90af61134314",
+      "canvas_px": [
+        32,
+        32
+      ]
+    },
+    {
+      "source_attachment_or_addendum": "KETIK_SAJI_13_RECIPE_PROGRESSION_AND_DEMAND_HANDOFF(1).md",
+      "package_path": "sources/KETIK_SAJI_13_RECIPE_PROGRESSION_AND_DEMAND_HANDOFF(1).md",
+      "bytes": 19706,
+      "sha256": "f7d20b04c803582837adadd9d3069454cbc8010d77e8288049dd3eef486958f7"
+    },
+    {
+      "source_attachment_or_addendum": "KETIK_SAJI_TUTORIAL_PANEL_REPLACEMENT.md",
+      "package_path": "sources/KETIK_SAJI_TUTORIAL_PANEL_REPLACEMENT.md",
+      "bytes": 6340,
+      "sha256": "e2401df1a0d799fa2a285bd7ac1c8e6195923738f87b0c4f6b8a837f2e5e497e"
+    }
+  ]
+}

@@ -13,6 +13,8 @@
 [ext_resource type="Texture2D" uid="uid://d4wefrwc4md2" path="res://assets/art/characters/npc 6.png" id="10_npc6"]
 [ext_resource type="Texture2D" uid="uid://cknw5tegiabwu" path="res://assets/art/characters/npc 7.png" id="11_npc7"]
 [ext_resource type="PackedScene" path="res://scenes/world/dining_table.tscn" id="12_dining_table"]
+[ext_resource type="Texture2D" uid="uid://c8pq74d0tx7bl" path="res://assets/art/road/Sidewalk(trotoar).png" id="13_sidewalk"]
+[ext_resource type="Texture2D" uid="uid://bbr3n7o0uobgv" path="res://assets/art/road/Road.png" id="14_road"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_warung"]
 texture = ExtResource("2_tileset")
@@ -32,9 +34,25 @@ texture_region_size = Vector2i(32, 32)
 5:4/0 = 0
 8:4/0 = 0
 
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_sidewalk"]
+texture = ExtResource("13_sidewalk")
+texture_region_size = Vector2i(32, 32)
+0:0/next_alternative_id = 2
+0:0/0 = 0
+0:0/1 = 1
+0:0/1/flip_h = true
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_road"]
+texture = ExtResource("14_road")
+texture_region_size = Vector2i(32, 32)
+0:0/0 = 0
+0:1/0 = 0
+
 [sub_resource type="TileSet" id="TileSet_warung"]
 tile_size = Vector2i(32, 32)
 sources/0 = SubResource("TileSetAtlasSource_warung")
+sources/1 = SubResource("TileSetAtlasSource_sidewalk")
+sources/2 = SubResource("TileSetAtlasSource_road")
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_station"]
 size = Vector2(28, 28)
@@ -54,7 +72,7 @@ customer_textures = Array[Texture2D]([ExtResource("5_npc1"), ExtResource("6_npc2
 
 [node name="FloorTiles" type="TileMapLayer" parent="." unique_id=1214754640]
 texture_filter = 1
-tile_map_data = PackedByteArray(0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 11, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 11, 0, 1, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 2, 0, 0, 0, 1, 0, 1, 0, 0, 0, 11, 0, 2, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 3, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 3, 0, 0, 0, 1, 0, 1, 0, 0, 0, 11, 0, 3, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 4, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 4, 0, 0, 0, 1, 0, 1, 0, 0, 0, 11, 0, 4, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 5, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 5, 0, 0, 0, 1, 0, 1, 0, 0, 0, 11, 0, 5, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 6, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 6, 0, 0, 0, 1, 0, 1, 0, 0, 0, 11, 0, 6, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 7, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 7, 0, 0, 0, 1, 0, 1, 0, 0, 0, 11, 0, 7, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 8, 0, 0, 0, 0, 0, 2, 0, 0, 0, 10, 0, 8, 0, 0, 0, 1, 0, 2, 0, 0, 0, 11, 0, 8, 0, 0, 0, 2, 0, 2, 0, 0, 0)
+tile_map_data = PackedByteArray(0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 1, 0, 2, 0, 0, 0, 1, 0, 0, 0, 11, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 2, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 3, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 3, 0, 2, 0, 0, 0, 1, 0, 0, 0, 11, 0, 3, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 4, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 4, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 5, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 5, 0, 2, 0, 0, 0, 1, 0, 0, 0, 11, 0, 5, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 6, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 6, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 6, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 7, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 7, 0, 2, 0, 0, 0, 1, 0, 0, 0, 11, 0, 7, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 8, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 8, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 8, 0, 1, 0, 0, 0, 0, 0, 1, 0)
 tile_set = SubResource("TileSet_warung")
 
 [node name="DineInWaitingAnchors" type="Node2D" parent="." unique_id=34387969]
@@ -199,6 +217,54 @@ color = Color(0.84, 0.71, 0.50, 1)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/WorkTable/ChoppingTarget" unique_id=501000204]
 shape = SubResource("RectangleShape2D_work_chop")
+
+[node name="LongCounterLeft01" type="Area2D" parent="KitchenWorkTables" unique_id=501000301]
+position = Vector2(16, 144)
+metadata/world_id = &"long_counter_left_01"
+metadata/footprint_size = Vector2i(1, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/LongCounterLeft01" unique_id=501000311]
+shape = SubResource("RectangleShape2D_station")
+
+[node name="LongCounterLeft02" type="Area2D" parent="KitchenWorkTables" unique_id=501000302]
+position = Vector2(48, 144)
+metadata/world_id = &"long_counter_left_02"
+metadata/footprint_size = Vector2i(1, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/LongCounterLeft02" unique_id=501000312]
+shape = SubResource("RectangleShape2D_station")
+
+[node name="LongCounterLeft03" type="Area2D" parent="KitchenWorkTables" unique_id=501000303]
+position = Vector2(80, 144)
+metadata/world_id = &"long_counter_left_03"
+metadata/footprint_size = Vector2i(1, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/LongCounterLeft03" unique_id=501000313]
+shape = SubResource("RectangleShape2D_station")
+
+[node name="LongCounterRight01" type="Area2D" parent="KitchenWorkTables" unique_id=501000304]
+position = Vector2(112, 144)
+metadata/world_id = &"long_counter_right_01"
+metadata/footprint_size = Vector2i(1, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/LongCounterRight01" unique_id=501000314]
+shape = SubResource("RectangleShape2D_station")
+
+[node name="LongCounterRight02" type="Area2D" parent="KitchenWorkTables" unique_id=501000305]
+position = Vector2(144, 144)
+metadata/world_id = &"long_counter_right_02"
+metadata/footprint_size = Vector2i(1, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/LongCounterRight02" unique_id=501000315]
+shape = SubResource("RectangleShape2D_station")
+
+[node name="LongCounterRight03" type="Area2D" parent="KitchenWorkTables" unique_id=501000306]
+position = Vector2(176, 144)
+metadata/world_id = &"long_counter_right_03"
+metadata/footprint_size = Vector2i(1, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/LongCounterRight03" unique_id=501000316]
+shape = SubResource("RectangleShape2D_station")
 
 [node name="DiningTables" type="Node2D" parent="." unique_id=1975887348]
 

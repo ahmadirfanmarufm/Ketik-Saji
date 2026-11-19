@@ -1,0 +1,23 @@
+{
+  "version": "FINAL-v006",
+  "dish_icons": 13,
+  "ordinary_plate": 1,
+  "all_new_pngs": "32x32; original bytes verified",
+  "recipe_ids": "13 distinct, all mapped",
+  "unlock_totals": [
+    1,
+    2,
+    4,
+    6,
+    8,
+    10,
+    13
+  ],
+  "all_selected_day7_demand_example": 51,
+  "source_integrity_records_verified": 74,
+  "prior_assets": "retained byte-for-byte",
+  "tutorial_text": "unchanged from latest coordinator addendum",
+  "relative_links": "pass; unchanged historical sources excluded",
+  "repository": "not modified; no fresh HEAD audit",
+  "runtime_checks": "not performed by handoff preparer; required checks delegated explicitly"
+}

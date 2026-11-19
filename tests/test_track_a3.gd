@@ -12,8 +12,18 @@ const INGREDIENT_IDS: Array[StringName] = [
 
 const RECIPE_IDS: Array[StringName] = [
 	&"nasi_telor",
+	&"nasi_tempe",
 	&"nasi_ayam",
-	&"nasi_komplit",
+	&"nasi_telur_tempe",
+	&"nasi_ayam_telur",
+	&"egg_salad",
+	&"chicken_salad",
+	&"nasi_daging_sapi",
+	&"nasi_ayam_komplit",
+	&"nasi_sapi_telur",
+	&"beef_salad",
+	&"nasi_sapi_komplit",
+	&"nasi_gila",
 ]
 
 const UTILITY_IDS: Array[StringName] = [
@@ -186,15 +196,19 @@ func _test_recipes(ingredients: Array[IngredientDef]) -> Array[RecipeDef]:
 			continue
 		_check(
 			"recipe valid " + String(id),
-			res.recipe_id == id and res.validate(ing_map).is_empty()
+			res.recipe_id == id
+			and res.validate(ing_map).is_empty()
+			and res.icon != null
+			and not res.description.strip_edges().is_empty()
 		)
 		_check("recipe has no unlock_day field", not ("unlock_day" in res))
 		list.append(res)
 
-	if list.size() == 3:
+	if list.size() == 13:
 		_check("nasi_telor 2 parts", list[0].required_parts.size() == 2)
-		_check("nasi_ayam 3 parts", list[1].required_parts.size() == 3)
-		_check("nasi_komplit 5 parts", list[2].required_parts.size() == 5)
+		_check("nasi_ayam 2 parts (rice + chicken, no tempe)", list[2].required_parts.size() == 2)
+		_check("egg_salad 2 parts (no rice)", list[5].required_parts.size() == 2)
+		_check("nasi_gila 6 parts", list[12].required_parts.size() == 6)
 
 	return list
 
@@ -230,15 +244,19 @@ func _test_economy_config(
 	var errors: PackedStringArray = report["errors"]
 	var warnings: PackedStringArray = report["warnings"]
 	_check("economy_config validate 0 errors", errors.is_empty())
-	_check("economy_config emits Days 4-7 content warning", warnings.size() == 1)
+	_check("economy_config no missing Days 4-7 warnings", warnings.is_empty())
 
 	var e1 := cfg.get_recipe_entry(&"nasi_telor")
 	_check(
-		"nasi_telor entry day 1 Rp20000",
-		e1 != null and e1.unlock_day == 1 and e1.dine_in_price == 20000
+		"nasi_telor entry day 1 Rp20000 +3",
+		e1 != null and e1.unlock_day == 1 and e1.dine_in_price == 20000 and e1.arrival_contribution == 3
 	)
-	_check("day 1 unlocked count == 1", cfg.get_unlocked_recipe_ids(1).size() == 1)
-	_check("day 3 unlocked count == 3", cfg.get_unlocked_recipe_ids(3).size() == 3)
+	var expected_totals := [1, 2, 4, 6, 8, 10, 13]
+	var totals_ok := true
+	for d in range(1, 8):
+		if cfg.get_unlocked_recipe_ids(d).size() != expected_totals[d - 1]:
+			totals_ok = false
+	_check("day 1..7 unlocked totals == [1, 2, 4, 6, 8, 10, 13]", totals_ok)
 	_check("confirmed timings unchanged", is_equal_approx(cfg.diner_patience_seconds, 100.0)
 		and is_equal_approx(cfg.online_deadline_seconds, 60.0))
 	_check(

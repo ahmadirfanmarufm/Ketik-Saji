@@ -33,8 +33,18 @@ const DEFAULT_INGREDIENT_IDS: Array[StringName] = [
 ]
 const DEFAULT_RECIPE_IDS: Array[StringName] = [
 	&"nasi_telor",
+	&"nasi_tempe",
 	&"nasi_ayam",
-	&"nasi_komplit",
+	&"nasi_telur_tempe",
+	&"nasi_ayam_telur",
+	&"egg_salad",
+	&"chicken_salad",
+	&"nasi_daging_sapi",
+	&"nasi_ayam_komplit",
+	&"nasi_sapi_telur",
+	&"beef_salad",
+	&"nasi_sapi_komplit",
+	&"nasi_gila",
 ]
 
 var _world_map: WorldMap = null
@@ -77,6 +87,27 @@ func _exit_tree() -> void:
 	_disconnect_service_signals()
 	if kitchen_state_changed.is_connected(_on_self_kitchen_state_changed):
 		kitchen_state_changed.disconnect(_on_self_kitchen_state_changed)
+
+
+func reset_for_new_run() -> void:
+	_last_service_now = 0.0
+	_player_tile = DEFAULT_START_TILE
+	_selected_target_id = &""
+	_selected_target_is_driver = false
+	_accepted_prefix = ""
+	_last_executed_command = ""
+	_executed_command_count = 0
+	_next_item_seq = 0
+	_held_item.clear()
+	_work_table_items.clear()
+	_cooker_outputs.clear()
+	_storage_units.clear()
+	_plate_records.clear()
+	_fixture_kinds.clear()
+	_washer_dirty_plates.clear()
+	_pending_deliveries.clear()
+	_delivered_purchase_ids.clear()
+	kitchen_state_changed.emit()
 
 
 ## Binds the passive WorldMap and optional GameRoot reference.
@@ -465,6 +496,14 @@ func get_work_table_view(work_table_id: StringName = &"work_table") -> Dictionar
 	if not _work_table_items.has(work_table_id):
 		return {}
 	return _work_table_items[work_table_id].duplicate(true)
+
+
+func get_work_table_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for tid: StringName in _work_table_items:
+		ids.append(tid)
+	ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+	return ids
 
 
 func get_cooker_output_view(cooker_id: StringName = &"rice_cooker") -> Dictionary:
@@ -1186,6 +1225,9 @@ func _perform_click_action(target_id: StringName) -> void:
 			_handle_work_table_stage_click(&"work_table")
 		&"trash":
 			_handle_trash_click()
+		_:
+			if _work_table_items.has(target_id):
+				_handle_work_table_stage_click(target_id)
 
 
 func _perform_typed_command(command: StringName) -> void:

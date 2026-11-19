@@ -1,24 +1,23 @@
 [gd_resource type="Resource" script_class="RecipeDef" format=3]
 
-[ext_resource type="Script" path="res://scripts/kitchen/recipe_part_def.gd" id="1_h8jg1"]
-[ext_resource type="Script" path="res://scripts/kitchen/recipe_def.gd" id="2_phwos"]
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_part_def.gd" id="1_part"]
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_def.gd" id="2_def"]
+[ext_resource type="Texture2D" path="res://assets/art/dishes/Nasi-Ayam.png" id="3_icon"]
 
-[sub_resource type="Resource" id="Resource_4onha"]
-script = ExtResource("1_h8jg1")
+[sub_resource type="Resource" id="Resource_p1"]
+script = ExtResource("1_part")
 ingredient_id = &"beras"
 required_state = 2
 
-[sub_resource type="Resource" id="Resource_oxjy1"]
-script = ExtResource("1_h8jg1")
+[sub_resource type="Resource" id="Resource_p2"]
+script = ExtResource("1_part")
 ingredient_id = &"ayam"
 
-[sub_resource type="Resource" id="Resource_ilq80"]
-script = ExtResource("1_h8jg1")
-ingredient_id = &"tempe"
-
 [resource]
-script = ExtResource("2_phwos")
+script = ExtResource("2_def")
 recipe_id = &"nasi_ayam"
 display_name = "Nasi Ayam"
 icon_key = &"nasi_ayam"
-required_parts = Array[ExtResource("1_h8jg1")]([SubResource("Resource_4onha"), SubResource("Resource_oxjy1"), SubResource("Resource_ilq80")])
+icon = ExtResource("3_icon")
+description = "Masak nasi, goreng ayam, lalu sajikan bersama."
+required_parts = Array[ExtResource("1_part")]([SubResource("Resource_p1"), SubResource("Resource_p2")])

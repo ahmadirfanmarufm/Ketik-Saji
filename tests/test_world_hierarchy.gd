@@ -165,7 +165,7 @@ func _test_starter_fixtures_and_unique_ids(world: WorldMap) -> void:
 		and world.grid.tile_size == Vector2i(32, 32)
 	)
 	_check("KitchenStations count == 6", world.kitchen_stations.get_child_count() == 6)
-	_check("KitchenWorkTables count == 1", world.kitchen_work_tables.get_child_count() == 1)
+	_check("KitchenWorkTables count == 7", world.kitchen_work_tables.get_child_count() == 7)
 	_check("DiningTables count == 2", world.dining_tables.get_child_count() == 2)
 	_check("DriverPickupSpots count == 3", world.driver_pickup_spots.get_child_count() == 3)
 	_check(
@@ -176,7 +176,8 @@ func _test_starter_fixtures_and_unique_ids(world: WorldMap) -> void:
 	_check("PlacementSlots count == 11", world.placement_slots.get_child_count() == 11)
 
 	var ids := world.registry.get_ids()
-	_check("31 unique scene IDs registered", ids.size() == 31)
+	_check("37 unique scene IDs registered (31 base + 6 long counter slots)", ids.size() == 37)
+	_check("6 long counter slots exposed", world.get_long_counter_slot_ids().size() == 6)
 
 	for id in INTERACTABLE_IDS + PICKUP_SPOT_IDS + WAITING_ANCHOR_IDS + SLOT_IDS:
 		_check("registered ID " + String(id), world.registry.has_object(id))
@@ -321,11 +322,11 @@ func _test_visual_only_nodes(world: WorldMap) -> void:
 		world.registry.find_id(world.decorations) == &""
 		and all_decor_passive
 	)
-	var counter_non_walkable := true
+	var counter_slots_valid := true
 	for cx in range(0, 6):
 		var c := Vector2i(cx, 4)
-		if world.grid.is_walkable(c) or world.grid.is_occupied(c):
-			counter_non_walkable = false
+		if world.grid.is_walkable(c) or not world.grid.is_occupied(c):
+			counter_slots_valid = false
 	var wall_non_walkable := true
 	for wy in [0, 1, 2, 3, 4, 8]:
 		var wc := Vector2i(8, wy)
@@ -336,8 +337,8 @@ func _test_visual_only_nodes(world: WorldMap) -> void:
 		if not world.grid.is_free(Vector2i(8, dy)):
 			doorway_and_passage_free = false
 	_check(
-		"passive long counter and interior wall are non-walkable while doorway/passage are free",
-		counter_non_walkable and wall_non_walkable and doorway_and_passage_free
+		"long counter slots are non-walkable and registered while doorway/passage are free",
+		counter_slots_valid and wall_non_walkable and doorway_and_passage_free
 	)
 	_check(
 		"Player starts at cell (6, 3) which remains free",
@@ -400,7 +401,21 @@ func _test_m5a2_starter_dining_tables(world: WorldMap) -> void:
 			and world.grid.get_footprint(table_id) == [table_cell]
 			and world.grid.is_free(south_cell)
 		)
-	_check("M5-A2 preserves exact 31 registered scene IDs", world.registry.get_ids().size() == 31)
+	_check("M5-A2 preserves exact 37 registered scene IDs", world.registry.get_ids().size() == 37)
+
+	# Verify dirty dining table uses plate-dirty.png with no persistent Kotor text.
+	world.sync_dine_in_visuals([], [{"table_id": &"dining_table_01", "state": SharedTypes.TableState.DIRTY}], {})
+	var dt1 := world.registry.get_object(&"dining_table_01")
+	var dirty_vis := dt1.get_node_or_null("TableDirtyVisual") if dt1 != null else null
+	var dirty_spr := dirty_vis.get_node_or_null("DirtyPlate") as Sprite2D if dirty_vis != null else null
+	_check(
+		"dirty dining table renders plate-dirty.png with no persistent DirtyLabel",
+		dirty_spr != null
+		and dirty_spr.texture != null
+		and dirty_spr.texture.resource_path == "res://assets/art/ui/icons/plate-dirty.png"
+		and dirty_vis.get_node_or_null("DirtyLabel") == null
+	)
+	world.sync_dine_in_visuals([], [{"table_id": &"dining_table_01", "state": SharedTypes.TableState.CLEAN_VACANT}], {})
 
 
 func _test_art_integration_and_driver_visuals(world: WorldMap) -> void:
@@ -666,49 +681,71 @@ func _test_multi_tile_and_negative_queries(world: WorldMap) -> void:
 
 
 func _test_f1a_unified_road_and_backdrop(game_root: Node, world: WorldMap) -> void:
-	var road_connected := true
+	var street_connected := true
 	for y in range(world.grid_size.y):
-		var exp_c9 := WorldMap.TILE_LANE_MID_LEFT
-		var exp_c10 := WorldMap.TILE_LANE_FILL
-		var exp_c11 := WorldMap.TILE_LANE_MID_RIGHT
-		if y == 0:
-			exp_c9 = WorldMap.TILE_LANE_TOP_LEFT
-			exp_c10 = WorldMap.TILE_LANE_TOP_MID
-			exp_c11 = WorldMap.TILE_LANE_TOP_RIGHT
-		elif y == world.grid_size.y - 1:
-			exp_c9 = WorldMap.TILE_LANE_BOT_LEFT
-			exp_c10 = WorldMap.TILE_LANE_BOT_MID
-			exp_c11 = WorldMap.TILE_LANE_BOT_RIGHT
+		var exp_road := WorldMap.TILE_ROAD_TOP if (y % 2 == 0) else WorldMap.TILE_ROAD_BOTTOM
 		if (
-			world.floor_layer.get_cell_atlas_coords(Vector2i(9, y)) != exp_c9
-			or world.floor_layer.get_cell_atlas_coords(Vector2i(10, y)) != exp_c10
-			or world.floor_layer.get_cell_atlas_coords(Vector2i(11, y)) != exp_c11
+			world.floor_layer.get_cell_source_id(Vector2i(9, y)) != WorldMap.SIDEWALK_SOURCE_ID
+			or world.floor_layer.get_cell_atlas_coords(Vector2i(9, y)) != WorldMap.TILE_SIDEWALK
+			or world.floor_layer.get_cell_alternative_tile(Vector2i(9, y))
+				!= WorldMap.SIDEWALK_ALT_DEFAULT
+			or world.floor_layer.get_cell_source_id(Vector2i(10, y)) != WorldMap.ROAD_SOURCE_ID
+			or world.floor_layer.get_cell_atlas_coords(Vector2i(10, y)) != exp_road
+			or world.floor_layer.get_cell_source_id(Vector2i(11, y)) != WorldMap.SIDEWALK_SOURCE_ID
+			or world.floor_layer.get_cell_atlas_coords(Vector2i(11, y)) != WorldMap.TILE_SIDEWALK
+			or world.floor_layer.get_cell_alternative_tile(Vector2i(11, y))
+				!= WorldMap.SIDEWALK_ALT_FLIPPED
 		):
-			road_connected = false
+			street_connected = false
 		for x in [9, 10, 11]:
 			if world.grid.is_walkable(Vector2i(x, y)):
-				road_connected = false
+				street_connected = false
 	_check(
-		"F1-A cols 9..11 form one connected 3-tile road while remaining non-walkable",
-		road_connected
+		"cols 9..11 form continuous left-sidewalk / road / right-sidewalk street while non-walkable",
+		street_connected
+	)
+
+	var tileset := world.floor_layer.tile_set
+	var sidewalk_src := tileset.get_source(WorldMap.SIDEWALK_SOURCE_ID) as TileSetAtlasSource
+	var road_src := tileset.get_source(WorldMap.ROAD_SOURCE_ID) as TileSetAtlasSource
+	_check(
+		"FloorTiles TileSet binds custom Sidewalk(trotoar).png and Road.png textures",
+		sidewalk_src != null
+		and sidewalk_src.texture != null
+		and sidewalk_src.texture.resource_path == "res://assets/art/road/Sidewalk(trotoar).png"
+		and sidewalk_src.texture.get_size() == Vector2(32, 32)
+		and road_src != null
+		and road_src.texture != null
+		and road_src.texture.resource_path == "res://assets/art/road/Road.png"
+		and road_src.texture.get_size() == Vector2(32, 64)
 	)
 
 	# Verify programmatic _populate_floor_tiles() fallback matches authored tile_map_data.
 	world.floor_layer.clear()
 	world._populate_floor_tiles()
 	_check(
-		"F1-A _populate_floor_tiles() fallback builds connected 108-cell road",
+		"_populate_floor_tiles() fallback builds connected 108-cell street",
 		world.floor_layer.get_used_cells().size() == 108
-		and world.floor_layer.get_cell_atlas_coords(Vector2i(9, 4)) == WorldMap.TILE_LANE_MID_LEFT
-		and world.floor_layer.get_cell_atlas_coords(Vector2i(10, 4)) == WorldMap.TILE_LANE_FILL
-		and world.floor_layer.get_cell_atlas_coords(Vector2i(11, 4)) == WorldMap.TILE_LANE_MID_RIGHT
+		and world.floor_layer.get_cell_source_id(Vector2i(9, 4)) == WorldMap.SIDEWALK_SOURCE_ID
+		and world.floor_layer.get_cell_alternative_tile(Vector2i(9, 4))
+			== WorldMap.SIDEWALK_ALT_DEFAULT
+		and world.floor_layer.get_cell_source_id(Vector2i(10, 4)) == WorldMap.ROAD_SOURCE_ID
+		and world.floor_layer.get_cell_atlas_coords(Vector2i(10, 4)) == WorldMap.TILE_ROAD_TOP
+		and world.floor_layer.get_cell_source_id(Vector2i(10, 5)) == WorldMap.ROAD_SOURCE_ID
+		and world.floor_layer.get_cell_atlas_coords(Vector2i(10, 5)) == WorldMap.TILE_ROAD_BOTTOM
+		and world.floor_layer.get_cell_source_id(Vector2i(11, 4)) == WorldMap.SIDEWALK_SOURCE_ID
+		and world.floor_layer.get_cell_alternative_tile(Vector2i(11, 4))
+			== WorldMap.SIDEWALK_ALT_FLIPPED
 	)
 
 	var backdrop := game_root.get_node_or_null("WorldBackdrop") as Node2D
 	var passive_only := backdrop != null
 	var wall_sprites_ok := false
+	var street_ext_ok := false
 	if backdrop != null:
 		var wall_count := 0
+		var sidewalk_ext_count := 0
+		var road_ext_count := 0
 		for child in backdrop.get_children():
 			if child is Area2D or child is CollisionObject2D or child is Control:
 				passive_only = false
@@ -718,16 +755,24 @@ func _test_f1a_unified_road_and_backdrop(game_root: Node, world: WorldMap) -> vo
 				var spr := child as Sprite2D
 				if (
 					spr.texture != null
-					and spr.texture.resource_path == "res://assets/art/tiles/Warung-Tileset.png"
 					and spr.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
 				):
-					wall_count += 1
+					if spr.texture.resource_path == "res://assets/art/tiles/Warung-Tileset.png":
+						wall_count += 1
+					elif (
+						spr.texture.resource_path == "res://assets/art/road/Sidewalk(trotoar).png"
+					):
+						sidewalk_ext_count += 1
+					elif spr.texture.resource_path == "res://assets/art/road/Road.png":
+						road_ext_count += 1
 		wall_sprites_ok = (wall_count == 4)
+		street_ext_ok = (sidewalk_ext_count == 8 and road_ext_count == 3)
 	_check(
-		"F1-A WorldBackdrop is passive, draws behind World, and uses Warung-Tileset rear wall",
+		"WorldBackdrop is passive, draws behind World, and extends wall/sidewalk/road cleanly",
 		backdrop != null
 		and passive_only
 		and wall_sprites_ok
+		and street_ext_ok
 		and backdrop.z_index < world.z_index
 		and backdrop.get_index() < world.get_index()
 		and world.registry.find_id(backdrop) == &""

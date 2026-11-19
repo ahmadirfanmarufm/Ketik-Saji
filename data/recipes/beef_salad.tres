@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="RecipeDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_part_def.gd" id="1_part"]
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_def.gd" id="2_def"]
+[ext_resource type="Texture2D" path="res://assets/art/dishes/Beef-Salad.png" id="3_icon"]
+
+[sub_resource type="Resource" id="Resource_p1"]
+script = ExtResource("1_part")
+ingredient_id = &"sapi"
+
+[sub_resource type="Resource" id="Resource_p2"]
+script = ExtResource("1_part")
+ingredient_id = &"sayur"
+required_state = 3
+
+[resource]
+script = ExtResource("2_def")
+recipe_id = &"beef_salad"
+display_name = "Beef Salad"
+icon_key = &"beef_salad"
+icon = ExtResource("3_icon")
+description = "Goreng sapi, potong sayur, lalu sajikan tanpa nasi."
+required_parts = Array[ExtResource("1_part")]([SubResource("Resource_p1"), SubResource("Resource_p2")])

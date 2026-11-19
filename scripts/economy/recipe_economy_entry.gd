@@ -5,6 +5,7 @@ extends Resource
 @export var recipe_id: StringName = &""
 @export var unlock_day: int = 1
 @export var dine_in_price: int = 0
+@export var arrival_contribution: int = 0
 
 
 ## Returns validation errors against `recipes_by_id` (StringName -> RecipeDef).

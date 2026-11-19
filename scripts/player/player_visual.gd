@@ -101,8 +101,11 @@ func play_visual_animation(animation_name: StringName) -> bool:
 func sync_held_item_visual(
 	has_item: bool,
 	is_plated: bool,
-	part_textures: Array[Texture2D]
+	part_textures: Array[Texture2D],
+	dish_icon: Texture2D = null
 ) -> void:
 	if _held_item_visual == null:
 		return
-	WorldMap.sync_food_item_visual(_held_item_visual, has_item, is_plated, part_textures)
+	WorldMap.sync_food_item_visual(
+		_held_item_visual, has_item, is_plated, part_textures, dish_icon
+	)

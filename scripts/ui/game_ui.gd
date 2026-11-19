@@ -1693,14 +1693,16 @@ func _refresh_kitchen_visuals() -> void:
 	var held_has := not held_view.is_empty()
 	var held_plated: bool = held_has and held_view.get("plate_id", &"") != &""
 	var held_textures := _resolve_item_textures(held_view)
+	var held_dish_icon := _resolve_dish_icon_for_item_view(held_view)
 	var player_visual := _world_map.player as PlayerVisual
 	if player_visual != null:
-		player_visual.sync_held_item_visual(held_has, held_plated, held_textures)
+		player_visual.sync_held_item_visual(held_has, held_plated, held_textures, held_dish_icon)
 
 	var table_view := _kitchen_controller.get_work_table_view(&"work_table")
 	var table_has := not table_view.is_empty()
 	var table_plated: bool = table_has and table_view.get("plate_id", &"") != &""
 	var table_textures := _resolve_item_textures(table_view)
+	var table_dish_icon := _resolve_dish_icon_for_item_view(table_view)
 
 	var cooker_view := _kitchen_controller.get_cooker_output_view(&"rice_cooker")
 	var cooker_portions := int(cooker_view.get("portions", 0))
@@ -1721,8 +1723,23 @@ func _refresh_kitchen_visuals() -> void:
 		cooker_tex,
 		clean_plates,
 		dirty_plates,
-		cooker_portions
+		cooker_portions,
+		table_dish_icon
 	)
+	if (
+		_world_map.has_method(&"sync_counter_slot_visuals")
+		and _world_map.has_method(&"get_long_counter_slot_ids")
+	):
+		var slot_views: Dictionary = {}
+		for slot_id in _world_map.get_long_counter_slot_ids():
+			var s_view := _kitchen_controller.get_work_table_view(slot_id)
+			if not s_view.is_empty():
+				slot_views[slot_id] = {
+					"is_plated": s_view.get("plate_id", &"") != &"",
+					"textures": _resolve_item_textures(s_view),
+					"dish_icon": _resolve_dish_icon_for_item_view(s_view),
+				}
+		_world_map.sync_counter_slot_visuals(slot_views)
 	if _world_map.has_method(&"sync_extra_kitchen_visuals"):
 		var extra_cookers: Dictionary[StringName, Dictionary] = {}
 		for cooker_id in _kitchen_controller.get_cooker_ids():
@@ -1815,12 +1832,16 @@ func _refresh_driver_visuals() -> void:
 		return
 	var driver_views := _service_controller.get_driver_views()
 	var recipe_names: Dictionary = {}
+	var recipe_icons: Dictionary = {}
 	for view: Dictionary in driver_views:
 		var recipe_id := StringName(view.get("recipe_id", &""))
 		if recipe_id == &"" or recipe_names.has(recipe_id):
 			continue
 		recipe_names[recipe_id] = _get_recipe_display_name(recipe_id)
-	_world_map.sync_driver_visuals(driver_views, recipe_names)
+		var icon := _get_recipe_icon(recipe_id)
+		if icon != null:
+			recipe_icons[recipe_id] = icon
+	_world_map.sync_driver_visuals(driver_views, recipe_names, recipe_icons)
 
 
 func _refresh_online_station_visual() -> void:
@@ -1833,7 +1854,14 @@ func _refresh_online_station_visual() -> void:
 	var enabled := bool(offer_view.get("acceptance_enabled", false))
 	var recipe_label := _get_recipe_display_name(preview_id) if preview_id != &"" else ""
 	var part_textures := _resolve_recipe_part_textures(preview_id)
-	_world_map.sync_online_station_visual(preview_id, enabled, recipe_label, part_textures)
+	var dish_icon := _get_recipe_icon(preview_id) if preview_id != &"" else null
+	_world_map.sync_online_station_visual(
+		preview_id,
+		enabled,
+		recipe_label,
+		part_textures,
+		dish_icon
+	)
 
 
 func _get_recipe_display_name(recipe_id: StringName) -> String:
@@ -1844,6 +1872,22 @@ func _get_recipe_display_name(recipe_id: StringName) -> String:
 		if def != null and not def.display_name.is_empty():
 			return def.display_name
 	return String(recipe_id)
+
+
+func _get_recipe_icon(recipe_id: StringName) -> Texture2D:
+	if recipe_id == &"" or _kitchen_controller == null or not is_instance_valid(_kitchen_controller):
+		return null
+	var def := _kitchen_controller.get_recipe_def(recipe_id)
+	return def.icon if def != null else null
+
+
+func _resolve_dish_icon_for_item_view(item_view: Dictionary) -> Texture2D:
+	if item_view.is_empty():
+		return null
+	var matched_id := StringName(item_view.get("matched_recipe_id", &""))
+	if matched_id == &"":
+		return null
+	return _get_recipe_icon(matched_id)
 
 
 func _resolve_recipe_part_textures(recipe_id: StringName) -> Array[Texture2D]:
@@ -1873,6 +1917,7 @@ func _refresh_dine_in_visuals() -> void:
 		table_views.append(_service_controller.get_table_view(table_id))
 
 	var recipe_names: Dictionary = {}
+	var recipe_icons: Dictionary = {}
 	if _kitchen_controller != null and is_instance_valid(_kitchen_controller):
 		for view: Dictionary in customer_views:
 			var recipe_id := StringName(view.get("recipe_id", &""))
@@ -1881,8 +1926,10 @@ func _refresh_dine_in_visuals() -> void:
 			var def := _kitchen_controller.get_recipe_def(recipe_id)
 			if def != null and not def.display_name.is_empty():
 				recipe_names[recipe_id] = def.display_name
+			if def != null and def.icon != null:
+				recipe_icons[recipe_id] = def.icon
 
-	_world_map.sync_dine_in_visuals(customer_views, table_views, recipe_names)
+	_world_map.sync_dine_in_visuals(customer_views, table_views, recipe_names, recipe_icons)
 
 
 func _is_selected_target_dining_table() -> bool:
@@ -3144,12 +3191,23 @@ func _get_ordered_shop_ingredient_ids() -> Array[StringName]:
 	var result: Array[StringName] = []
 	if _kitchen_controller == null or not is_instance_valid(_kitchen_controller):
 		return result
+	var unlocked_filter: Array[StringName] = []
+	if _run_controller != null and is_instance_valid(_run_controller) and _run_controller.has_method(&"get_unlocked_ingredient_ids"):
+		unlocked_filter = _run_controller.get_unlocked_ingredient_ids()
 	var registered: Array[StringName] = _kitchen_controller.get_ingredient_ids()
 	for id in SHOP_INGREDIENT_ORDER:
-		if registered.has(id) and _get_ingredient_unit_price(id) > 0:
+		if (
+			registered.has(id)
+			and (unlocked_filter.is_empty() or unlocked_filter.has(id))
+			and _get_ingredient_unit_price(id) > 0
+		):
 			result.append(id)
 	for id in registered:
-		if not result.has(id) and _get_ingredient_unit_price(id) > 0:
+		if (
+			not result.has(id)
+			and (unlocked_filter.is_empty() or unlocked_filter.has(id))
+			and _get_ingredient_unit_price(id) > 0
+		):
 			result.append(id)
 	return result
 

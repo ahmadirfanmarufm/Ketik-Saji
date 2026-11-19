@@ -67,6 +67,7 @@ var _service_controller: ServiceController = null
 var _game_root: Node = null
 
 var _utility_defs: Dictionary[StringName, UtilityDef] = {}
+var _recipe_defs_fallback: Dictionary[StringName, RecipeDef] = {}
 var _run_started: bool = false
 var _day_index: int = 1
 var _cash: int = 0
@@ -146,6 +147,12 @@ func get_fixture_instance(instance_id: StringName) -> Dictionary:
 	if not _fixture_instances.has(instance_id):
 		return {}
 	return _fixture_instances[instance_id].duplicate(true)
+
+
+func reset_for_new_run() -> void:
+	_run_started = false
+	_rng.seed = 1337
+	start_new_run()
 
 
 func start_new_run() -> void:
@@ -429,6 +436,8 @@ func request_ingredient_basket_purchase(
 		var quantity := int(raw_qty)
 		if ingredient_id == &"" or quantity <= 0:
 			return false
+		if not is_ingredient_unlocked(ingredient_id):
+			return false
 		var unit_price := economy_config.get_ingredient_price(ingredient_id)
 		if unit_price <= 0:
 			return false
@@ -560,6 +569,8 @@ func request_ingredient_purchase(
 	if not _can_attempt_ingredient_purchase(storage_unit_id):
 		return false
 	if ingredient_id == &"" or quantity <= 0:
+		return false
+	if not is_ingredient_unlocked(ingredient_id):
 		return false
 
 	var unit_price := economy_config.get_ingredient_price(ingredient_id)
@@ -822,12 +833,59 @@ func get_run_view() -> Dictionary:
 		"day_7_target": economy_config.day_7_cash_target if economy_config != null else 0,
 		"goal_outcome": _day_7_outcome,
 		"unlocked_recipe_ids": _unlocked_recipe_ids.duplicate(),
+		"unlocked_ingredient_ids": get_unlocked_ingredient_ids(_day_index),
 		"selected_recipe_ids": _selected_recipe_ids.duplicate(),
 		"installed_fixtures": _fixture_instances.duplicate(true),
 		"demand_penalty_debt": _demand_penalty_debt,
 		"potential_demand": int(demand["potential_demand"]),
 		"planned_dinein_quota": int(demand["planned_dinein_quota"]),
 	}
+
+
+## Returns derived purchasable raw ingredient IDs across all recipes unlocked
+## up to `day` (union of RecipeDef.required_parts across unlocked recipes).
+func get_unlocked_ingredient_ids(day: int = -1) -> Array[StringName]:
+	_ensure_resources_loaded()
+	var target_day := _day_index if day <= 0 else day
+	var result: Array[StringName] = []
+	if economy_config == null:
+		return result
+	var unlocked_recipes := economy_config.get_unlocked_recipe_ids(target_day)
+	for recipe_id in unlocked_recipes:
+		var recipe_def := _resolve_recipe_def(recipe_id)
+		if recipe_def == null:
+			continue
+		for part in recipe_def.required_parts:
+			if part != null and part.ingredient_id != &"" and not result.has(part.ingredient_id):
+				result.append(part.ingredient_id)
+	return result
+
+
+## Returns true if `ingredient_id` is required by at least one recipe unlocked
+## by `day` (defaults to current day index).
+func is_ingredient_unlocked(ingredient_id: StringName, day: int = -1) -> bool:
+	if ingredient_id == &"":
+		return false
+	return get_unlocked_ingredient_ids(day).has(ingredient_id)
+
+
+func _resolve_recipe_def(recipe_id: StringName) -> RecipeDef:
+	if recipe_id == &"":
+		return null
+	if (
+		_kitchen_controller != null
+		and is_instance_valid(_kitchen_controller)
+		and _kitchen_controller.has_method(&"get_recipe_def")
+	):
+		var kc_def := _kitchen_controller.get_recipe_def(recipe_id) as RecipeDef
+		if kc_def != null:
+			return kc_def
+	if _recipe_defs_fallback.has(recipe_id):
+		return _recipe_defs_fallback[recipe_id]
+	var loaded := load("res://data/recipes/%s.tres" % recipe_id) as RecipeDef
+	if loaded != null:
+		_recipe_defs_fallback[recipe_id] = loaded
+	return loaded
 
 
 ## Returns read-only Potential Demand and Planned Dine-in Quota for a candidate menu.
@@ -895,6 +953,9 @@ func _bind_starter_fixtures() -> void:
 			&"work_table"
 		):
 			_kitchen_controller.register_work_table(&"work_table")
+		if _world_map != null and _world_map.has_method(&"get_long_counter_slot_ids"):
+			for slot_id in _world_map.get_long_counter_slot_ids():
+				_kitchen_controller.register_work_table(slot_id)
 
 
 func _get_installed_table_ids() -> Array[StringName]:
@@ -924,7 +985,7 @@ func _compute_demand_for_day_and_menu(day: int, recipe_ids: Array[StringName]) -
 			"planned_dinein_quota": 0,
 		}
 	var unlocked_for_day := economy_config.get_unlocked_recipe_ids(day)
-	var active_count := 0
+	var valid_selected: Array[StringName] = []
 	var seen: Dictionary[StringName, bool] = {}
 	for recipe_id in recipe_ids:
 		if recipe_id == &"" or seen.has(recipe_id):
@@ -932,8 +993,8 @@ func _compute_demand_for_day_and_menu(day: int, recipe_ids: Array[StringName]) -
 		if not unlocked_for_day.has(recipe_id):
 			continue
 		seen[recipe_id] = true
-		active_count += 1
-	if active_count <= 0:
+		valid_selected.append(recipe_id)
+	if valid_selected.is_empty():
 		return {
 			"base_potential": 0,
 			"menu_bonus": 0,
@@ -941,19 +1002,34 @@ func _compute_demand_for_day_and_menu(day: int, recipe_ids: Array[StringName]) -
 			"planned_dinein_quota": 0,
 		}
 
+	valid_selected.sort_custom(func(a: StringName, b: StringName) -> bool:
+		var ea := economy_config.get_recipe_entry(a)
+		var eb := economy_config.get_recipe_entry(b)
+		var ua := ea.unlock_day if ea != null else 999
+		var ub := eb.unlock_day if eb != null else 999
+		if ua != ub:
+			return ua < ub
+		return String(a) < String(b)
+	)
+	var baseline_id: StringName = valid_selected[0]
+	var extra_menu_arrivals := 0
+	for i in range(1, valid_selected.size()):
+		var rid := valid_selected[i]
+		if rid == baseline_id:
+			continue
+		var entry := economy_config.get_recipe_entry(rid)
+		if entry != null:
+			extra_menu_arrivals += maxi(0, entry.arrival_contribution)
+
 	var base_quota := (
 		economy_config.day_1_base_dinein_quota
 		+ maxi(0, day - 1) * economy_config.arrival_increment_per_day
 	)
-	var conv_pct := clampi(economy_config.potential_demand_conversion_percent, 1, 100)
-	var base_potential := ceili(float(base_quota) * 100.0 / float(conv_pct))
-	var menu_bonus := economy_config.get_menu_demand_bonus(active_count)
-	var potential_demand := maxi(0, base_potential + menu_bonus)
-	var gross_planned_quota := (potential_demand * conv_pct) / 100
-	var planned_quota := maxi(0, gross_planned_quota - _demand_penalty_debt)
+	var potential_demand := maxi(0, base_quota + extra_menu_arrivals)
+	var planned_quota := maxi(0, potential_demand - _demand_penalty_debt)
 	return {
-		"base_potential": base_potential,
-		"menu_bonus": menu_bonus,
+		"base_potential": base_quota,
+		"menu_bonus": extra_menu_arrivals,
 		"potential_demand": potential_demand,
 		"planned_dinein_quota": planned_quota,
 	}

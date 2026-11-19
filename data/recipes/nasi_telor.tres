@@ -1,20 +1,23 @@
 [gd_resource type="Resource" script_class="RecipeDef" format=3]
 
-[ext_resource type="Script" path="res://scripts/kitchen/recipe_part_def.gd" id="1_fvd2l"]
-[ext_resource type="Script" path="res://scripts/kitchen/recipe_def.gd" id="2_vh2wx"]
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_part_def.gd" id="1_part"]
+[ext_resource type="Script" path="res://scripts/kitchen/recipe_def.gd" id="2_def"]
+[ext_resource type="Texture2D" path="res://assets/art/dishes/Nasi-Telur.png" id="3_icon"]
 
-[sub_resource type="Resource" id="Resource_ips27"]
-script = ExtResource("1_fvd2l")
+[sub_resource type="Resource" id="Resource_p1"]
+script = ExtResource("1_part")
 ingredient_id = &"beras"
 required_state = 2
 
-[sub_resource type="Resource" id="Resource_nlgep"]
-script = ExtResource("1_fvd2l")
+[sub_resource type="Resource" id="Resource_p2"]
+script = ExtResource("1_part")
 ingredient_id = &"telur"
 
 [resource]
-script = ExtResource("2_vh2wx")
+script = ExtResource("2_def")
 recipe_id = &"nasi_telor"
-display_name = "Nasi Telor"
+display_name = "Nasi Telur"
 icon_key = &"nasi_telor"
-required_parts = Array[ExtResource("1_fvd2l")]([SubResource("Resource_ips27"), SubResource("Resource_nlgep")])
+icon = ExtResource("3_icon")
+description = "Cuci dan masak beras, goreng telur, lalu sajikan bersama nasi."
+required_parts = Array[ExtResource("1_part")]([SubResource("Resource_p1"), SubResource("Resource_p2")])
