@@ -528,121 +528,33 @@ static func get_feature_discovery_tip(tip_id: StringName) -> Dictionary:
 static func get_cara_main_sections() -> Array[Dictionary]:
 	return [
 		{
-			"heading": "1. TUJUAN PERMAINAN",
+			"heading": "KLIK & KETIK",
 			"bullets": [
-				"Kelola warung makan selama 7 hari dari modal awal Rp 100k.",
-				"Kumpulkan kas bersih minimal [color=#9e2508]Rp 700.000[/color] di akhir Hari ke-7 (setelah listrik & gaji).",
+				"Klik lantai untuk berpindah, klik objek untuk berinteraksi.",
+				"Ketik perintah yang muncul. Tidak perlu tekan Enter!",
 			],
 		},
 		{
-			"heading": "2. ALUR SATU HARI",
+			"heading": "SEBELUM BUKA",
 			"bullets": [
-				"Setiap hari berjalan berurutan: Persiapan (Planning) → Layanan (Serving) → Tutup Otomatis → Hasil Hari.",
-				"Warung baru tutup otomatis saat semua tamu antrean, tamu di meja, dan order online aktif selesai.",
+				"Pilih menu, beli bahan, dan tambah peralatan.",
+				"Ketik [color=#9e2508]buka[/color] untuk mulai berjualan!",
 			],
 		},
 		{
-			"heading": "3. KONTROL DAN PERINTAH",
+			"heading": "SAAT BERJUALAN",
 			"bullets": [
-				"Klik lantai untuk berpindah; klik alat/meja/pengantar untuk mendekat & memilihnya langsung.",
-				"Ketik huruf perintah Indonesia yang muncul di balon dialog — selesai kata langsung jalan [color=#9e2508]tanpa Enter[/color]!",
-				"Salah huruf bergetar; Backspace hapus 1 huruf; klik lantai atau tekan ESC membatalkan pilihan/ketikan.",
-				"Kamu juga bisa langsung mengklik kata perintah di balon dialog.",
+				"Siapkan bahan, masak, lalu sajikan pesanan sebelum pelanggan kehabisan kesabaran!",
+				"Ketik [color=#9e2508]saji[/color] untuk mengantar makanan.",
+				"Ketik [color=#9e2508]bersihkan[/color] untuk membereskan meja, lalu [color=#9e2508]cuci[/color] untuk mencuci piring.",
+				"Pesanan online bisa diterima dengan mengetik [color=#9e2508]terima[/color]. Awas, ada batas waktunya!",
 			],
 		},
 		{
-			"heading": "4. PERSIAPAN WARUNG",
+			"heading": "TARGETMU",
+			"plain_body": true,
 			"bullets": [
-				"Saat Persiapan: atur menu, beli bahan, pasang alat/meja, dan kelola pegawai (belum bisa memasak).",
-				"Kosongkan pilihan objek lalu ketik [color=#9e2508]buka[/color] untuk mulai berjualan.",
-			],
-		},
-		{
-			"heading": "5. BELI BAHAN",
-			"bullets": [
-				"Pilih Kotak Bahan atau Kulkas lalu ketik [color=#9e2508]beli[/color].",
-				"Kotak Bahan (3 slot × 5): gratis listrik, tetapi [color=#9e2508]stok hangus setiap malam[/color].",
-				"Kulkas (2 slot × 3): listrik Rp 4k/hari, stok bahan mentah bertahan antar hari.",
-				"Belanja saat Persiapan langsung masuk; saat Layanan tiba dalam 100 detik (uang kembali jika keburu tutup).",
-			],
-		},
-		{
-			"heading": "6. BELI DAN PASANG ALAT",
-			"bullets": [
-				"Saat Persiapan, klik [color=#9e2508]Beli alat[/color] atau slot hijau +Alat/+Meja di dapur/area makan.",
-				"Peralatan langsung terpasang! Penanak Nasi kena listrik Rp 2k/hari; Kulkas Rp 4k/hari.",
-			],
-		},
-		{
-			"heading": "7. EDIT MENU",
-			"bullets": [
-				"Saat Persiapan, klik [color=#9e2508]Edit menu[/color] untuk memilih resep aktif (minimal 1) lalu Simpan.",
-				"Panel Resep di kanan menampilkan rincian bahan dan harga jualnya.",
-			],
-		},
-		{
-			"heading": "8. MEMASAK DAN MENYIAPKAN BAHAN",
-			"bullets": [
-				"Kamu hanya bisa memegang 1 bahan atau 1 piring rakitan.",
-				"Kotak/Kulkas: ketik nama bahan mentah ([color=#9e2508]beras, telur, tempe, ayam, sayur, sapi[/color]).",
-				"Beras: Wastafel ([color=#9e2508]cuci[/color]) → Penanak Nasi ([color=#9e2508]masak[/color], 1x jadi 5 porsi).",
-				"Telur/Tempe/Ayam/Sapi: Kompor ([color=#9e2508]goreng[/color]). Sayur: Talenan ([color=#9e2508]potong[/color], lalu goreng jika perlu).",
-			],
-		},
-		{
-			"heading": "9. MERAKIT DAN MENYAJIKAN PESANAN",
-			"bullets": [
-				"Ambil piring di Rak Piring (4 piring per rak), isi nasi ([color=#9e2508]nasi[/color]), lalu gabung di tangan/Meja Kerja/Konter (urutan bebas).",
-				"Salah rakit? Klik Tempat Sampah untuk membuang isi tanpa membuang piring bersih.",
-				"Pilih meja tamu atau pengantar di spot pickup lalu ketik [color=#9e2508]saji[/color].",
-			],
-		},
-		{
-			"heading": "10. PELANGGAN DINE-IN",
-			"bullets": [
-				"Tamu datang tiap 20 detik, antre di luar, dengan batas kesabaran 100 detik sejak datang.",
-				"Setelah disaji, tamu makan 20 detik lalu meninggalkan meja kotor.",
-				"Pilih meja kotor → ketik [color=#9e2508]bersihkan[/color], lalu kosongkan tangan & cuci piring di Wastafel ([color=#9e2508]cuci[/color]).",
-			],
-		},
-		{
-			"heading": "11. PESANAN ONLINE",
-			"bullets": [
-				"Penawaran muncul berkala di Meja Online. Pilih Meja Online → ketik [color=#9e2508]terima[/color].",
-				"Pengantar punya batas 60 detik di 3 spot pickup (antre jalan tidak bisa disaji sebelum masuk spot).",
-				"Sajikan hidangan ([color=#9e2508]saji[/color]) ke pengantar di spot: bayar 70%, piring langsung kembali bersih!",
-			],
-		},
-		{
-			"heading": "12. PEGAWAI",
-			"bullets": [
-				"Kelola di tombol [color=#9e2508]Pegawai[/color] saat Persiapan (Koki, Kasir, Pelayan).",
-				"Koki mencuci piring wastafel, mengisi Penanak Nasi, menuntaskan bahan, & menggoreng bahan pesanan ke konter kanan.",
-				"Kasir memperpanjang kesabaran tamu (+12 dtk) & menerima online otomatis saat spot kosong.",
-				"Pelayan membersihkan meja kotor & mengantar hidangan jadi dari Meja Kerja/Konter ke meja tamu.",
-				"Pegawai tidak merakit hidangan jadi — kamu tetap penanggung jawab utama dapur!",
-			],
-		},
-		{
-			"heading": "13. GAJI DAN PENGELOLAAN UANG",
-			"bullets": [
-				"Biaya Rekrutmen dibayar langsung & [color=#9e2508]tidak kembali[/color] bila dipecat.",
-				"Gaji Harian pegawai + biaya listrik dipotong setiap akhir hari sebelum laporan hasil.",
-			],
-		},
-		{
-			"heading": "14. PRINSIP WARUNG: SEDIKIT LEBIH BAIK",
-			"bullets": [
-				"Warung yang ramai belum tentu untung besar! Terlalu banyak menu bikin stok & piring kewalahan.",
-				"Lebih dari 2 pegawai membuat dapur sesak, kerja melambat, & biaya koordinasi melonjak.",
-			],
-		},
-		{
-			"heading": "15. PERGANTIAN HARI DAN TARGET AKHIR",
-			"bullets": [
-				"Setiap malam stok Kotak Bahan hangus, piring & meja kembali rapi, lalu hasil bersih dihitung.",
-				"Pesanan gagal mengurangi jumlah tamu esok hari; hari sempurna tanpa gagal memulihkannya.",
-				"Capai minimal [color=#9e2508]Rp 700.000[/color] setelah biaya Hari ke-7 untuk menang!",
+				"Kumpulkan cukup uang sebelum hari ke-7 berakhir!",
 			],
 		},
 	]

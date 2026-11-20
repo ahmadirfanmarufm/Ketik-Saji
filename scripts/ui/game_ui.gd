@@ -129,8 +129,8 @@ const SLOT_DISPLAY_LABELS: Dictionary[StringName, String] = {
 	&"slot_table_06": "Slot Meja 6",
 }
 
-@export var ui_safe_rect: Rect2 = Rect2(0.0, 0.0, 136.0, 360.0)
-@export var world_visible_rect: Rect2 = Rect2(136.0, 0.0, 504.0, 360.0)
+@export var ui_safe_rect: Rect2 = Rect2(0.0, 0.0, 160.0, 360.0)
+@export var world_visible_rect: Rect2 = Rect2(160.0, 0.0, 480.0, 360.0)
 
 var _game_root: Node = null
 var _world_map: WorldMap = null
@@ -535,6 +535,8 @@ var _last_mouse_canvas_pos: Vector2 = Vector2(-1.0, -1.0)
 @onready var main_menu_cloud_tl: TextureRect = $UIRoot/MainMenuOverlay/MegaMendungTopLeft
 @onready var main_menu_cloud_br: TextureRect = $UIRoot/MainMenuOverlay/MegaMendungBottomRight
 @onready var main_menu_logo: TextureRect = $UIRoot/MainMenuOverlay/MainMenuCenter/MainMenuLogo
+@onready var active_menu_panel: PanelContainer = $UIRoot/ActiveMenuPanel
+@onready var active_menu_list: RichTextLabel = $UIRoot/ActiveMenuPanel/MenuList
 @onready var main_menu_play_button: Button = (
 	$UIRoot/MainMenuOverlay/MainMenuCenter/MainMenuButtons/MainMenuPlayButton
 )
@@ -646,6 +648,22 @@ func _ready() -> void:
 	_layout_fixture_shop_overlay()
 	_refresh_all()
 	call_deferred(&"_check_auto_onboarding_start")
+	KetikUiArt.apply_wood_board(active_menu_panel, true, 6.0, 6.0)
+
+	active_menu_panel.z_index = 12
+	active_menu_list.bbcode_enabled = true
+	active_menu_list.fit_content = false
+	active_menu_list.scroll_active = true
+	active_menu_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	active_menu_list.add_theme_font_override(
+		"normal_font", KetikUiArt.load_font()
+	)
+	active_menu_list.add_theme_font_size_override("normal_font_size", 10)
+	active_menu_list.add_theme_color_override(
+		"default_color", KetikUiArt.COLOR_WOOD_DARK
+	)
+
+	_refresh_active_menu()
 
 
 func _process(delta: float) -> void:
@@ -684,7 +702,45 @@ func _process(delta: float) -> void:
 		if _onboarding_enabled:
 			_refresh_visual_guidance()
 
+func _refresh_active_menu() -> void:
+	var show_menu := (
+		not is_main_menu_open()
+		and (_is_planning_phase() or _is_serving_phase())
+	)
+	active_menu_panel.visible = show_menu
 
+	if not show_menu or _run_controller == null:
+		return
+
+	var selected: Array = _run_controller.get_run_view().get(
+		"selected_recipe_ids", []
+	)
+
+	var lines: PackedStringArray = [
+		"[font_size=12]Menu Hari Ini[/font_size]",
+		"",
+	]
+
+	for recipe_id in selected:
+		lines.append(_get_recipe_display_name(StringName(recipe_id)))
+
+	if selected.is_empty():
+		lines.append("Belum ada menu")
+
+	active_menu_list.text = "\n".join(lines)
+
+	var vp_size := _get_viewport_logical_size()
+	var panel_width := 96.0
+	var panel_height := minf(
+		200.0,
+		48.0 + float(selected.size()) * 18.0
+	)
+
+	active_menu_panel.position = Vector2(
+		vp_size.x - panel_width - 4.0,
+		4.0
+	)
+	active_menu_panel.size = Vector2(panel_width, panel_height)
 ## Binds GameRoot, WorldMap, and controller references once per wiring pass,
 ## disconnecting any prior references so signals are never duplicated.
 func bind_context(
@@ -865,7 +921,7 @@ func _sync_settings_controls(feedback: String = "") -> void:
 	_update_percent_label(sfx_value_label, sfx_v)
 
 	if display_mode_button != null:
-		display_mode_button.text = "Layar Penuh" if fullscreen else "Berjendela"
+		display_mode_button.text = "Fullscreen" if fullscreen else "Windowed"
 	if resolution_option_button != null:
 		for i in range(resolution_option_button.item_count):
 			var item_res: Variant = resolution_option_button.get_item_metadata(i)
@@ -3106,6 +3162,7 @@ func _refresh_hud() -> void:
 	var target: int = 0
 	var potential_demand: int = 0
 	var planned_quota: int = 0
+	_refresh_active_menu()
 
 	if _run_controller != null and is_instance_valid(_run_controller):
 		var run_view: Dictionary = _run_controller.get_run_view()
@@ -3135,7 +3192,10 @@ func _refresh_hud() -> void:
 	var hud_w := clampf(ui_safe_rect.size.x, 0.0, maxf(0.0, vp_size.x - 200.0))
 	if menu_game_backdrop != null:
 		menu_game_backdrop.position = Vector2.ZERO
-		menu_game_backdrop.size = Vector2(roundf(vp_size.y * 511.0 / 1080.0), vp_size.y)
+		menu_game_backdrop.size = Vector2(
+	roundf(hud_w * 511.0 / 362.0),
+	vp_size.y
+)
 	_sync_left_hud_rect(vp_size, hud_w)
 	_layout_fixture_shop_overlay()
 
@@ -3209,7 +3269,7 @@ func _refresh_hud() -> void:
 	forecast_quota_label.text = "Target Tamu: %d" % planned_quota
 	forecast_quota_label.visible = false
 	if start_hint_label != null:
-		start_hint_label.text = "Ketik: buka"
+		start_hint_label.text = "buka"
 
 	service_box.visible = (
 		is_serving
@@ -4013,8 +4073,8 @@ func _apply_fallback_styles() -> void:
 		menu_game_backdrop.visible = true
 	if left_hud_region != null:
 		var trans := StyleBoxEmpty.new()
-		trans.content_margin_left = 8.0
-		trans.content_margin_right = 8.0
+		trans.content_margin_left = 20.0
+		trans.content_margin_right = 20.0
 		trans.content_margin_top = 6.0
 		trans.content_margin_bottom = 6.0
 		left_hud_region.add_theme_stylebox_override("panel", trans)
@@ -5631,9 +5691,9 @@ func _sync_left_hud_rect(vp_size: Vector2, hud_w: float) -> void:
 	var hud_col := left_hud_region.get_node_or_null("HUDColumn") as VBoxContainer
 	if hud_col != null:
 		hud_col.add_theme_constant_override("separation", 1 if compact else 3)
-		hud_col.position = Vector2(8.0, 4.0 if compact else 6.0)
+		hud_col.position = Vector2(20.0, 4.0 if compact else 6.0)
 		hud_col.size = Vector2(
-			maxf(1.0, hud_w - 16.0),
+			maxf(1.0, hud_w - 40.0),
 			maxf(1.0, vp_size.y - (8.0 if compact else 12.0))
 		)
 	var target_sec := left_hud_region.get_node_or_null("HUDColumn/TargetSection") as VBoxContainer
@@ -6003,7 +6063,7 @@ func open_reference(from_pause: bool = false) -> bool:
 		reference_body_richtext.text = NarrativeTutorialCatalog.get_cara_main_bbcode()
 	_populate_cara_main_sections()
 	if reference_restart_button != null:
-		reference_restart_button.visible = true
+		reference_restart_button.visible = false
 		reference_restart_button.disabled = opened_from_pause
 	tutorial_reference_overlay.visible = true
 	_layout_fixture_shop_overlay()
@@ -6149,10 +6209,12 @@ func open_opening_story() -> bool:
 		return false
 	if _shown_day_stories.get(1, false):
 		return false
+
 	_shown_day_stories[1] = true
-	return _open_story_payload(NarrativeTutorialCatalog.get_opening_story())
-
-
+	_on_story_finished(NarrativeTutorialCatalog.DAY_1_OPENING_ID)
+	return true
+	
+	
 func open_day_narrative(day_index: int) -> bool:
 	if not _onboarding_enabled:
 		return false
@@ -6345,29 +6407,11 @@ func _save_tutorial_persistence() -> void:
 
 
 func _start_tutorial() -> void:
-	if not _onboarding_enabled or _tutorial_completed or _tutorial_skipped:
-		_tutorial_active = false
-		return
-	var steps := NarrativeTutorialCatalog.get_tutorial_steps()
-	if steps.is_empty():
-		_tutorial_active = false
-		_tutorial_completed = true
-		return
-	_tutorial_started_day = _get_current_day_index()
-	_tutorial_step_index = clampi(_tutorial_step_index, 0, steps.size() - 1)
-	_tutorial_active = true
-	_evaluate_onboarding_progress()
-	_update_tutorial_banner_view()
-	_refresh_onboarding_visibility()
+	_tutorial_active = false
 
 
 func is_tutorial_active() -> bool:
-	return (
-		_onboarding_enabled
-		and _tutorial_active
-		and not _tutorial_completed
-		and not _tutorial_skipped
-	)
+	return false
 
 
 func is_tutorial_completed() -> bool:
@@ -6428,24 +6472,7 @@ func skip_tutorial() -> void:
 
 
 func restart_tutorial() -> void:
-	_onboarding_explicitly_set = true
-	_onboarding_enabled = true
-	_onboarding_boot_checked = true
-	_tutorial_replay_pending_from_menu = false
-	_reset_tutorial_runtime_state()
-	_tutorial_started_day = _get_current_day_index()
-	_tutorial_active = true
-	var audio := _get_audio_controller()
-	if audio != null and audio.has_method(&"reset_tutorial_state"):
-		audio.reset_tutorial_state(true)
-	if is_reference_open():
-		close_reference()
-	if is_story_open():
-		_close_story_internal()
-	_evaluate_onboarding_progress()
-	_update_tutorial_banner_view()
-	_refresh_onboarding_visibility()
-	_release_button_focus_if_any()
+	_tutorial_active = false
 
 
 func get_active_feature_tip_id() -> StringName:
@@ -6468,19 +6495,9 @@ func dismiss_feature_tip() -> void:
 	_release_button_focus_if_any()
 
 
-func _queue_feature_tip(tip_id: StringName) -> void:
-	if not _onboarding_enabled or tip_id == &"":
-		return
-	if bool(_shown_feature_tips.get(tip_id, false)):
-		return
-	if NarrativeTutorialCatalog.get_feature_discovery_tip(tip_id).is_empty():
-		return
-	if _active_feature_tip_id == &"":
-		_activate_feature_tip(tip_id)
-		_save_tutorial_persistence()
-		_refresh_onboarding_visibility()
-	elif _active_feature_tip_id != tip_id and not _pending_feature_tips.has(tip_id):
-		_pending_feature_tips.append(tip_id)
+func _queue_feature_tip(_tip_id: StringName) -> void:
+	_active_feature_tip_id = &""
+	_pending_feature_tips.clear()
 
 
 func _activate_feature_tip(tip_id: StringName) -> void:
@@ -7377,11 +7394,7 @@ func _refresh_onboarding_visibility() -> void:
 		)
 
 	if tutorial_help_button != null:
-		tutorial_help_button.visible = (
-			not in_menu and _onboarding_enabled and not paused and not story_open
-		)
-		tutorial_help_button.text = "? Cara Main"
-		KetikUiArt.apply_button_skin(tutorial_help_button, false, 6, 2)
+		tutorial_help_button.visible = false
 
 	var show_tut_banner := (
 		is_tutorial_active()

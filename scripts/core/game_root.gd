@@ -356,7 +356,7 @@ func _reset_run_world_and_controllers(start_new_run_now: bool = true) -> void:
 		var fresh_world := RESTAURANT_WORLD_SCENE.instantiate() as Node2D
 		if fresh_world != null:
 			fresh_world.name = "World"
-			fresh_world.position = Vector2(144, 36)
+			fresh_world.position = Vector2(168, 36)
 			add_child(fresh_world)
 			move_child(fresh_world, mini(old_idx, get_child_count() - 1))
 

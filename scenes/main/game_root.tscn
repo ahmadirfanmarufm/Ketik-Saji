@@ -5,7 +5,7 @@
 [ext_resource type="Script" uid="uid://bdgg0naj6ugc0" path="res://scripts/kitchen/kitchen_controller.gd" id="3_kitchen"]
 [ext_resource type="Script" uid="uid://ew07g3xeefsv" path="res://scripts/service/service_controller.gd" id="4_service"]
 [ext_resource type="Script" uid="uid://d1wtcyganh2n4" path="res://scripts/economy/run_controller.gd" id="5_run"]
-[ext_resource type="PackedScene" path="res://scenes/ui/game_ui.tscn" id="6_ui"]
+[ext_resource type="PackedScene" uid="uid://b5c1oui1re25d" path="res://scenes/ui/game_ui.tscn" id="6_ui"]
 [ext_resource type="Texture2D" uid="uid://cebm8jteebukm" path="res://assets/art/tiles/Warung-Tileset.png" id="7_tileset"]
 [ext_resource type="Texture2D" uid="uid://c8pq74d0tx7bl" path="res://assets/art/road/Sidewalk(trotoar).png" id="8_sidewalk"]
 [ext_resource type="Texture2D" uid="uid://bbr3n7o0uobgv" path="res://assets/art/road/Road.png" id="9_road"]
@@ -17,6 +17,7 @@ script = ExtResource("2_root")
 [node name="WorldBackdrop" type="Node2D" parent="." unique_id=901000100]
 z_index = -10
 texture_filter = 1
+position = Vector2(24, 0)
 
 [node name="OuterBackdrop" type="Polygon2D" parent="WorldBackdrop" unique_id=901000101]
 position = Vector2(-60, -8)
@@ -46,6 +47,14 @@ region_rect = Rect2(224, 32, 96, 64)
 [node name="RearKitchenWallRight" type="Sprite2D" parent="WorldBackdrop" unique_id=901000105]
 texture_filter = 1
 position = Vector2(336, -28)
+texture = ExtResource("7_tileset")
+centered = false
+region_enabled = true
+region_rect = Rect2(224, 32, 64, 64)
+
+[node name="RearKitchenWallRight" type="Sprite2D" parent="WorldBackdrop/RearKitchenWallRight" unique_id=1497943110]
+texture_filter = 1
+position = Vector2(32, 0)
 texture = ExtResource("7_tileset")
 centered = false
 region_enabled = true
@@ -136,7 +145,7 @@ centered = false
 flip_h = true
 
 [node name="World" parent="." unique_id=1520841377 instance=ExtResource("1_world")]
-position = Vector2(144, 36)
+position = Vector2(168, 36)
 
 [node name="KitchenController" type="Node" parent="." unique_id=701000101]
 script = ExtResource("3_kitchen")
@@ -151,3 +160,5 @@ script = ExtResource("5_run")
 script = ExtResource("10_audio")
 
 [node name="UI" parent="." unique_id=701000104 instance=ExtResource("6_ui")]
+ui_safe_rect = null
+world_visible_rect = null

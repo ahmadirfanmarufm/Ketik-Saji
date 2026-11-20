@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://bji5d72e66yjj"]
+[gd_scene format=4 uid="uid://bji5d72e66yjj"]
 
 [ext_resource type="PackedScene" uid="uid://ys8j281lg1mt" path="res://scenes/player/player.tscn" id="1_p7mg2"]
 [ext_resource type="Script" uid="uid://bs8gnj4dfnw7w" path="res://scripts/world/world_map.gd" id="1_worldmap"]
@@ -64,6 +64,7 @@ size = Vector2(19, 28)
 size = Vector2(10, 26)
 
 [node name="RestaurantWorld" type="Node2D" unique_id=678061488]
+z_index = -1
 texture_filter = 1
 script = ExtResource("1_worldmap")
 driver_texture = ExtResource("3_gojek")
@@ -71,11 +72,13 @@ employee_texture = ExtResource("4_pegawai")
 customer_textures = Array[Texture2D]([ExtResource("5_npc1"), ExtResource("6_npc2"), ExtResource("7_npc3"), ExtResource("8_npc4"), ExtResource("9_npc5"), ExtResource("10_npc6"), ExtResource("11_npc7")])
 
 [node name="FloorTiles" type="TileMapLayer" parent="." unique_id=1214754640]
+z_index = -1
 texture_filter = 1
-tile_map_data = PackedByteArray(0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 0, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 1, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 1, 0, 2, 0, 0, 0, 1, 0, 0, 0, 11, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 2, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 2, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 1, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 2, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 3, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 4, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 6, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 7, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 8, 0, 3, 0, 0, 0, 8, 0, 4, 0, 0, 0, 9, 0, 3, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 3, 0, 2, 0, 0, 0, 1, 0, 0, 0, 11, 0, 3, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 4, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 4, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 4, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 5, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 5, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 5, 0, 2, 0, 0, 0, 1, 0, 0, 0, 11, 0, 5, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 6, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 6, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 6, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 6, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 7, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 7, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 7, 0, 2, 0, 0, 0, 1, 0, 0, 0, 11, 0, 7, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 1, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 2, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 3, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 4, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 5, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 6, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 7, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 8, 0, 8, 0, 0, 0, 5, 0, 4, 0, 0, 0, 9, 0, 8, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0, 8, 0, 2, 0, 0, 0, 0, 0, 0, 0, 11, 0, 8, 0, 1, 0, 0, 0, 0, 0, 1, 0)
+tile_map_data = PackedByteArray("AAAAAAAAAAAIAAQAAAABAAAAAAAIAAQAAAACAAAAAAAIAAQAAAADAAAAAAAIAAQAAAAEAAAAAAAIAAQAAAAFAAAAAAAIAAQAAAAGAAAAAAAIAAQAAAAHAAAAAAAIAAQAAAAIAAAAAAADAAEAAAAJAAAAAQAAAAAAAAALAAAAAQAAAAAAAQAAAAEAAAAIAAQAAAABAAEAAAAIAAQAAAACAAEAAAAIAAQAAAADAAEAAAAIAAQAAAAEAAEAAAAIAAQAAAAFAAEAAAAIAAQAAAAGAAEAAAAIAAQAAAAHAAEAAAAIAAQAAAAIAAEAAAADAAEAAAAJAAEAAQAAAAAAAAAKAAEAAgAAAAEAAAALAAEAAQAAAAAAAQAAAAIAAAAIAAQAAAABAAIAAAAIAAQAAAACAAIAAAAIAAQAAAADAAIAAAAIAAQAAAAEAAIAAAAIAAQAAAAFAAIAAAAIAAQAAAAGAAIAAAAIAAQAAAAHAAIAAAAIAAQAAAAIAAIAAAADAAEAAAAJAAIAAQAAAAAAAAAKAAIAAgAAAAAAAAALAAIAAQAAAAAAAQAAAAMAAAAIAAQAAAABAAMAAAAIAAQAAAACAAMAAAAIAAQAAAADAAMAAAAIAAQAAAAEAAMAAAAIAAQAAAAFAAMAAAAIAAQAAAAGAAMAAAAIAAQAAAAHAAMAAAAIAAQAAAAIAAMAAAADAAEAAAAJAAMAAQAAAAAAAAAKAAMAAgAAAAEAAAALAAMAAQAAAAAAAQAAAAQAAAAFAAQAAAABAAQAAAAFAAQAAAACAAQAAAAFAAQAAAADAAQAAAAFAAQAAAAEAAQAAAAFAAQAAAAFAAQAAAAFAAQAAAAGAAQAAAAFAAQAAAAHAAQAAAAFAAQAAAAIAAQAAAADAAIAAAAJAAQAAQAAAAAAAAAKAAQAAgAAAAAAAAALAAQAAQAAAAAAAQAAAAUAAAAFAAQAAAABAAUAAAAFAAQAAAACAAUAAAAFAAQAAAADAAUAAAAFAAQAAAAEAAUAAAAFAAQAAAAFAAUAAAAFAAQAAAAGAAUAAAAFAAQAAAAHAAUAAAAFAAQAAAAJAAUAAQAAAAAAAAAKAAUAAgAAAAEAAAALAAUAAQAAAAAAAQAAAAYAAAAFAAQAAAABAAYAAAAFAAQAAAACAAYAAAAFAAQAAAADAAYAAAAFAAQAAAAEAAYAAAAFAAQAAAAFAAYAAAAFAAQAAAAGAAYAAAAFAAQAAAAHAAYAAAAFAAQAAAAIAAYAAAAFAAQAAAAJAAYAAQAAAAAAAAAKAAYAAgAAAAAAAAALAAYAAQAAAAAAAQAAAAcAAAAFAAQAAAABAAcAAAAFAAQAAAACAAcAAAAFAAQAAAADAAcAAAAFAAQAAAAEAAcAAAAFAAQAAAAFAAcAAAAFAAQAAAAGAAcAAAAFAAQAAAAHAAcAAAAFAAQAAAAIAAcAAAAFAAQAAAAJAAcAAQAAAAAAAAAKAAcAAgAAAAEAAAALAAcAAQAAAAAAAQAAAAgAAAAFAAQAAAABAAgAAAAFAAQAAAACAAgAAAAFAAQAAAADAAgAAAAFAAQAAAAEAAgAAAAFAAQAAAAFAAgAAAAFAAQAAAAGAAgAAAAFAAQAAAAHAAgAAAAFAAQAAAAJAAgAAQAAAAAAAAAKAAgAAgAAAAAAAAALAAgAAQAAAAAAAQAAAAkAAAAFAAQAAAABAAkAAAAFAAQAAAACAAkAAAAFAAQAAAADAAkAAAAFAAQAAAAEAAkAAAAFAAQAAAAFAAkAAAAFAAQAAAAGAAkAAAAFAAQAAAAHAAkAAAAFAAQAAAAIAAkAAAADAAEAAAAIAAoAAAACAAIAAAAHAAoAAAABAAAAAAAGAAoAAAABAAAAAAAFAAoAAAABAAAAAAAEAAoAAAABAAAAAAADAAoAAAABAAAAAAACAAoAAAABAAAAAAABAAoAAAABAAAAAAAAAAoAAAABAAAAAAD//wkAAAACAAEAAAD//wgAAAACAAEAAAD//wcAAAACAAEAAAD//wYAAAACAAEAAAD//wUAAAACAAEAAAD//wQAAAACAAEAAAD//wMAAAACAAEAAAD//wIAAAACAAEAAAD//wEAAAACAAEAAAD//wAAAAACAAEAAAD/////AAACAAEAAAD+/wkAAAABAAEAAAD9/wkAAAABAAEAAAD9/wgAAAABAAEAAAD+/wgAAAABAAEAAAD8/wgAAAABAAEAAAD+/wcAAAABAAEAAAD9/wcAAAABAAEAAAD8/wYAAAABAAEAAAD9/wYAAAABAAEAAAD+/wYAAAABAAEAAAD8/wkAAAABAAEAAAD8/wcAAAABAAEAAAD8/wUAAAABAAEAAAD8/wQAAAABAAEAAAD8/wMAAAABAAEAAAD8/wIAAAABAAEAAAD8/wEAAAABAAEAAAD8/wAAAAABAAEAAAD9/wAAAAABAAEAAAD9////AAABAAEAAAD+////AAABAAEAAAD8////AAABAAEAAAD+/wAAAAABAAEAAAD+/wEAAAABAAEAAAD+/wIAAAABAAEAAAD9/wIAAAABAAEAAAD9/wMAAAABAAEAAAD9/wQAAAABAAEAAAD9/wUAAAABAAEAAAD9/wEAAAABAAEAAAD+/wMAAAABAAEAAAD+/wQAAAABAAEAAAD+/wUAAAABAAEAAAAMAAAAAAAAAAEAAAAMAAEAAAAAAAEAAAAMAAMAAAAAAAEAAAAMAAQAAAAAAAEAAAAMAAUAAAAAAAEAAAAMAAYAAAAAAAEAAAAMAAcAAAAAAAEAAAAMAAgAAAAAAAEAAAAMAAkAAAAAAAEAAAANAAkAAAABAAEAAAAOAAkAAAABAAEAAAAPAAkAAAABAAEAAAAPAAgAAAABAAEAAAAOAAgAAAABAAEAAAANAAgAAAABAAEAAAANAAcAAAABAAEAAAAOAAcAAAABAAEAAAAPAAcAAAABAAEAAAAPAAYAAAABAAEAAAAOAAYAAAABAAEAAAANAAYAAAABAAEAAAANAAUAAAABAAEAAAAOAAUAAAABAAEAAAAPAAUAAAABAAEAAAAPAAQAAAABAAEAAAAOAAQAAAABAAEAAAANAAQAAAABAAEAAAANAAMAAAABAAEAAAAOAAMAAAABAAEAAAAPAAMAAAABAAEAAAAPAAIAAAABAAEAAAAOAAIAAAABAAEAAAANAAIAAAABAAEAAAANAAEAAAABAAEAAAAOAAEAAAABAAEAAAAPAAEAAAABAAEAAAAPAAAAAAABAAEAAAAOAAAAAAABAAEAAAANAAAAAAABAAEAAAAIAAgAAAADAAAAAAAIAAUAAAAFAAQAAAAJAP//AQAAAAAAAAALAP//AQAAAAAAAQAKAAAAAgAAAAAAAAAKAP//AgAAAAEAAAAMAAIAAAAAAAEAAAAMAP//AAAAAAEAAAANAP//AAABAAEAAAAOAP//AAABAAEAAAAPAP//AAABAAEAAAAKAAkAAgAAAAEAAAAJAAkAAQAAAAAAAAALAAkAAQAAAAAAAQA=")
 tile_set = SubResource("TileSet_warung")
 
 [node name="DineInWaitingAnchors" type="Node2D" parent="." unique_id=34387969]
+z_index = -1
 
 [node name="WaitingAnchor01" type="Marker2D" parent="DineInWaitingAnchors" unique_id=401000101]
 position = Vector2(304, 80)
@@ -98,6 +101,7 @@ z_index = 1
 position = Vector2(208, 112)
 
 [node name="KitchenStations" type="Node2D" parent="." unique_id=1277309707]
+z_index = -1
 
 [node name="StorageBox" type="Area2D" parent="KitchenStations" unique_id=1327328344]
 position = Vector2(112, 16)
@@ -186,6 +190,7 @@ region_rect = Rect2(608, 96, 32, 32)
 shape = SubResource("RectangleShape2D_station")
 
 [node name="KitchenWorkTables" type="Node2D" parent="." unique_id=140000100]
+z_index = -1
 
 [node name="WorkTable" type="Node2D" parent="KitchenWorkTables" unique_id=2084572048]
 position = Vector2(112, 80)
@@ -212,8 +217,8 @@ metadata/world_id = &"work_table_chop"
 metadata/parent_world_id = &"work_table"
 
 [node name="BoardVisual" type="Polygon2D" parent="KitchenWorkTables/WorkTable/ChoppingTarget" unique_id=501000206]
+color = Color(0.84, 0.71, 0.5, 1)
 polygon = PackedVector2Array(-4, -7, 4, -7, 4, 7, -4, 7)
-color = Color(0.84, 0.71, 0.50, 1)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="KitchenWorkTables/WorkTable/ChoppingTarget" unique_id=501000204]
 shape = SubResource("RectangleShape2D_work_chop")
@@ -267,16 +272,15 @@ metadata/footprint_size = Vector2i(1, 1)
 shape = SubResource("RectangleShape2D_station")
 
 [node name="DiningTables" type="Node2D" parent="." unique_id=1975887348]
+z_index = -1
 
 [node name="DiningTable01" parent="DiningTables" unique_id=1842323601 instance=ExtResource("12_dining_table")]
 position = Vector2(80, 240)
 metadata/world_id = &"dining_table_01"
-metadata/footprint_size = Vector2i(1, 1)
 
 [node name="DiningTable02" parent="DiningTables" unique_id=743940907 instance=ExtResource("12_dining_table")]
 position = Vector2(144, 240)
 metadata/world_id = &"dining_table_02"
-metadata/footprint_size = Vector2i(1, 1)
 
 [node name="OnlineStation" type="Area2D" parent="." unique_id=150000100]
 position = Vector2(208, 144)
@@ -294,6 +298,7 @@ region_rect = Rect2(480, 128, 32, 64)
 shape = SubResource("RectangleShape2D_station")
 
 [node name="DriverPickupSpots" type="Node2D" parent="." unique_id=1312146385]
+z_index = -1
 
 [node name="PickupSpot01" type="Marker2D" parent="DriverPickupSpots" unique_id=2139004358]
 position = Vector2(240, 176)
@@ -308,14 +313,17 @@ position = Vector2(240, 240)
 metadata/world_id = &"pickup_spot_03"
 
 [node name="DriverOverflowAnchors" type="Node2D" parent="." unique_id=160000100]
+z_index = -1
 
 [node name="DriverOverflow" type="Marker2D" parent="DriverOverflowAnchors" unique_id=1243384309]
 position = Vector2(368, 240)
 metadata/world_id = &"driver_overflow"
 
 [node name="DriverObjects" type="Node2D" parent="." unique_id=170000100]
+z_index = -1
 
 [node name="PlacementSlots" type="Node2D" parent="." unique_id=188077336]
+z_index = -1
 
 [node name="SlotUtility01" type="Marker2D" parent="PlacementSlots" unique_id=601000101]
 position = Vector2(176, 16)
@@ -395,59 +403,90 @@ metadata/allowed_fixture_kinds = PackedInt32Array(6)
 metadata/footprint_size = Vector2i(1, 1)
 
 [node name="Decorations" type="Node2D" parent="." unique_id=144426961]
+z_index = -1
 
 [node name="LongCounterLeft" type="Sprite2D" parent="Decorations" unique_id=801000101]
-position = Vector2(48, 144)
 texture_filter = 1
+position = Vector2(48, 144)
 texture = ExtResource("2_tileset")
 region_enabled = true
 region_rect = Rect2(416, 32, 96, 32)
 
 [node name="LongCounterRight" type="Sprite2D" parent="Decorations" unique_id=801000102]
-position = Vector2(144, 144)
 texture_filter = 1
+position = Vector2(144, 144)
 texture = ExtResource("2_tileset")
 region_enabled = true
 region_rect = Rect2(416, 32, 96, 32)
 
 [node name="InteriorWall00" type="Sprite2D" parent="Decorations" unique_id=801000201]
-position = Vector2(272, 16)
+z_index = -1
 texture_filter = 1
+position = Vector2(16, -16)
 texture = ExtResource("2_tileset")
 region_enabled = true
 region_rect = Rect2(160, 64, 32, 32)
 
 [node name="InteriorWall01" type="Sprite2D" parent="Decorations" unique_id=801000202]
-position = Vector2(272, 48)
+z_index = -1
 texture_filter = 1
+position = Vector2(48, -16)
 texture = ExtResource("2_tileset")
 region_enabled = true
 region_rect = Rect2(160, 64, 32, 32)
 
 [node name="InteriorWall02" type="Sprite2D" parent="Decorations" unique_id=801000203]
-position = Vector2(272, 80)
+z_index = -1
 texture_filter = 1
+position = Vector2(144, -16)
 texture = ExtResource("2_tileset")
 region_enabled = true
 region_rect = Rect2(160, 64, 32, 32)
 
 [node name="InteriorWall03" type="Sprite2D" parent="Decorations" unique_id=801000204]
-position = Vector2(272, 112)
+z_index = -1
 texture_filter = 1
+position = Vector2(112, -16)
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(160, 64, 32, 32)
+
+[node name="InteriorWall02" type="Sprite2D" parent="Decorations/InteriorWall03" unique_id=29719246]
+z_index = -1
+texture_filter = 1
+position = Vector2(128, 0)
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(160, 64, 32, 32)
+
+[node name="InteriorWall03" type="Sprite2D" parent="Decorations/InteriorWall03" unique_id=770807985]
+z_index = -1
+texture_filter = 1
+position = Vector2(96, 0)
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(160, 64, 32, 32)
+
+[node name="InteriorWall08" type="Sprite2D" parent="Decorations/InteriorWall03" unique_id=869110905]
+z_index = -1
+texture_filter = 1
+position = Vector2(160, 0)
 texture = ExtResource("2_tileset")
 region_enabled = true
 region_rect = Rect2(160, 64, 32, 32)
 
 [node name="InteriorWall04" type="Sprite2D" parent="Decorations" unique_id=801000205]
-position = Vector2(272, 144)
+z_index = -1
 texture_filter = 1
+position = Vector2(80, -16)
 texture = ExtResource("2_tileset")
 region_enabled = true
 region_rect = Rect2(160, 64, 32, 32)
 
 [node name="InteriorWall08" type="Sprite2D" parent="Decorations" unique_id=801000206]
-position = Vector2(272, 272)
+z_index = -1
 texture_filter = 1
+position = Vector2(176, -16)
 texture = ExtResource("2_tileset")
 region_enabled = true
 region_rect = Rect2(160, 64, 32, 32)
