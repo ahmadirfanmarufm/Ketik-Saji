@@ -103,10 +103,10 @@ func _test_starter_fixtures_and_ui_information() -> void:
 	)
 
 	_check(
-		"m4c_fixture_shop_button_retired_under_slot_first_flow",
+		"m4c_fixture_shop_button_enabled_in_planning",
 		ui.fixture_shop_button != null
-		and not ui.fixture_shop_button.visible
-		and ui.fixture_shop_button.disabled
+		and ui.fixture_shop_button.visible
+		and not ui.fixture_shop_button.disabled
 	)
 	_check("m4c_fixture_shop_opens_on_slot", ui.open_fixture_shop(&"slot_utility_01"))
 	_check("m4c_fixture_shop_blocks_modal", ui.is_modal_blocking())
@@ -326,8 +326,8 @@ func _test_additional_stove_placement_and_cooking() -> void:
 		ui.get_target_display_title(&"stove_01") == "Kompor"
 	)
 
-	# Buy telur & ayam in PLANNING (Rp3,000 + Rp5,000 = Rp8,000)
-	var basket_items: Dictionary[StringName, int] = {&"telur": 2, &"ayam": 1}
+	# Buy telur & beras in PLANNING on Day 1
+	var basket_items: Dictionary[StringName, int] = {&"telur": 2, &"beras": 1}
 	var basket_ok: bool = run.request_ingredient_basket_purchase(
 		basket_items,
 		&"storage_box"

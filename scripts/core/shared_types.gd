@@ -67,3 +67,17 @@ enum DayOutcome {
 	WON,
 	LOST,
 }
+
+enum EmployeeRole {
+	COOK,
+	CASHIER,
+	WAITER,
+}
+
+enum EmployeeAnimState {
+	IDLE,
+	WALK,
+	WORK,
+	CLEAN,
+	SERVE,
+}

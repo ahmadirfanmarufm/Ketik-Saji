@@ -24,6 +24,9 @@ const EXPECTED_SETTLEMENT_KEYS: Array[String] = [
 	"order_revenue_online",
 	"refund_total",
 	"electricity_charge",
+	"employee_hire_total",
+	"employee_salary_total",
+	"active_employee_count",
 	"end_cash",
 	"completed_dinein_count",
 	"completed_online_count",
@@ -83,7 +86,7 @@ func _test_scene_binding_and_starter_kit() -> void:
 
 	_check(
 		"no duplicate World nodes on startup",
-		world.registry.get_ids().size() == 31
+		world.registry.get_ids().size() == 37
 		and world.kitchen_stations.get_child_count() == 6
 		and world.dining_tables.get_child_count() == 2
 	)
@@ -111,7 +114,7 @@ func _test_scene_binding_and_starter_kit() -> void:
 	run.start_new_run()
 	_check(
 		"repeated start_new_run does not duplicate nodes or plates",
-		world.registry.get_ids().size() == 31 and kitchen.get_plate_count() == 4
+		world.registry.get_ids().size() == 37 and kitchen.get_plate_count() == 4
 	)
 
 	game_root.free()
@@ -307,7 +310,7 @@ func _test_run_plan_and_once_only_transactions() -> void:
 	# it is canceled and refunded once on close, and starter rice_cooker charges Rp2000 power.
 	_check(
 		"in-service ingredient purchase reserves and debits 6000",
-		run.request_ingredient_purchase(&"ayam", 1, &"storage_box")
+		run.request_ingredient_purchase(&"telur", 2, &"storage_box")
 		and int(run.get_run_view().get("cash", 0)) == 104000
 		and kitchen.get_pending_delivery_views().size() == 1
 	)
@@ -559,8 +562,8 @@ func _test_same_tick_delivery_precedes_close() -> void:
 
 	_check("start service for same-tick tie-break test", game_root.start_service_requested())
 	_check(
-		"schedule 100s service delivery of 1 ayam (6000)",
-		run.request_ingredient_purchase(&"ayam", 1, &"storage_box")
+		"schedule 100s service delivery of 2 telur (6000)",
+		run.request_ingredient_purchase(&"telur", 2, &"storage_box")
 	)
 
 	# Drain service on the exact 100.0s tick when delivery becomes due:

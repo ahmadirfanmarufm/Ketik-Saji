@@ -159,7 +159,7 @@ func _test_ui_structure_and_wiring() -> void:
 	_check(
 		"initial PlanningBox visible with forecast, Edit Menu, buka hint, and stub buttons",
 		ui.planning_box.visible
-		and ui.potential_demand_label.text == "Potensi Tamu: 5"
+		and ui.potential_demand_label.text == "Potensi Tamu: 4"
 		and ui.forecast_quota_label.text == "Target Tamu: 4"
 		and ui.edit_menu_button.visible
 		and ui.start_hint_label.text == "Ketik: buka"
@@ -259,8 +259,8 @@ func _test_phase_and_hud_transitions() -> void:
 		and ui.continue_button.visible
 		and not ui.continue_button.disabled
 		and not ui.extra_mode_button.visible
-		and ui.result_title_label.text == "Hasil Hari 1"
-		and ui.settlement_summary_label.text.contains("Kas Akhir: Rp 98k")
+		and ui.result_title_label.text == "Hari 1 selesai"
+		and ui.settlement_summary_label.text.contains("Kas akhir: Rp 98k")
 	)
 	ui.continue_button.grab_focus()
 	_check("ContinueButton grabs keyboard focus in RESULTS", ui.continue_button.has_focus())
@@ -294,10 +294,10 @@ func _test_phase_and_hud_transitions() -> void:
 	game_root.request_close_if_drained()
 
 	_check(
-		"Day 7 WON shows Berhasil! and ExtraModeButton",
+		"Day 7 WON shows Target tercapai! and ExtraModeButton",
 		game_root.get_phase() == SharedTypes.Phase.FINISHED
 		and ui.day_result_side_panel.visible
-		and ui.result_title_label.text.contains("Berhasil!")
+		and ui.result_title_label.text == "Target tercapai!"
 		and not ui.continue_button.visible
 		and ui.extra_mode_button.visible
 	)
@@ -412,14 +412,14 @@ func _test_mouse_input_and_world_offset() -> void:
 	var expected_floor_cell := underlying_floor_cell
 
 	# 6. Clicks outside the World grid (e.g. left margin (140, 100) or bottom-right (600, 340))
-	# or on passive long counter (0, 4) -> (160, 180) and wall (8, 0) -> (416, 52)
+	# or on passive wall (8, 0) -> (416, 52) and (9, 0) -> (448, 52)
 	# are safely rejected without moving player or selecting a target.
 	_send_left_click(ui, Vector2(140, 100))
 	_send_left_click(ui, Vector2(600, 340))
-	_send_left_click(ui, Vector2(160, 180))
+	_send_left_click(ui, Vector2(448, 52))
 	_send_left_click(ui, Vector2(416, 52))
 	_check(
-		"clicks outside World grid or on passive counter/wall rejected without moving player",
+		"clicks outside World grid or on passive wall rejected without moving player",
 		kitchen.get_player_tile() == expected_floor_cell
 		and kitchen.get_selected_target_id() == &""
 	)
@@ -652,7 +652,9 @@ func _test_dialogue_display_and_clamping() -> void:
 	await physics_frame
 
 	var run := game_root.get_run_controller() as RunController
+	var service := game_root.get_service_controller() as ServiceController
 	var ui := game_root.get_node("UI") as GameUI
+	_advance_to_day(game_root, service, 5)
 	_check("stock ayam in storage_box", run.request_ingredient_purchase(&"ayam", 1, &"storage_box"))
 	_check("stock sapi in storage_box", run.request_ingredient_purchase(&"sapi", 1, &"storage_box"))
 	_check("stock sayur in storage_box", run.request_ingredient_purchase(&"sayur", 1, &"storage_box"))
@@ -759,8 +761,10 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 
 	var world := game_root.get_node("World") as WorldMap
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
+	_advance_to_day(game_root, service, 5)
 
 	# In PLANNING, clicking plate_rack selects it without taking a plate.
 	_send_left_click(ui, Vector2(288, 52))
@@ -1011,8 +1015,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and (assembled["parts"] as Array).size() == 2
 		and assembled.get("matched_recipe_id", &"") == &"nasi_telor"
 		and ui.context_message_label.text == "Hidangan siap disajikan!"
-		and staged_vis.get_node_or_null("PartSprite_0") != null
-		and staged_vis.get_node_or_null("PartSprite_1") != null
+		and staged_vis.get_node_or_null("DishSprite") != null
 	)
 
 	# Pick up completed nasi_telor into hand.
@@ -1026,8 +1029,7 @@ func _test_m1_kitchen_gameplay_and_visuals() -> void:
 		and final_dish.get("matched_recipe_id", &"") == &"nasi_telor"
 		and (final_dish.get("parts", []) as Array).size() == 2
 		and held_vis.visible
-		and held_vis.get_node_or_null("PlateIndicator") != null
-		and held_vis.get_node_or_null("PartSprite_1") != null
+		and held_vis.get_node_or_null("DishSprite") != null
 	)
 
 	game_root.free()
@@ -1043,8 +1045,10 @@ func _test_m1_edge_cases_and_readonly() -> void:
 
 	var world := game_root.get_node("World") as WorldMap
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
+	_advance_to_day(game_root, service, 5)
 
 	_check("stock storage_box", run.request_ingredient_purchase(&"beras", 2, &"storage_box"))
 	_check("stock telur", run.request_ingredient_purchase(&"telur", 2, &"storage_box"))
@@ -1234,8 +1238,10 @@ func _test_p5a_beef_held_and_cooked_visuals() -> void:
 
 	var world := game_root.get_node("World") as WorldMap
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
+	_advance_to_day(game_root, service, 5)
 
 	_check("stock sapi in storage_box", run.request_ingredient_purchase(&"sapi", 1, &"storage_box"))
 	game_root.start_service_requested()
@@ -1310,6 +1316,14 @@ func _force_empty_service(service: ServiceController) -> void:
 		table["order_id_or_empty"] = &""
 
 
+func _advance_to_day(game_root: GameRoot, service: ServiceController, target_day: int) -> void:
+	while game_root.get_day_index() < target_day:
+		game_root.start_service_requested()
+		_force_empty_service(service)
+		game_root.request_close_if_drained()
+		game_root.request_continue_from_results()
+
+
 func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
 	var game_root := packed.instantiate() as GameRoot
@@ -1324,6 +1338,7 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 	var ui := game_root.get_node("UI") as GameUI
 	var player_vis := world.player as PlayerVisual
 
+	_advance_to_day(game_root, service, 5)
 	run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
 	_type_word(ui, "buka")
 
@@ -1418,9 +1433,8 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 		and vp_rect.encloses(cont_rect)
 		and ui.result_title_label.is_visible_in_tree()
 		and ui.settlement_summary_label.is_visible_in_tree()
-		and ui.settlement_summary_label.text.contains("Kas Awal:")
-		and ui.settlement_summary_label.text.contains("Potensi Besok:")
-		and ui.settlement_summary_label.text.contains("Perkiraan Besok:")
+		and ui.settlement_summary_label.text.contains("Kas awal:")
+		and ui.settlement_summary_label.text.contains("Perkiraan besok:")
 		and ui.continue_button.is_visible_in_tree()
 		and not ui.continue_button.disabled
 		and not cont_rect.intersects(title_rect)
@@ -1430,9 +1444,9 @@ func _test_worktable_hitboxes_player_movement_and_results_layout() -> void:
 	_send_left_click(ui, cont_rect.get_center())
 	await process_frame
 	_check(
-		"clicking visible ContinueButton advances cleanly to Day 2 PLANNING",
+		"clicking visible ContinueButton advances cleanly to Day 6 PLANNING",
 		game_root.get_phase() == SharedTypes.Phase.PLANNING
-		and game_root.get_day_index() == 2
+		and game_root.get_day_index() == 6
 		and not ui.day_result_side_panel.visible
 	)
 

@@ -19,6 +19,7 @@ func _check(label: String, condition: bool) -> void:
 
 func _init() -> void:
 	await _test_money_formatting_and_hud_fit()
+	await _test_refined_sidebar_hierarchy_and_dedup()
 	await _test_pause_freezes_timers_and_inputs()
 	await _test_escape_priority_and_modal_restoration()
 	await _test_pause_exit_and_phase_guards()
@@ -180,8 +181,8 @@ func _test_money_formatting_and_hud_fit() -> void:
 
 	# Verify integer cash accounting stays exact even when UI formats as Rp Xk / Rp X.Yk.
 	_check(
-		"integer cash remains exact when purchasing 1 sayur (100000 -> 98000 = Rp 98k)",
-		run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
+		"integer cash remains exact when purchasing 1 beras (100000 -> 98000 = Rp 98k)",
+		run.request_ingredient_purchase(&"beras", 1, &"storage_box")
 		and int(run.get_run_view()["cash"]) == 98000
 		and ui.cash_label.text == "Kas: Rp 98k"
 	)
@@ -224,7 +225,7 @@ func _test_pause_freezes_timers_and_inputs() -> void:
 	_type_word(ui, "beli")
 	await process_frame
 	_check("IngredientShop open", ui.is_ingredient_shop_open())
-	var shop_btn_ok := ui.adjust_shop_quantity(&"sayur", 1)
+	var shop_btn_ok := ui.adjust_shop_quantity(&"telur", 1)
 	var elapsed_before_shop := game_root.get_service_elapsed()
 	game_root._process(5.0)
 	_check(
@@ -484,8 +485,28 @@ func _test_pause_exit_and_phase_guards() -> void:
 	ui.pause_exit_button.pressed.emit()
 	await process_frame
 	_check(
-		"PauseExitButton triggers exit_game_requested and cleans up pause state",
+		"PauseExitButton opens ExitConfirmOverlay without immediately quitting",
+		ui.is_exit_confirm_open()
+		and not ui.is_pause_open()
+		and int(exit_state["count"]) == 0
+	)
+	ui.exit_confirm_cancel_button.pressed.emit()
+	await process_frame
+	_check(
+		"Canceling ExitConfirmOverlay returns to Pause without quitting",
+		not ui.is_exit_confirm_open()
+		and ui.is_pause_open()
+		and game_root.is_paused()
+		and int(exit_state["count"]) == 0
+	)
+	ui.pause_exit_button.pressed.emit()
+	await process_frame
+	ui.exit_confirm_quit_button.pressed.emit()
+	await process_frame
+	_check(
+		"Confirming ExitConfirmOverlay triggers exit_game_requested and cleans up pause state",
 		int(exit_state["count"]) == 1
+		and not ui.is_exit_confirm_open()
 		and not ui.is_pause_open()
 		and not game_root.is_paused()
 		and paused == false
@@ -513,6 +534,110 @@ func _test_pause_exit_and_phase_guards() -> void:
 	# Escape in RESULTS does NOT open Pause.
 	_send_key(ui, 0, KEY_ESCAPE)
 	_check("Escape in RESULTS does not open Pause", not ui.is_pause_open() and not game_root.is_paused())
+
+	game_root.free()
+	await process_frame
+
+
+func _test_refined_sidebar_hierarchy_and_dedup() -> void:
+	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
+	var game_root := packed.instantiate() as GameRoot
+	root.add_child(game_root)
+	await process_frame
+	await physics_frame
+
+	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var ui := game_root.get_node("UI") as GameUI
+
+	for sz: Vector2i in [
+		Vector2i(480, 270),
+		Vector2i(640, 360),
+		Vector2i(1280, 720),
+		Vector2i(1600, 900),
+	]:
+		root.content_scale_size = sz
+		root.size = sz
+		ui._on_viewport_size_changed()
+		await process_frame
+		await process_frame
+		var hud_rect := ui.left_hud_region.get_global_rect()
+		var day_r := ui.day_card.get_global_rect()
+		var ph_r := ui.phase_label.get_global_rect()
+		var cash_r := ui.cash_panel.get_global_rect()
+		var target_r := ui.target_guest_panel.get_global_rect()
+		var gl_r := ui.goal_label.get_global_rect()
+		var typing_r := ui.hud_typing_panel.get_global_rect()
+		var edit_r := ui.edit_menu_button.get_global_rect()
+		var fx_r := ui.fixture_shop_button.get_global_rect()
+		var menu_r := ui.menu_stub_button.get_global_rect()
+		var exit_r := ui.exit_stub_button.get_global_rect()
+		var pause_r := ui.pause_button.get_global_rect()
+		_check(
+			"refined sidebar hierarchy & reference layout clean at %dx%d" % [sz.x, sz.y],
+			ph_r.size.y > 8.0
+			and gl_r.size.y > 8.0
+			and ui.day_value_label.text == "1/7"
+			and ui.cash_panel.visible
+			and ui.cash_coin_icon.texture != null
+			and ui.target_guest_value_label.text == "4"
+			and ui.target_guest_sub_label.text == "dari 4"
+			and not ui.forecast_quota_label.visible
+			and not ui.potential_demand_label.visible
+			and ui.hud_typing_section.visible
+			and ui.start_hint_label.visible
+			and not ui.hud_typing_label.visible
+			and ui.edit_menu_button.visible
+			and ui.fixture_shop_button.visible
+			and not ui.fixture_shop_button.disabled
+			and edit_r.size.x > menu_r.size.x * 2.0
+			and absf(menu_r.size.x - (22.0 if sz.y < 320 else 26.0)) <= 2.0
+			and absf(exit_r.size.x - (22.0 if sz.y < 320 else 26.0)) <= 2.0
+			and menu_r.end.x + 6.0 <= exit_r.position.x
+			and day_r.end.y <= cash_r.position.y + 0.5
+			and cash_r.end.y <= target_r.position.y + 0.5
+			and target_r.end.y <= typing_r.position.y + 0.5
+			and typing_r.end.y <= edit_r.position.y + 0.5
+			and edit_r.end.y <= fx_r.position.y + 0.5
+			and fx_r.end.y <= menu_r.position.y + 0.5
+			and menu_r.end.y <= pause_r.position.y + 0.5
+			and hud_rect.encloses(day_r)
+			and hud_rect.encloses(cash_r)
+			and hud_rect.encloses(target_r)
+			and hud_rect.encloses(typing_r)
+			and hud_rect.encloses(edit_r)
+			and hud_rect.encloses(fx_r)
+			and hud_rect.encloses(pause_r)
+			and _hud_children_fit_inside(hud_rect, ui.left_hud_region)
+		)
+
+	root.content_scale_size = Vector2i(640, 360)
+	root.size = Vector2i(640, 360)
+	ui._on_viewport_size_changed()
+	await process_frame
+
+	# Selecting a station in PLANNING or entering SERVING switches the Ketik: panel to active command text.
+	kitchen.on_interactable_clicked(&"storage_box")
+	await process_frame
+	_check(
+		"selecting storage_box shows active command options inside HudTypingPanel",
+		ui.hud_typing_panel.visible and ui.hud_typing_label.visible and not ui.start_hint_label.visible
+	)
+	kitchen.clear_selected_target()
+	await process_frame
+	_check(
+		"clearing selection in PLANNING restores StartHintLabel inside Ketik panel cleanly",
+		ui.hud_typing_panel.visible and ui.start_hint_label.visible and not ui.hud_typing_label.visible
+	)
+	_check("entering SERVING shows HudTypingLabel command mirror and live Target tamu progress", game_root.start_service_requested())
+	await process_frame
+	_check(
+		"SERVING keeps Ketik panel active & shows 0 dari 4 Target tamu",
+		ui.hud_typing_panel.visible
+		and ui.hud_typing_label.visible
+		and not ui.start_hint_label.visible
+		and ui.target_guest_value_label.text == "0"
+		and ui.target_guest_sub_label.text == "dari 4"
+	)
 
 	game_root.free()
 	await process_frame

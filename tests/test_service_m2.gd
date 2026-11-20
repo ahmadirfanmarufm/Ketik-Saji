@@ -98,6 +98,18 @@ func _cook_plated_nasi_telor(ui: GameUI, world: WorldMap) -> void:
 	_select_world_target(ui, world, &"work_table_stage")
 
 
+func _advance_to_day(game_root: GameRoot, target_day: int) -> void:
+	var service := game_root.get_service_controller() as ServiceController
+	while game_root.get_day_index() < target_day:
+		game_root.start_service_requested()
+		service._day_queue_remaining = 0
+		service._outside_dine_in_queue.clear()
+		service._in_shop_dine_in_count = 0
+		service._online_orders_open.clear()
+		game_root.request_close_if_drained()
+		game_root.request_continue_from_results()
+
+
 func _cook_plated_nasi_ayam(ui: GameUI, world: WorldMap) -> void:
 	var kitchen := ui._kitchen_controller
 	if kitchen == null or kitchen.get_cooker_output_view(&"rice_cooker").is_empty():
@@ -114,11 +126,6 @@ func _cook_plated_nasi_ayam(ui: GameUI, world: WorldMap) -> void:
 	_select_world_target(ui, world, &"work_table_stage")
 	_select_world_target(ui, world, &"storage_box")
 	_type_word(ui, "ayam")
-	_select_world_target(ui, world, &"stove")
-	_type_word(ui, "goreng")
-	_select_world_target(ui, world, &"work_table_stage")
-	_select_world_target(ui, world, &"storage_box")
-	_type_word(ui, "tempe")
 	_select_world_target(ui, world, &"stove")
 	_type_word(ui, "goreng")
 	_select_world_target(ui, world, &"work_table_stage")
@@ -275,8 +282,7 @@ func _test_full_dine_in_serve_eat_clean_wash_and_fifo_loop() -> void:
 	var world := game_root.get_node("World") as WorldMap
 
 	run.request_ingredient_purchase(&"beras", 4, &"storage_box")
-	run.request_ingredient_purchase(&"telur", 4, &"storage_box")
-	run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
+	run.request_ingredient_purchase(&"telur", 5, &"storage_box")
 	var cash_after_stock := int(run.get_run_view()["cash"])
 
 	_check("start service for full M2 gameplay loop", game_root.start_service_requested())
@@ -298,7 +304,7 @@ func _test_full_dine_in_serve_eat_clean_wash_and_fifo_loop() -> void:
 		"selecting OCCUPIED_WAITING dining_table_01 with empty hand shows order prompt and hides saji",
 		ui.interaction_dialogue.visible
 		and ui.target_title_label.text == "Meja Makan 1"
-		and ui.context_message_label.text.contains("Nasi Telor")
+		and ui.context_message_label.text.contains("Nasi Telur")
 		and kitchen.get_allowed_commands_for_selected_target().is_empty()
 		and not ui.allowed_commands_label.visible
 	)
@@ -319,12 +325,12 @@ func _test_full_dine_in_serve_eat_clean_wash_and_fifo_loop() -> void:
 	)
 
 	_select_world_target(ui, world, &"storage_box")
-	_type_word(ui, "sayur")
+	_type_word(ui, "telur")
 	_select_world_target(ui, world, &"stove")
 	_type_word(ui, "goreng")
 	_select_world_target(ui, world, &"dining_table_01")
 	_check(
-		"holding unplated cooked sayur hides saji on OCCUPIED_WAITING table",
+		"holding unplated cooked telur hides saji on OCCUPIED_WAITING table",
 		kitchen.get_allowed_commands_for_selected_target().is_empty()
 	)
 	_type_word(ui, "saji")
@@ -520,7 +526,7 @@ func _test_wrong_dishes_boundaries_expiry_and_timeout_feedback() -> void:
 	game_root.free()
 	await process_frame
 
-	# 3. Separate run with 3 storage slots (beras, ayam, tempe) assembling real nasi_ayam:
+	# 3. Separate run advanced to Day 3 with (beras, ayam) assembling real 2-part nasi_ayam:
 	var g_wrong := packed.instantiate() as GameRoot
 	root.add_child(g_wrong)
 	await process_frame
@@ -529,9 +535,9 @@ func _test_wrong_dishes_boundaries_expiry_and_timeout_feedback() -> void:
 	var u_w := g_wrong.get_node("UI") as GameUI
 	var w_w := g_wrong.get_node("World") as WorldMap
 
+	_advance_to_day(g_wrong, 3)
 	r_w.request_ingredient_purchase(&"beras", 1, &"storage_box")
 	r_w.request_ingredient_purchase(&"ayam", 1, &"storage_box")
-	r_w.request_ingredient_purchase(&"tempe", 1, &"storage_box")
 	var cash_wrong := int(r_w.get_run_view()["cash"])
 	g_wrong.start_service_requested()
 	_cook_plated_nasi_ayam(u_w, w_w)

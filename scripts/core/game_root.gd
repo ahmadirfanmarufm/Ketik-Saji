@@ -44,17 +44,36 @@ func _ready() -> void:
 	if _audio_controller == null:
 		_audio_controller = get_node_or_null("AudioController") as GameAudio
 
+	_in_main_menu = _is_app_main_scene_boot()
 	_wire_controllers()
-	if _run_controller != null and _run_controller.has_method(&"start_new_run"):
-		_run_controller.start_new_run()
-	if (
-		is_inside_tree()
-		and get_tree() != null
-		and get_tree().current_scene == self
-		and get_node_or_null("UI/UIRoot/MainMenuOverlay") != null
-	):
-		_in_main_menu = true
+	if not _in_main_menu:
+		if _run_controller != null and _run_controller.has_method(&"start_new_run"):
+			_run_controller.start_new_run()
 	_sync_bgm_stage(false)
+
+
+func _is_app_main_scene_boot() -> bool:
+	if not is_inside_tree() or get_tree() == null:
+		return false
+	if get_node_or_null("UI/UIRoot/MainMenuOverlay") == null:
+		return false
+	var tree := get_tree()
+	if tree.current_scene == self:
+		return true
+	# During Main::start(), Godot adds the main scene before assigning tree.current_scene.
+	if get_parent() == tree.root and tree.get_script() == null:
+		var main_scene_path := String(
+			ProjectSettings.get_setting("application/run/main_scene", "")
+		)
+		var main_uid := ResourceUID.id_to_text(
+			ResourceLoader.get_resource_uid(scene_file_path)
+		) if not scene_file_path.is_empty() else ""
+		if (
+			scene_file_path == main_scene_path
+			or (not main_uid.is_empty() and main_uid == main_scene_path)
+		):
+			return true
+	return false
 
 
 func _exit_tree() -> void:
@@ -107,6 +126,11 @@ func start_service_requested() -> bool:
 	if plan.has("day_index") and int(plan.get("day_index", -1)) != current_day:
 		return false
 
+	if (
+		_kitchen_controller != null
+		and _kitchen_controller.has_method(&"prepare_service_day")
+	):
+		_kitchen_controller.prepare_service_day(current_day, plan)
 	_service_controller.prepare_service_day(current_day, plan)
 
 	_service_elapsed = 0.0
@@ -280,10 +304,13 @@ func is_in_main_menu() -> bool:
 
 ## Transitions from Main Menu to fresh Day 1 Planning, fading BGM out over 5s.
 func request_start_play_from_menu() -> bool:
-	if not _in_main_menu:
+	if not _in_main_menu or _restarting_run:
 		return false
+	_restarting_run = true
 	_in_main_menu = false
+	_reset_run_world_and_controllers(true)
 	_sync_bgm_stage(true)
+	_restarting_run = false
 	phase_changed.emit(_phase, get_day_index())
 	return true
 
@@ -295,27 +322,27 @@ func request_restart_run() -> bool:
 		return false
 	_restarting_run = true
 	_in_main_menu = false
-	_reset_run_world_and_controllers()
+	_reset_run_world_and_controllers(true)
 	_sync_bgm_stage(true)
 	_restarting_run = false
 	phase_changed.emit(_phase, get_day_index())
 	return true
 
 
-## Returns cleanly to Main Menu with a fresh run state and BGM active.
+## Returns cleanly to Main Menu in an idle non-run state with Main Menu BGM active.
 func request_return_to_main_menu() -> bool:
 	if _restarting_run:
 		return false
 	_restarting_run = true
 	_in_main_menu = true
-	_reset_run_world_and_controllers()
+	_reset_run_world_and_controllers(false)
 	_sync_bgm_stage(true)
 	_restarting_run = false
 	phase_changed.emit(_phase, get_day_index())
 	return true
 
 
-func _reset_run_world_and_controllers() -> void:
+func _reset_run_world_and_controllers(start_new_run_now: bool = true) -> void:
 	set_paused(false)
 	_closing_in_progress = false
 	_service_elapsed = 0.0
@@ -339,10 +366,13 @@ func _reset_run_world_and_controllers() -> void:
 		_service_controller.reset_for_new_run()
 
 	_wire_controllers()
-	if _run_controller != null and _run_controller.has_method(&"reset_for_new_run"):
-		_run_controller.reset_for_new_run()
-	elif _run_controller != null and _run_controller.has_method(&"start_new_run"):
-		_run_controller.start_new_run()
+	if start_new_run_now:
+		if _run_controller != null and _run_controller.has_method(&"reset_for_new_run"):
+			_run_controller.reset_for_new_run()
+		elif _run_controller != null and _run_controller.has_method(&"start_new_run"):
+			_run_controller.start_new_run()
+	elif _run_controller != null and _run_controller.has_method(&"reset_to_idle"):
+		_run_controller.reset_to_idle()
 
 
 func _wire_controllers() -> void:

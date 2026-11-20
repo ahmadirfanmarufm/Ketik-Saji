@@ -31,8 +31,8 @@ func _test_diminishing_demand_and_plan_contracts() -> void:
 	var service := game_root.get_service_controller() as ServiceController
 	var ui := game_root.get_node("UI") as GameUI
 
-	# 1. Verify 1-recipe baseline across Days 1-7 preserves Potential (5..35) -> Quota (4..28).
-	var expected_potentials: Array[int] = [5, 10, 15, 20, 25, 30, 35]
+	# 1. Verify 1-recipe baseline across Days 1-7 preserves Potential/Quota [4, 8, 12, 16, 20, 24, 28].
+	var expected_potentials: Array[int] = [4, 8, 12, 16, 20, 24, 28]
 	var expected_quotas: Array[int] = [4, 8, 12, 16, 20, 24, 28]
 	for i in range(7):
 		var day := i + 1
@@ -44,44 +44,52 @@ func _test_diminishing_demand_and_plan_contracts() -> void:
 			and int(demand["planned_dinein_quota"]) == expected_quotas[i]
 		)
 
-	# 2. Verify diminishing-return curve on Day 3 (1, 2, 3 active) & config steps 4..5.
+	# 2. Verify diminishing-return arrival contributions (+3 -> +2 -> +1) on Days 3 & 6:
 	var cfg := run.economy_config
 	var d3_1 := run._compute_demand_for_day_and_menu(3, [&"nasi_telor"])
-	var d3_2 := run._compute_demand_for_day_and_menu(3, [&"nasi_telor", &"nasi_ayam"])
+	var d3_2 := run._compute_demand_for_day_and_menu(3, [&"nasi_telor", &"nasi_tempe"])
 	var d3_3 := run._compute_demand_for_day_and_menu(
-		3, [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"]
+		3, [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"]
+	)
+	var d6_3 := run._compute_demand_for_day_and_menu(
+		6, [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"]
+	)
+	var d6_4 := run._compute_demand_for_day_and_menu(
+		6, [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"nasi_ayam_komplit"]
 	)
 	var pot_gain_1_to_2 := int(d3_2["potential_demand"]) - int(d3_1["potential_demand"])
 	var pot_gain_2_to_3 := int(d3_3["potential_demand"]) - int(d3_2["potential_demand"])
-	var q_gain_1_to_2 := int(d3_2["planned_dinein_quota"]) - int(d3_1["planned_dinein_quota"])
-	var q_gain_2_to_3 := int(d3_3["planned_dinein_quota"]) - int(d3_2["planned_dinein_quota"])
+	var pot_gain_3_to_4 := int(d6_4["potential_demand"]) - int(d6_3["potential_demand"])
 	_check(
-		"diminishing returns on Day 3: 1->2 (+%d pot / +%d quota) > 2->3 (+%d pot / +%d quota)"
-		% [pot_gain_1_to_2, q_gain_1_to_2, pot_gain_2_to_3, q_gain_2_to_3],
-		int(d3_1["potential_demand"]) == 15
+		"diminishing returns (+3 -> +2 -> +1): 1->2 (+%d) > 2->3 (+%d) > 3->4 (+%d)"
+		% [pot_gain_1_to_2, pot_gain_2_to_3, pot_gain_3_to_4],
+		int(d3_1["potential_demand"]) == 12
 		and int(d3_1["planned_dinein_quota"]) == 12
-		and int(d3_2["potential_demand"]) == 19
+		and int(d3_2["potential_demand"]) == 15
 		and int(d3_2["planned_dinein_quota"]) == 15
-		and int(d3_3["potential_demand"]) == 22
+		and int(d3_3["potential_demand"]) == 17
 		and int(d3_3["planned_dinein_quota"]) == 17
+		and pot_gain_1_to_2 == 3
+		and pot_gain_2_to_3 == 2
+		and pot_gain_3_to_4 == 1
 		and pot_gain_1_to_2 > pot_gain_2_to_3
-		and q_gain_1_to_2 > q_gain_2_to_3
+		and pot_gain_2_to_3 > pot_gain_3_to_4
 		and cfg.get_menu_demand_bonus(4) - cfg.get_menu_demand_bonus(3) == 1
 		and cfg.get_menu_demand_bonus(5) - cfg.get_menu_demand_bonus(4) == 1
 	)
 
 	# 3. Verify locked/inactive exclusion and P5-F debt semantics (1 debt = 1 quota reduction
-	# after conversion while Potential Demand stays gross across Days 1-7, 1-3 recipes, debt 0-12).
+	# while Potential Demand stays gross across Days 1-7, 1-3 recipes, debt 0-12).
 	_check(
-		"Day 1 rejects locked nasi_ayam selection without mutating menu",
-		not run.select_daily_menu([&"nasi_telor", &"nasi_ayam"])
+		"Day 1 rejects locked nasi_tempe selection without mutating menu",
+		not run.select_daily_menu([&"nasi_telor", &"nasi_tempe"])
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
 
 	var menus_by_count: Array = [
 		[&"nasi_telor"],
-		[&"nasi_telor", &"nasi_ayam"],
-		[&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
+		[&"nasi_telor", &"nasi_tempe"],
+		[&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
 	]
 	var day_recipe_debt_ok := true
 	var potential_invariant_ok := true
@@ -95,7 +103,7 @@ func _test_diminishing_demand_and_plan_contracts() -> void:
 			var base_dem := run._compute_demand_for_day_and_menu(day, menu_slice)
 			var gross_pot := int(base_dem["potential_demand"])
 			var gross_q := int(base_dem["planned_dinein_quota"])
-			if gross_q != (gross_pot * 80) / 100:
+			if gross_q != gross_pot:
 				day_recipe_debt_ok = false
 			for debt in range(0, 13):
 				run._demand_penalty_debt = debt
@@ -125,26 +133,26 @@ func _test_diminishing_demand_and_plan_contracts() -> void:
 		clamp_zero_ok
 	)
 
-	# Explicitly verify integer-conversion boundary cases without no-op steps:
-	# Day 2 2-recipe (pot=14, gross_q=11): debt 3->8, debt 4->7, debt 9->2;
-	# Day 3 3-recipe (pot=22, gross_q=17): debt 2->15, debt 7->10, debt 12->5.
+	# Explicitly verify boundary cases without no-op steps:
+	# Day 2 2-recipe (pot=11, gross_q=11): debt 4->7;
+	# Day 3 3-recipe (pot=17, gross_q=17): debt 2->15, debt 7->10.
 	run._demand_penalty_debt = 4
-	var boundary_d2 := run._compute_demand_for_day_and_menu(2, [&"nasi_telor", &"nasi_ayam"])
+	var boundary_d2 := run._compute_demand_for_day_and_menu(2, [&"nasi_telor", &"nasi_tempe"])
 	run._demand_penalty_debt = 2
 	var boundary_d3_2 := run._compute_demand_for_day_and_menu(
-		3, [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"]
+		3, [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"]
 	)
 	run._demand_penalty_debt = 7
 	var boundary_d3_7 := run._compute_demand_for_day_and_menu(
-		3, [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"]
+		3, [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"]
 	)
 	_check(
 		"P5-F conversion boundary cases reduce quota by exact debt without no-op plateaus",
-		int(boundary_d2["potential_demand"]) == 14
+		int(boundary_d2["potential_demand"]) == 11
 		and int(boundary_d2["planned_dinein_quota"]) == 7
-		and int(boundary_d3_2["potential_demand"]) == 22
+		and int(boundary_d3_2["potential_demand"]) == 17
 		and int(boundary_d3_2["planned_dinein_quota"]) == 15
-		and int(boundary_d3_7["potential_demand"]) == 22
+		and int(boundary_d3_7["potential_demand"]) == 17
 		and int(boundary_d3_7["planned_dinein_quota"]) == 10
 	)
 	run._demand_penalty_debt = 0
@@ -153,8 +161,8 @@ func _test_diminishing_demand_and_plan_contracts() -> void:
 	_check("start Day 1", game_root.start_service_requested())
 	var d1_plan := run.get_service_plan()
 	_check(
-		"Day 1 ServicePlan freezes potential_demand=5 distinct from day_queue_initial=4",
-		int(d1_plan.get("potential_demand", -1)) == 5
+		"Day 1 ServicePlan freezes potential_demand=4 and day_queue_initial=4",
+		int(d1_plan.get("potential_demand", -1)) == 4
 		and int(d1_plan.get("day_queue_initial", -1)) == 4
 		and int(service.get_customer_queue_view()["day_queue_initial"]) == 4
 	)
@@ -179,32 +187,32 @@ func _test_diminishing_demand_and_plan_contracts() -> void:
 	_check(
 		"Day 1 settlement accumulates debt in [1,2] and separates gross Potensi Besok from Target",
 		d1_debt in [1, 2]
-		and int(d1_settle.get("forecast_next_day_potential", -1)) == 10
+		and int(d1_settle.get("forecast_next_day_potential", -1)) == 8
 		and int(d1_settle.get("forecast_next_day", -1)) == 8 - d1_debt
 	)
 
 	_check("continue to Day 2", game_root.request_continue_from_results())
 	var d2_rv := run.get_run_view()
 	_check(
-		"Day 2 keeps nasi_ayam inactive, keeps gross potential=10, and applies 1:1 debt to quota",
-		d2_rv["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_ayam"]
+		"Day 2 keeps nasi_tempe inactive, keeps gross potential=8, and applies 1:1 debt to quota",
+		d2_rv["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_tempe"]
 		and d2_rv["selected_recipe_ids"] == [&"nasi_telor"]
-		and int(d2_rv["potential_demand"]) == 10
+		and int(d2_rv["potential_demand"]) == 8
 		and int(d2_rv["planned_dinein_quota"]) == 8 - d1_debt
-		and ui.potential_demand_label.text == "Potensi Tamu: 10"
+		and ui.potential_demand_label.text == "Potensi Tamu: 8"
 		and ui.forecast_quota_label.text == "Target Tamu: %d" % (8 - d1_debt)
 	)
 
-	# Verify Edit Menu preview & HUD match ServicePlan freeze when toggling nasi_ayam with debt > 0.
+	# Verify Edit Menu preview & HUD match ServicePlan freeze when toggling nasi_tempe with debt > 0.
 	ui.open_edit_menu()
 	await process_frame
-	ui.get_edit_menu_recipe_button(&"nasi_ayam").button_pressed = true
-	var d2_preview := run.preview_demand_for_menu([&"nasi_telor", &"nasi_ayam"])
+	ui.get_edit_menu_recipe_button(&"nasi_tempe").button_pressed = true
+	var d2_preview := run.preview_demand_for_menu([&"nasi_telor", &"nasi_tempe"])
 	_check(
-		"Edit Menu preview applies 1:1 debt to quota (11 - debt) while keeping gross potential=14",
-		int(d2_preview["potential_demand"]) == 14
+		"Edit Menu preview applies 1:1 debt to quota (11 - debt) while keeping gross potential=11",
+		int(d2_preview["potential_demand"]) == 11
 		and int(d2_preview["planned_dinein_quota"]) == 11 - d1_debt
-		and ui.edit_menu_forecast_label.text == "Potensi Tamu: 14 | Target Tamu: %d" % (11 - d1_debt)
+		and ui.edit_menu_forecast_label.text == "Potensi Tamu: 11 | Target Tamu: %d" % (11 - d1_debt)
 	)
 	ui.edit_menu_confirm_button.pressed.emit()
 	_check("start Day 2 with 2 active recipes and active debt", game_root.start_service_requested())
@@ -214,7 +222,7 @@ func _test_diminishing_demand_and_plan_contracts() -> void:
 	game_root._process(20.0)
 	_check(
 		"ServicePlan & ServiceController quota remain frozen during SERVING",
-		int(d2_plan.get("potential_demand", -1)) == 14
+		int(d2_plan.get("potential_demand", -1)) == 11
 		and frozen_q == 11 - d1_debt
 		and int(service.get_customer_queue_view()["day_queue_initial"]) == frozen_q
 		and int(run.get_service_plan().get("day_queue_initial", -1)) == frozen_q
@@ -230,7 +238,7 @@ func _test_negative_config_validation() -> void:
 	for id: StringName in [&"beras", &"telur", &"ayam", &"tempe", &"sayur", &"sapi"]:
 		ingredients.append(load("res://data/ingredients/%s.tres" % id) as IngredientDef)
 	var recipes: Array[RecipeDef] = []
-	for id: StringName in [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"]:
+	for id: StringName in [&"nasi_telor", &"nasi_ayam", &"nasi_ayam_komplit"]:
 		recipes.append(load("res://data/recipes/%s.tres" % id) as RecipeDef)
 	var utilities: Array[UtilityDef] = []
 	for id: StringName in [
@@ -286,12 +294,12 @@ func _run_seven_day_simulations() -> void:
 			"name": "2_active_recipes_from_day2_2box_online",
 			"target_recipes_by_day": {
 				1: [&"nasi_telor"],
-				2: [&"nasi_telor", &"nasi_ayam"],
-				3: [&"nasi_telor", &"nasi_ayam"],
-				4: [&"nasi_telor", &"nasi_ayam"],
-				5: [&"nasi_telor", &"nasi_ayam"],
-				6: [&"nasi_telor", &"nasi_ayam"],
-				7: [&"nasi_telor", &"nasi_ayam"],
+				2: [&"nasi_telor", &"nasi_tempe"],
+				3: [&"nasi_telor", &"nasi_tempe"],
+				4: [&"nasi_telor", &"nasi_tempe"],
+				5: [&"nasi_telor", &"nasi_tempe"],
+				6: [&"nasi_telor", &"nasi_tempe"],
+				7: [&"nasi_telor", &"nasi_tempe"],
 			},
 			"accept_online": true,
 			"buy_extra_box_day": 2,
@@ -299,18 +307,18 @@ func _run_seven_day_simulations() -> void:
 			"expect_cash_meets_target": true,
 		},
 		{
-			"name": "3_active_recipes_from_day3_2box_online_constrained",
+			"name": "3_active_recipes_from_day3_1box_online_constrained",
 			"target_recipes_by_day": {
 				1: [&"nasi_telor"],
-				2: [&"nasi_telor", &"nasi_ayam"],
-				3: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				4: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				5: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				6: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				7: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
+				2: [&"nasi_telor", &"nasi_tempe"],
+				3: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				4: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"egg_salad"],
+				5: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"egg_salad"],
+				6: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"egg_salad"],
+				7: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"egg_salad"],
 			},
 			"accept_online": true,
-			"buy_extra_box_day": 2,
+			"buy_extra_box_day": 0,
 			"expected_outcome": SharedTypes.DayOutcome.LOST,
 			"expect_cash_meets_target": false,
 		},
@@ -318,12 +326,12 @@ func _run_seven_day_simulations() -> void:
 			"name": "3_active_recipes_from_day3_2box_dinein_only",
 			"target_recipes_by_day": {
 				1: [&"nasi_telor"],
-				2: [&"nasi_telor", &"nasi_ayam"],
-				3: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				4: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				5: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				6: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				7: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
+				2: [&"nasi_telor", &"nasi_tempe"],
+				3: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				4: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"egg_salad"],
+				5: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"egg_salad"],
+				6: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"egg_salad"],
+				7: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"egg_salad"],
 			},
 			"accept_online": false,
 			"buy_extra_box_day": 2,
@@ -373,17 +381,17 @@ func _run_seven_day_simulations() -> void:
 		)
 
 	_check(
-		"Constrained 2-box+online 3-recipe policy congests vs 2-recipe & 3-recipe dine-in",
-		int(fails_by_scenario["3_active_recipes_from_day3_2box_online_constrained"])
+		"Constrained 1-box+online multi-recipe policy congests vs 2-recipe & 2-box dine-in",
+		int(fails_by_scenario["3_active_recipes_from_day3_1box_online_constrained"])
 		> int(fails_by_scenario["2_active_recipes_from_day2_2box_online"])
-		and int(cash_by_scenario["3_active_recipes_from_day3_2box_online_constrained"])
+		and int(cash_by_scenario["3_active_recipes_from_day3_1box_online_constrained"])
 		< int(cash_by_scenario["2_active_recipes_from_day2_2box_online"])
-		and int(cash_by_scenario["3_active_recipes_from_day3_2box_online_constrained"])
+		and int(cash_by_scenario["3_active_recipes_from_day3_1box_online_constrained"])
 		< int(cash_by_scenario["3_active_recipes_from_day3_2box_dinein_only"])
 		and int(outcome_by_scenario["1_active_recipe_1box_online"]) == SharedTypes.DayOutcome.WON
 		and int(outcome_by_scenario["2_active_recipes_from_day2_2box_online"])
 		== SharedTypes.DayOutcome.WON
-		and int(outcome_by_scenario["3_active_recipes_from_day3_2box_online_constrained"])
+		and int(outcome_by_scenario["3_active_recipes_from_day3_1box_online_constrained"])
 		== SharedTypes.DayOutcome.LOST
 		and int(outcome_by_scenario["3_active_recipes_from_day3_2box_dinein_only"])
 		== SharedTypes.DayOutcome.WON
@@ -509,22 +517,23 @@ func _restock_for_menu(
 			_buy_smart(run, kitchen, &"telur", eggs - cur_egg, has_extra_box)
 		return
 
-	if menu.has(&"nasi_telor") or menu.has(&"nasi_komplit"):
+	if menu.has(&"nasi_telor") or menu.has(&"egg_salad"):
 		var max_e := 10 if (has_extra_box and menu.size() == 2) else 5
 		var eggs := mini(max_e, maxi(4, ceili(float(est_orders) * 0.6)))
 		var cur_egg := _count_ingredient(kitchen, &"telur")
 		if cur_egg < eggs:
 			_buy_smart(run, kitchen, &"telur", eggs - cur_egg, has_extra_box)
-	if menu.has(&"nasi_ayam") or menu.has(&"nasi_komplit"):
-		var ayam_n := mini(5, maxi(3, ceili(float(est_orders) * 0.5)))
-		var cur_ayam := _count_ingredient(kitchen, &"ayam")
-		if cur_ayam < ayam_n:
-			_buy_smart(run, kitchen, &"ayam", ayam_n - cur_ayam, has_extra_box)
+	if menu.has(&"nasi_tempe"):
 		var tempe_n := mini(5, maxi(3, ceili(float(est_orders) * 0.5)))
 		var cur_tempe := _count_ingredient(kitchen, &"tempe")
 		if cur_tempe < tempe_n:
 			_buy_smart(run, kitchen, &"tempe", tempe_n - cur_tempe, has_extra_box)
-	if menu.has(&"nasi_komplit"):
+	if menu.has(&"nasi_ayam"):
+		var ayam_n := mini(5, maxi(3, ceili(float(est_orders) * 0.5)))
+		var cur_ayam := _count_ingredient(kitchen, &"ayam")
+		if cur_ayam < ayam_n:
+			_buy_smart(run, kitchen, &"ayam", ayam_n - cur_ayam, has_extra_box)
+	if menu.has(&"egg_salad"):
 		var sayur_n := mini(5, maxi(3, ceili(float(est_orders) * 0.4)))
 		var cur_sayur := _count_ingredient(kitchen, &"sayur")
 		if cur_sayur < sayur_n:
@@ -672,19 +681,20 @@ func _has_ingredients_for_recipe(kitchen: KitchenController, recipe_id: StringNa
 				(_count_ingredient(kitchen, &"beras") > 0 or _cooker_has_rice(kitchen))
 				and _count_ingredient(kitchen, &"telur") > 0
 			)
+		&"nasi_tempe":
+			return (
+				(_count_ingredient(kitchen, &"beras") > 0 or _cooker_has_rice(kitchen))
+				and _count_ingredient(kitchen, &"tempe") > 0
+			)
 		&"nasi_ayam":
 			return (
 				(_count_ingredient(kitchen, &"beras") > 0 or _cooker_has_rice(kitchen))
 				and _count_ingredient(kitchen, &"ayam") > 0
-				and _count_ingredient(kitchen, &"tempe") > 0
 			)
-		&"nasi_komplit":
+		&"egg_salad":
 			return (
-				(_count_ingredient(kitchen, &"beras") > 0 or _cooker_has_rice(kitchen))
-				and _count_ingredient(kitchen, &"ayam") > 0
-				and _count_ingredient(kitchen, &"tempe") > 0
+				_count_ingredient(kitchen, &"telur") > 0
 				and _count_ingredient(kitchen, &"sayur") > 0
-				and _count_ingredient(kitchen, &"telur") > 0
 			)
 	return false
 
@@ -707,9 +717,11 @@ func _schedule_proactive_restock(
 		return
 	var total_needed := rem_queue + int(qv.get("outside_dinein_count", 0)) + 2
 	var check_ings: Array[StringName] = [&"telur"]
-	if menu.has(&"nasi_ayam") or menu.has(&"nasi_komplit"):
-		check_ings.append_array([&"ayam", &"tempe"])
-	if menu.has(&"nasi_komplit"):
+	if menu.has(&"nasi_tempe"):
+		check_ings.append(&"tempe")
+	if menu.has(&"nasi_ayam"):
+		check_ings.append(&"ayam")
+	if menu.has(&"egg_salad"):
 		check_ings.append(&"sayur")
 
 	for ing_id: StringName in check_ings:
@@ -731,13 +743,12 @@ func _min_recipe_stock(kitchen: KitchenController, recipe_id: StringName) -> int
 	match recipe_id:
 		&"nasi_telor":
 			return _count_ingredient(kitchen, &"telur")
+		&"nasi_tempe":
+			return _count_ingredient(kitchen, &"tempe")
 		&"nasi_ayam":
-			return mini(_count_ingredient(kitchen, &"ayam"), _count_ingredient(kitchen, &"tempe"))
-		&"nasi_komplit":
-			return mini(
-				mini(_count_ingredient(kitchen, &"telur"), _count_ingredient(kitchen, &"sayur")),
-				mini(_count_ingredient(kitchen, &"ayam"), _count_ingredient(kitchen, &"tempe"))
-			)
+			return _count_ingredient(kitchen, &"ayam")
+		&"egg_salad":
+			return mini(_count_ingredient(kitchen, &"telur"), _count_ingredient(kitchen, &"sayur"))
 	return 0
 
 
@@ -745,13 +756,12 @@ func _count_pending_for_recipe(kitchen: KitchenController, recipe_id: StringName
 	match recipe_id:
 		&"nasi_telor":
 			return _count_pending_for(kitchen, &"telur")
+		&"nasi_tempe":
+			return _count_pending_for(kitchen, &"tempe")
 		&"nasi_ayam":
-			return mini(_count_pending_for(kitchen, &"ayam"), _count_pending_for(kitchen, &"tempe"))
-		&"nasi_komplit":
-			return mini(
-				mini(_count_pending_for(kitchen, &"telur"), _count_pending_for(kitchen, &"sayur")),
-				mini(_count_pending_for(kitchen, &"ayam"), _count_pending_for(kitchen, &"tempe"))
-			)
+			return _count_pending_for(kitchen, &"ayam")
+		&"egg_salad":
+			return mini(_count_pending_for(kitchen, &"telur"), _count_pending_for(kitchen, &"sayur"))
 	return 0
 
 
@@ -800,8 +810,9 @@ func _cook_and_serve_order(kitchen: KitchenController, target: Dictionary) -> fl
 	var target_id := StringName(target["target_id"])
 	var elapsed_action := 0.0
 
-	# Ensure cooked rice is available.
-	if not _cooker_has_rice(kitchen):
+	# Ensure cooked rice is available for rice dishes.
+	var needs_rice := recipe_id != &"egg_salad"
+	if needs_rice and not _cooker_has_rice(kitchen):
 		if _take_from_any_box(kitchen, &"beras"):
 			kitchen.on_interactable_clicked(&"washer")
 			kitchen._perform_typed_command(&"cuci")
@@ -811,29 +822,34 @@ func _cook_and_serve_order(kitchen: KitchenController, target: Dictionary) -> fl
 		else:
 			return 0.5
 
-	# Stage clean plate + scoop rice.
+	# Stage clean plate (+ scoop rice if needed).
 	kitchen.on_interactable_clicked(&"plate_rack")
 	if kitchen.get_held_item_view().is_empty():
 		return 0.5
 	kitchen.on_interactable_clicked(&"work_table_stage")
-	kitchen.on_interactable_clicked(&"rice_cooker")
-	kitchen._perform_typed_command(&"nasi")
-	kitchen.on_interactable_clicked(&"work_table_stage")
-	elapsed_action += 2.0
+	if needs_rice:
+		kitchen.on_interactable_clicked(&"rice_cooker")
+		kitchen._perform_typed_command(&"nasi")
+		kitchen.on_interactable_clicked(&"work_table_stage")
+		elapsed_action += 2.0
+	else:
+		elapsed_action += 1.0
 
 	var fry_list: Array[StringName] = []
 	match recipe_id:
 		&"nasi_telor":
 			fry_list = [&"telur"]
+		&"nasi_tempe":
+			fry_list = [&"tempe"]
 		&"nasi_ayam":
-			fry_list = [&"ayam", &"tempe"]
-		&"nasi_komplit":
+			fry_list = [&"ayam"]
+		&"egg_salad":
 			if _take_from_any_box(kitchen, &"sayur"):
 				kitchen.on_interactable_clicked(&"work_table_chop")
 				kitchen._perform_typed_command(&"potong")
 				kitchen.on_interactable_clicked(&"work_table_stage")
 				elapsed_action += 2.5
-			fry_list = [&"ayam", &"tempe", &"telur"]
+			fry_list = [&"telur"]
 
 	for ing: StringName in fry_list:
 		if _take_from_any_box(kitchen, ing):

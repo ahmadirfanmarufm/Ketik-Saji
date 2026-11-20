@@ -19,7 +19,7 @@ z_index = -10
 texture_filter = 1
 
 [node name="OuterBackdrop" type="Polygon2D" parent="WorldBackdrop" unique_id=901000101]
-position = Vector2(-390, 63)
+position = Vector2(-60, -8)
 color = Color(0.11, 0.13, 0.17, 1)
 polygon = PackedVector2Array(-64, -64, 768, -64, 768, 448, -64, 448)
 

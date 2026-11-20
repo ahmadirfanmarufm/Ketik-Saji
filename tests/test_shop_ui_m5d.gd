@@ -78,7 +78,7 @@ func _test_ingredient_shop_simplification_and_behavior() -> void:
 	var beras_row := ui.get_shop_ingredient_controls(&"beras")
 	var slot_labels: Array[String] = []
 	for child in ui.shop_slots_row.get_children():
-		var lbl := child.get_child(0) as Label
+		var lbl := child.get_meta(&"slot_label_ref", null) as Label
 		if lbl != null:
 			slot_labels.append(lbl.text)
 	_check(
@@ -94,7 +94,7 @@ func _test_ingredient_shop_simplification_and_behavior() -> void:
 		and slot_labels.size() == 3
 		and slot_labels[0] == "Kosong (0/5)"
 		and not slot_labels[0].begins_with("S1:")
-		and ui.shop_total_label.text == "Total: Rp 0"
+		and ui.shop_total_label.text == "Total belanja: Rp 0"
 	)
 
 	# Quantity changes & total formatting, cancel preserves cash and stock.
@@ -103,7 +103,7 @@ func _test_ingredient_shop_simplification_and_behavior() -> void:
 	_check(
 		"quantity adjusts subtotal & total cleanly (2x2k + 1x3k = Rp 7k)",
 		ui.get_shop_total() == 7000
-		and ui.shop_total_label.text == "Total: Rp 7k"
+		and ui.shop_total_label.text == "Total belanja: Rp 7k"
 		and (beras_row["subtotal_label"] as Label).text == "Rp 4k"
 	)
 	ui.shop_cancel_button.pressed.emit()
@@ -121,7 +121,7 @@ func _test_ingredient_shop_simplification_and_behavior() -> void:
 	await process_frame
 	_check("empty basket rejected", not ui.submit_ingredient_shop())
 	ui.adjust_shop_quantity(&"beras", 2)
-	_check("over-cash rejected", not ui.submit_ingredient_shop({&"sapi": 11}))
+	_check("over-cash rejected", not ui.submit_ingredient_shop({&"telur": 40}))
 	_check("over-capacity rejected", not ui.submit_ingredient_shop({&"beras": 16}))
 	ui.shop_checkout_button.pressed.emit()
 	var dup_ok := ui.submit_ingredient_shop({&"telur": 1})
@@ -136,10 +136,11 @@ func _test_ingredient_shop_simplification_and_behavior() -> void:
 	_check("buy fridge_01", run.request_fixture_purchase(&"fridge", &"slot_utility_01"))
 	ui.open_ingredient_shop(&"fridge_01")
 	await process_frame
-	var fridge_slot0 := ui.shop_slots_row.get_child(0).get_child(0) as Label
+	var fridge_slot0 := ui.shop_slots_row.get_child(0).get_meta(&"slot_label_ref", null) as Label
 	_check(
 		"fridge_01 shop stays isolated (2 empty slots, zero spill from storage_box)",
 		ui.shop_slots_row.get_child_count() == 2
+		and fridge_slot0 != null
 		and fridge_slot0.text == "Kosong (0/3)"
 		and ui.shop_target_label.text == "Kulkas"
 	)
@@ -150,22 +151,23 @@ func _test_ingredient_shop_simplification_and_behavior() -> void:
 	_send_left_click(ui, Vector2(256, 52))
 	_type_word(ui, "beli")
 	await process_frame
-	var box_slot0 := ui.shop_slots_row.get_child(0).get_child(0) as Label
+	var box_slot0 := ui.shop_slots_row.get_child(0).get_meta(&"slot_label_ref", null) as Label
 	_check(
 		"SERVING shop shows Tiba 100 dtk and clean slot label Beras 2/5",
 		ui.shop_status_row.visible
 		and ui.shop_delivery_hint_label.visible
 		and ui.shop_delivery_hint_label.text == "Tiba 100 dtk"
+		and box_slot0 != null
 		and box_slot0.text == "Beras 2/5"
 		and not ui.shop_pending_label.visible
 	)
-	ui.adjust_shop_quantity(&"sayur", 1)
+	ui.adjust_shop_quantity(&"telur", 1)
 	ui.shop_checkout_button.pressed.emit()
 	_type_word(ui, "beli")
 	await process_frame
 	_check(
 		"active pending delivery becomes visible when present",
-		ui.shop_pending_label.visible and ui.shop_pending_label.text.contains("Sayur x1")
+		ui.shop_pending_label.visible and ui.shop_pending_label.text.contains("Telur x1")
 	)
 	ui.close_ingredient_shop()
 
@@ -185,12 +187,17 @@ func _test_fixture_shop_simplification_and_behavior() -> void:
 	var ui := game_root.get_node("UI") as GameUI
 
 	_check(
-		"Beli Alat HUD button retired & open_fixture_shop requires valid slot",
-		not ui.fixture_shop_button.visible
-		and ui.fixture_shop_button.disabled
+		"Beli Alat HUD button active in PLANNING & open_fixture_shop requires valid slot",
+		ui.fixture_shop_button.visible
+		and not ui.fixture_shop_button.disabled
 		and not ui.open_fixture_shop(&"")
 		and not ui.open_fixture_shop(&"slot_nonexistent")
 	)
+	ui.fixture_shop_button.pressed.emit()
+	await process_frame
+	_check("clicking Beli Alat HUD button opens Belanja Peralatan cleanly", ui.is_fixture_shop_open())
+	ui.close_fixture_shop()
+	await process_frame
 
 	# Click empty table slot in PLANNING -> ONLY dining_table offered, sprite icon + bold title + desc + Harga footer.
 	var tbl_view := world.get_placement_slot_view(&"slot_table_01")

@@ -74,6 +74,12 @@ var _washer_dirty_plates: Array[StringName] = []
 var _pending_deliveries: Dictionary[StringName, Dictionary] = {}
 var _delivered_purchase_ids: Dictionary[StringName, bool] = {}
 var _last_service_now: float = 0.0
+var _prev_service_now: float = 0.0
+var _cook_count: int = 0
+var _cook_interval_seconds: float = 0.0
+var _next_cook_action_at: float = INF
+var _cook_actions_count: int = 0
+var _cook_workers: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -107,6 +113,13 @@ func reset_for_new_run() -> void:
 	_washer_dirty_plates.clear()
 	_pending_deliveries.clear()
 	_delivered_purchase_ids.clear()
+	_last_service_now = 0.0
+	_prev_service_now = 0.0
+	_cook_count = 0
+	_cook_interval_seconds = 0.0
+	_next_cook_action_at = INF
+	_cook_actions_count = 0
+	_cook_workers.clear()
 	kitchen_state_changed.emit()
 
 
@@ -243,13 +256,20 @@ func get_fixture_kind(instance_id: StringName) -> int:
 
 
 func get_cooker_ids() -> Array[StringName]:
-	var ids: Array[StringName] = [&"rice_cooker"]
-	for fid: StringName in _fixture_kinds:
-		if _fixture_kinds[fid] == SharedTypes.FixtureKind.RICE_COOKER and not ids.has(fid):
-			ids.append(fid)
+	var ids := get_fixture_ids_by_kind(SharedTypes.FixtureKind.RICE_COOKER)
 	for cid: StringName in _cooker_outputs:
 		if not ids.has(cid):
 			ids.append(cid)
+	return ids
+
+
+## Returns sorted list of installed fixture IDs matching `kind`.
+func get_fixture_ids_by_kind(kind: SharedTypes.FixtureKind) -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for fid: StringName in _fixture_kinds:
+		if _fixture_kinds[fid] == int(kind) and not ids.has(fid):
+			ids.append(fid)
+	ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 	return ids
 
 
@@ -940,13 +960,76 @@ func clear_non_fridge_food_for_next_day() -> void:
 	for plate: Dictionary in _plate_records.values():
 		plate["location"] = &"RACK"
 		plate["table_id"] = &""
+	_prev_service_now = 0.0
+	_cook_count = 0
+	_cook_interval_seconds = 0.0
+	_next_cook_action_at = INF
+	_cook_actions_count = 0
+	_cook_workers.clear()
 
 	clear_command_prefix()
 	_set_selected_target(&"")
 	kitchen_state_changed.emit()
 
 
+func prepare_service_day(_day_index: int, plan: Dictionary) -> void:
+	_last_service_now = 0.0
+	_prev_service_now = 0.0
+	_cook_actions_count = 0
+	_cook_count = 0
+	_cook_interval_seconds = 0.0
+	_next_cook_action_at = INF
+	_cook_workers.clear()
+	var wf: Variant = plan.get("workforce_summary", {})
+	if wf is Dictionary:
+		var by_role: Variant = (wf as Dictionary).get("by_role", {})
+		if by_role is Dictionary:
+			var cook_info: Variant = (by_role as Dictionary).get(&"cook", {})
+			if cook_info is Dictionary:
+				_cook_count = maxi(0, int((cook_info as Dictionary).get("count", 0)))
+				_cook_interval_seconds = maxf(
+					0.0, float((cook_info as Dictionary).get("effective_interval", 0.0))
+				)
+	if _cook_count > 0 and _cook_interval_seconds > 0.0:
+		_next_cook_action_at = _cook_interval_seconds
+	var raw_emps: Variant = plan.get("employees", [])
+	if raw_emps is Array and _cook_count > 0 and _cook_interval_seconds > 0.0:
+		var worker_cycle := _cook_interval_seconds * float(_cook_count)
+		for raw_e: Variant in (raw_emps as Array):
+			if not (raw_e is Dictionary):
+				continue
+			var emp := raw_e as Dictionary
+			if StringName(emp.get("role_id", &"")) != &"cook":
+				continue
+			_cook_workers.append({
+				"employee_id": StringName(emp.get("employee_id", &"")),
+				"role_id": &"cook",
+				"display_name": String(emp.get("display_name", "")),
+				"state": SharedTypes.EmployeeAnimState.IDLE,
+				"target_id": &"",
+				"hold_ingredient_id": &"",
+				"hold_recipe_id": &"",
+				"cycle_interval": worker_cycle,
+				"phase_started_at": 0.0,
+				"phase_until": 0.0,
+				"next_task_at": 0.0,
+				"pending_task": {},
+			})
+
+
+func get_cook_actions_count() -> int:
+	return _cook_actions_count
+
+
+func get_employee_worker_views() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for w: Dictionary in _cook_workers:
+		out.append(w.duplicate(true))
+	return out
+
+
 func advance_service_time(now: float) -> void:
+	_prev_service_now = _last_service_now
 	_last_service_now = maxf(_last_service_now, now)
 	var changed := false
 	for purchase_id: StringName in _pending_deliveries:
@@ -961,6 +1044,10 @@ func advance_service_time(now: float) -> void:
 			if receive_stock(purchase_id, ing_id, qty, unit_id):
 				record["status"] = &"DELIVERED"
 				changed = true
+	if _cook_count > 0 and _cook_interval_seconds > 0.0 and not _is_game_paused():
+		var serving_active := (_game_root == null or _is_serving_phase())
+		if serving_active and _process_cook_workers(_last_service_now):
+			changed = true
 	if changed:
 		kitchen_state_changed.emit()
 
@@ -981,13 +1068,78 @@ func try_consume_serving_item(
 	order_kind: int,
 	dine_in_table_id: StringName
 ) -> bool:
-	if item_id == &"" or recipe_id == &"" or _held_item.is_empty():
+	if not _transfer_serving_plate_for_item(
+		_held_item, item_id, recipe_id, order_kind, dine_in_table_id
+	):
 		return false
-	if _held_item.get("item_id", &"") != item_id:
+	_held_item = {}
+	_sync_player_visual()
+	kitchen_state_changed.emit()
+	return true
+
+
+## Returns first staged dish whose completed recipe matches any ID in `recipe_ids`,
+## preferring long-counter pass-through slots before active `work_table`.
+func find_completed_staged_dish_for_recipes(
+	recipe_ids: Array[StringName],
+	excluded_slots: Dictionary = {}
+) -> Dictionary:
+	if recipe_ids.is_empty():
+		return {}
+	var ordered_ids := _get_waiter_priority_work_table_ids()
+	for wt_id in ordered_ids:
+		if excluded_slots.has(wt_id):
+			continue
+		var staged: Dictionary = _work_table_items.get(wt_id, {})
+		if staged.is_empty():
+			continue
+		var plate_id: StringName = staged.get("plate_id", &"")
+		var matched_id: StringName = staged.get("matched_recipe_id", &"")
+		if plate_id == &"" or matched_id == &"" or not recipe_ids.has(matched_id):
+			continue
+		return {
+			"work_table_id": wt_id,
+			"item_id": staged.get("item_id", &""),
+			"recipe_id": matched_id,
+		}
+	return {}
+
+
+## Atomically consumes a completed plated dish directly from a counter/work_table slot
+## for waiter delivery while preserving strict finite plate conservation.
+func try_consume_staged_serving_item(
+	work_table_id: StringName,
+	item_id: StringName,
+	recipe_id: StringName,
+	order_kind: int,
+	dine_in_table_id: StringName
+) -> bool:
+	if work_table_id == &"" or not _work_table_items.has(work_table_id):
 		return false
-	if _held_item.get("matched_recipe_id", &"") != recipe_id:
+	var staged: Dictionary = _work_table_items[work_table_id]
+	if not _transfer_serving_plate_for_item(
+		staged, item_id, recipe_id, order_kind, dine_in_table_id
+	):
 		return false
-	var plate_id: StringName = _held_item.get("plate_id", &"")
+	_work_table_items[work_table_id] = {}
+	kitchen_state_changed.emit()
+	return true
+
+
+func _transfer_serving_plate_for_item(
+	item: Dictionary,
+	item_id: StringName,
+	recipe_id: StringName,
+	order_kind: int,
+	dine_in_table_id: StringName
+) -> bool:
+	if item_id == &"" or recipe_id == &"" or item.is_empty():
+		return false
+	if item.get("item_id", &"") != item_id:
+		return false
+	if item.get("matched_recipe_id", &"") != recipe_id:
+		return false
+	var plate_id: StringName = item.get("plate_id", &"")
 	if plate_id == &"" or not _plate_records.has(plate_id):
 		return false
 
@@ -1002,11 +1154,509 @@ func try_consume_serving_item(
 		plate["table_id"] = &""
 	else:
 		return false
-
-	_held_item = {}
-	_sync_player_visual()
-	kitchen_state_changed.emit()
 	return true
+
+
+func _get_waiter_priority_work_table_ids() -> Array[StringName]:
+	var pass_through: Array[StringName] = []
+	var other: Array[StringName] = []
+	for tid in get_work_table_ids():
+		if tid == &"work_table":
+			other.append(tid)
+		else:
+			pass_through.append(tid)
+	pass_through.append_array(other)
+	return pass_through
+
+
+func _clear_cook_worker_task(worker: Dictionary, next_at: float) -> void:
+	worker["state"] = SharedTypes.EmployeeAnimState.IDLE
+	worker["target_id"] = &""
+	worker["hold_ingredient_id"] = &""
+	worker["hold_recipe_id"] = &""
+	worker["phase_started_at"] = 0.0
+	worker["phase_until"] = 0.0
+	worker["next_task_at"] = next_at
+	worker["pending_task"] = {}
+
+
+func _process_cook_workers(now: float) -> bool:
+	if _cook_workers.is_empty():
+		return false
+	var any_changed := false
+	var step_span := now - _prev_service_now
+	for worker: Dictionary in _cook_workers:
+		var cycle := maxf(0.5, float(worker.get("cycle_interval", _cook_interval_seconds)))
+		var walk_dur := minf(0.65, cycle * 0.20)
+		var work_dur := minf(1.40, cycle * 0.42)
+		var guard := 0
+		while guard < 4:
+			guard += 1
+			var state := int(worker.get("state", SharedTypes.EmployeeAnimState.IDLE))
+			if state == SharedTypes.EmployeeAnimState.WALK:
+				var walk_until := float(worker.get("phase_until", 0.0))
+				if now < walk_until:
+					break
+				var task: Dictionary = worker.get("pending_task", {})
+				var t_kind := StringName(task.get("kind", &""))
+				worker["state"] = (
+					SharedTypes.EmployeeAnimState.CLEAN
+					if t_kind == &"wash_plate"
+					else SharedTypes.EmployeeAnimState.WORK
+				)
+				worker["phase_until"] = walk_until + work_dur
+				continue
+			if (
+				state == SharedTypes.EmployeeAnimState.WORK
+				or state == SharedTypes.EmployeeAnimState.CLEAN
+			):
+				var work_until := float(worker.get("phase_until", 0.0))
+				if now < work_until:
+					break
+				var task: Dictionary = worker.get("pending_task", {})
+				if _execute_cook_task(task):
+					any_changed = true
+				_clear_cook_worker_task(
+					worker,
+					float(worker.get("phase_started_at", now)) + cycle
+				)
+				break
+			if now < float(worker.get("next_task_at", 0.0)):
+				break
+			var next_task := _claim_next_cook_task(worker)
+			if next_task.is_empty():
+				break
+			var start_t := (
+				maxf(float(worker.get("next_task_at", 0.0)), _prev_service_now)
+				if step_span > 1.25
+				else now
+			)
+			worker["state"] = SharedTypes.EmployeeAnimState.WALK
+			worker["target_id"] = StringName(next_task.get("station_id", &""))
+			worker["hold_ingredient_id"] = StringName(next_task.get("ingredient_id", &""))
+			worker["phase_started_at"] = start_t
+			worker["phase_until"] = start_t + walk_dur
+			worker["pending_task"] = next_task
+			if step_span <= 1.25:
+				break
+	return any_changed
+
+
+func _build_cook_claim_maps(exclude_emp_id: StringName) -> Dictionary:
+	var stations: Dictionary[StringName, bool] = {}
+	var output_slots: Dictionary[StringName, bool] = {}
+	var plates: Dictionary[StringName, bool] = {}
+	var in_progress_ing: Dictionary[StringName, int] = {}
+	for other: Dictionary in _cook_workers:
+		if StringName(other.get("employee_id", &"")) == exclude_emp_id:
+			continue
+		if int(other.get("state", SharedTypes.EmployeeAnimState.IDLE)) == SharedTypes.EmployeeAnimState.IDLE:
+			continue
+		var p: Dictionary = other.get("pending_task", {})
+		var st := StringName(p.get("station_id", &""))
+		var out_wt := StringName(p.get("target_slot_id", &""))
+		var pl := StringName(p.get("plate_id", &""))
+		var ing := StringName(p.get("ingredient_id", &""))
+		var kind := StringName(p.get("kind", &""))
+		if st != &"":
+			stations[st] = true
+		if out_wt != &"":
+			output_slots[out_wt] = true
+		if pl != &"":
+			plates[pl] = true
+		if (kind == &"cook_ingredient" or kind == &"finish_staged") and ing != &"":
+			in_progress_ing[ing] = int(in_progress_ing.get(ing, 0)) + 1
+	return {
+		"stations": stations,
+		"output_slots": output_slots,
+		"plates": plates,
+		"in_progress_ing": in_progress_ing,
+	}
+
+
+func _claim_next_cook_task(worker: Dictionary) -> Dictionary:
+	var emp_id := StringName(worker.get("employee_id", &""))
+	var claims := _build_cook_claim_maps(emp_id)
+	var claimed_stations: Dictionary = claims["stations"]
+	var claimed_slots: Dictionary = claims["output_slots"]
+	var claimed_plates: Dictionary = claims["plates"]
+	var in_prog_ing: Dictionary = claims["in_progress_ing"]
+
+	var washers := get_fixture_ids_by_kind(SharedTypes.FixtureKind.WASHER)
+	var cookers := get_cooker_ids()
+	var stoves := get_fixture_ids_by_kind(SharedTypes.FixtureKind.STOVE)
+	var order_needs := _compute_open_order_ingredient_needs()
+
+	# Priority 1: Finish an already-started staged preparation on work_table/counter
+	# (washed rice -> cooker, or chopped veggie requiring CHOPPED_AND_COOKED -> stove).
+	for wt_id in get_work_table_ids():
+		if claimed_slots.has(wt_id):
+			continue
+		var staged: Dictionary = _work_table_items.get(wt_id, {})
+		if staged.is_empty() or staged.get("plate_id", &"") != &"":
+			continue
+		var parts: Array = staged.get("parts", [])
+		if parts.size() != 1:
+			continue
+		var part: Dictionary = parts[0]
+		var ing_id := StringName(part.get("ingredient_id", &""))
+		var cur_state := int(part.get("state", -1)) as SharedTypes.PrepState
+		var def := _ingredients_by_id.get(ing_id) as IngredientDef
+		if def == null:
+			continue
+		if (
+			ing_id == &"beras"
+			and cur_state == SharedTypes.PrepState.WASHED
+			and def.get_next_state(cur_state, &"masak") == SharedTypes.PrepState.COOKED_RICE
+		):
+			for cid in cookers:
+				if claimed_stations.has(cid):
+					continue
+				var existing: Dictionary = _cooker_outputs.get(cid, {})
+				if existing.is_empty() or int(existing.get("portions", 0)) <= 0:
+					return {
+						"kind": &"finish_staged_rice",
+						"station_id": cid,
+						"target_slot_id": wt_id,
+						"ingredient_id": &"beras",
+					}
+		if (
+			cur_state == SharedTypes.PrepState.CHOPPED
+			and int(order_needs.get(&"sayur_cooked", 0)) > 0
+			and def.get_next_state(cur_state, &"goreng") == SharedTypes.PrepState.CHOPPED_AND_COOKED
+		):
+			for sid in stoves:
+				if not claimed_stations.has(sid):
+					return {
+						"kind": &"finish_staged",
+						"station_id": sid,
+						"target_slot_id": wt_id,
+						"ingredient_id": ing_id,
+					}
+
+	# Priority 2: Wash one dirty plate when clean plates are low or washer has plates waiting.
+	if not _washer_dirty_plates.is_empty() and not washers.is_empty():
+		var free_washer := &""
+		for wid in washers:
+			if not claimed_stations.has(wid):
+				free_washer = wid
+				break
+		if free_washer != &"":
+			for pid in _washer_dirty_plates:
+				if claimed_plates.has(pid) or not _plate_records.has(pid):
+					continue
+				if _plate_records[pid].get("location", &"") != &"WASHER_DIRTY":
+					continue
+				return {
+					"kind": &"wash_plate",
+					"station_id": free_washer,
+					"plate_id": pid,
+					"ingredient_id": &"",
+				}
+
+	# Priority 3: Cook 1 real stored `beras` into an idle rice cooker when cooked rice < 3.
+	if (
+		_total_cooked_rice_portions() < 3
+		and int(order_needs.get(&"__need_rice", 0)) > 0
+		and not cookers.is_empty()
+		and _ingredients_by_id.has(&"beras")
+		and _has_raw_in_storage(&"beras")
+	):
+		var beras_def := _ingredients_by_id[&"beras"] as IngredientDef
+		if (
+			beras_def != null
+			and beras_def.get_next_state(SharedTypes.PrepState.RAW, &"cuci") == SharedTypes.PrepState.WASHED
+			and beras_def.get_next_state(SharedTypes.PrepState.WASHED, &"masak") == SharedTypes.PrepState.COOKED_RICE
+		):
+			for cid in cookers:
+				if claimed_stations.has(cid):
+					continue
+				var existing: Dictionary = _cooker_outputs.get(cid, {})
+				if existing.is_empty() or int(existing.get("portions", 0)) <= 0:
+					return {
+						"kind": &"cook_rice",
+						"station_id": cid,
+						"ingredient_id": &"beras",
+					}
+
+	# Priority 4: Cook urgently needed protein/ingredient (telur, sapi, ayam, tempe) on stove.
+	if not stoves.is_empty():
+		var free_stove := &""
+		for sid in stoves:
+			if not claimed_stations.has(sid):
+				free_stove = sid
+				break
+		if free_stove != &"":
+			var empty_slot := _find_empty_cook_output_slot(claimed_slots)
+			if empty_slot != &"":
+				var staged_cooked := _count_staged_cooked_loose_by_ingredient()
+				for ing_id: StringName in [&"telur", &"sapi", &"ayam", &"tempe"]:
+					var need := int(order_needs.get(ing_id, 0))
+					var have := (
+						int(staged_cooked.get(ing_id, 0))
+						+ int(in_prog_ing.get(ing_id, 0))
+					)
+					if need <= have:
+						continue
+					if not _has_raw_in_storage(ing_id) or not _ingredients_by_id.has(ing_id):
+						continue
+					var def := _ingredients_by_id[ing_id] as IngredientDef
+					if (
+						def != null
+						and def.get_next_state(SharedTypes.PrepState.RAW, &"goreng") == SharedTypes.PrepState.COOKED
+					):
+						return {
+							"kind": &"cook_ingredient",
+							"station_id": free_stove,
+							"target_slot_id": empty_slot,
+							"ingredient_id": ing_id,
+						}
+	return {}
+
+
+func _execute_cook_task(task: Dictionary) -> bool:
+	var kind := StringName(task.get("kind", &""))
+	var station_id := StringName(task.get("station_id", &""))
+	match kind:
+		&"wash_plate":
+			var plate_id := StringName(task.get("plate_id", &""))
+			if not get_fixture_ids_by_kind(SharedTypes.FixtureKind.WASHER).has(station_id):
+				return false
+			if not _plate_records.has(plate_id):
+				return false
+			var record: Dictionary = _plate_records[plate_id]
+			if record.get("location", &"") != &"WASHER_DIRTY":
+				return false
+			_washer_dirty_plates.erase(plate_id)
+			record["location"] = &"RACK"
+			record["table_id"] = &""
+			_cook_actions_count += 1
+			return true
+		&"cook_rice":
+			if not get_cooker_ids().has(station_id) or not _ingredients_by_id.has(&"beras"):
+				return false
+			var existing: Dictionary = _cooker_outputs.get(station_id, {})
+			if not existing.is_empty() and int(existing.get("portions", 0)) > 0:
+				return false
+			var bdef := _ingredients_by_id[&"beras"] as IngredientDef
+			var s1 := bdef.get_next_state(SharedTypes.PrepState.RAW, &"cuci")
+			var s2 := (
+				bdef.get_next_state(s1 as SharedTypes.PrepState, &"masak")
+				if s1 >= 0
+				else -1
+			)
+			if s2 != int(SharedTypes.PrepState.COOKED_RICE):
+				return false
+			if not _consume_one_raw_from_storage(&"beras"):
+				return false
+			var cooked := _create_loose_item(&"beras", SharedTypes.PrepState.COOKED_RICE, &"COOKER_OUTPUT")
+			cooked["portions"] = COOKER_BATCH_PORTIONS
+			_cooker_outputs[station_id] = cooked
+			_cook_actions_count += 1
+			return true
+		&"finish_staged_rice":
+			var src_slot := StringName(task.get("target_slot_id", &""))
+			if not get_cooker_ids().has(station_id) or not _work_table_items.has(src_slot):
+				return false
+			var existing: Dictionary = _cooker_outputs.get(station_id, {})
+			if not existing.is_empty() and int(existing.get("portions", 0)) > 0:
+				return false
+			var staged: Dictionary = _work_table_items[src_slot]
+			var parts: Array = staged.get("parts", [])
+			if staged.get("plate_id", &"") != &"" or parts.size() != 1:
+				return false
+			var part: Dictionary = parts[0]
+			if (
+				StringName(part.get("ingredient_id", &"")) != &"beras"
+				or int(part.get("state", -1)) != SharedTypes.PrepState.WASHED
+			):
+				return false
+			_work_table_items[src_slot] = {}
+			var cooked := _create_loose_item(&"beras", SharedTypes.PrepState.COOKED_RICE, &"COOKER_OUTPUT")
+			cooked["portions"] = COOKER_BATCH_PORTIONS
+			_cooker_outputs[station_id] = cooked
+			_cook_actions_count += 1
+			return true
+		&"finish_staged":
+			var src_slot := StringName(task.get("target_slot_id", &""))
+			if not get_fixture_ids_by_kind(SharedTypes.FixtureKind.STOVE).has(station_id):
+				return false
+			if not _work_table_items.has(src_slot):
+				return false
+			var staged: Dictionary = _work_table_items[src_slot]
+			var parts: Array = staged.get("parts", [])
+			if staged.get("plate_id", &"") != &"" or parts.size() != 1:
+				return false
+			var part: Dictionary = parts[0]
+			var ing_id := StringName(part.get("ingredient_id", &""))
+			var def := _ingredients_by_id.get(ing_id) as IngredientDef
+			if def == null:
+				return false
+			var cur := int(part.get("state", -1)) as SharedTypes.PrepState
+			var next_s := def.get_next_state(cur, &"goreng")
+			if next_s < 0:
+				return false
+			part["state"] = next_s
+			_cook_actions_count += 1
+			return true
+		&"cook_ingredient":
+			var ing_id := StringName(task.get("ingredient_id", &""))
+			var dst_slot := StringName(task.get("target_slot_id", &""))
+			if not get_fixture_ids_by_kind(SharedTypes.FixtureKind.STOVE).has(station_id):
+				return false
+			if not _work_table_items.has(dst_slot) or not _work_table_items[dst_slot].is_empty():
+				return false
+			var def := _ingredients_by_id.get(ing_id) as IngredientDef
+			if def == null:
+				return false
+			var cooked_state := def.get_next_state(SharedTypes.PrepState.RAW, &"goreng")
+			if cooked_state != int(SharedTypes.PrepState.COOKED):
+				return false
+			if not _consume_one_raw_from_storage(ing_id):
+				return false
+			var loose := _create_loose_item(ing_id, cooked_state as SharedTypes.PrepState, &"WORK_TABLE")
+			loose["work_table_id"] = dst_slot
+			_work_table_items[dst_slot] = loose
+			_cook_actions_count += 1
+			return true
+	return false
+
+
+func _total_cooked_rice_portions() -> int:
+	var total := 0
+	for cooker_id in get_cooker_ids():
+		var out: Dictionary = _cooker_outputs.get(cooker_id, {})
+		total += maxi(0, int(out.get("portions", 0)))
+	return total
+
+
+func _compute_open_order_ingredient_needs() -> Dictionary:
+	var needs: Dictionary = {}
+	if (
+		_service_controller == null
+		or not is_instance_valid(_service_controller)
+		or not _service_controller.has_method(&"get_active_order_demand_summary")
+	):
+		return needs
+	var summary: Dictionary = _service_controller.get_active_order_demand_summary()
+	var open_recipes: Dictionary = summary.get("open_recipes", {})
+	var selected_recipes: Array = summary.get("selected_recipe_ids", [])
+
+	for r_id: Variant in selected_recipes:
+		var rdef := get_recipe_def(StringName(r_id))
+		if rdef == null:
+			continue
+		for req: RecipePartDef in rdef.required_parts:
+			if req == null:
+				continue
+			if (
+				req.ingredient_id == &"beras"
+				and req.required_state == SharedTypes.PrepState.COOKED_RICE
+			):
+				needs[&"__need_rice"] = 1
+
+	for raw_rid: Variant in open_recipes:
+		var count := int(open_recipes[raw_rid])
+		var rdef := get_recipe_def(StringName(raw_rid))
+		if rdef == null or count <= 0:
+			continue
+		for req: RecipePartDef in rdef.required_parts:
+			if req == null:
+				continue
+			var req_ing := req.ingredient_id
+			var req_state := req.required_state
+			if req_ing == &"beras" and req_state == SharedTypes.PrepState.COOKED_RICE:
+				needs[&"__need_rice"] = int(needs.get(&"__need_rice", 0)) + count
+			elif req_state == SharedTypes.PrepState.COOKED:
+				needs[req_ing] = int(needs.get(req_ing, 0)) + count
+			elif (
+				req_ing == &"sayur"
+				and req_state == SharedTypes.PrepState.CHOPPED_AND_COOKED
+			):
+				needs[&"sayur_cooked"] = int(needs.get(&"sayur_cooked", 0)) + count
+	return needs
+
+
+func _count_staged_cooked_loose_by_ingredient() -> Dictionary[StringName, int]:
+	var counts: Dictionary[StringName, int] = {}
+	for wt_id in get_work_table_ids():
+		var staged: Dictionary = _work_table_items.get(wt_id, {})
+		if staged.is_empty() or staged.get("plate_id", &"") != &"":
+			continue
+		var parts: Array = staged.get("parts", [])
+		if parts.size() != 1:
+			continue
+		var part: Dictionary = parts[0]
+		if int(part.get("state", -1)) == SharedTypes.PrepState.COOKED:
+			var ing := StringName(part.get("ingredient_id", &""))
+			if ing != &"":
+				counts[ing] = int(counts.get(ing, 0)) + 1
+	return counts
+
+
+func _find_empty_cook_output_slot(claimed_slots: Dictionary) -> StringName:
+	# Prefer right-side counter slots for Cook prep, leaving work_table & left counter free.
+	var preferred_order: Array[StringName] = [
+		&"long_counter_right_01",
+		&"long_counter_right_02",
+		&"long_counter_right_03",
+		&"long_counter_left_03",
+		&"long_counter_left_02",
+		&"long_counter_left_01",
+	]
+	for extra_wt in _get_waiter_priority_work_table_ids():
+		if extra_wt != &"work_table" and not preferred_order.has(extra_wt):
+			preferred_order.append(extra_wt)
+
+	var empty_candidates: Array[StringName] = []
+	for wt_id in preferred_order:
+		if not _work_table_items.has(wt_id):
+			continue
+		var staged: Dictionary = _work_table_items.get(wt_id, {})
+		if staged.is_empty() and not claimed_slots.has(wt_id):
+			empty_candidates.append(wt_id)
+	var total_free := empty_candidates.size()
+	if (
+		_work_table_items.has(&"work_table")
+		and _work_table_items[&"work_table"].is_empty()
+		and not claimed_slots.has(&"work_table")
+	):
+		total_free += 1
+	if empty_candidates.is_empty() or total_free <= 1:
+		return &""
+	return empty_candidates[0]
+
+
+func _has_raw_in_storage(ingredient_id: StringName) -> bool:
+	for unit: Dictionary in _storage_units.values():
+		for slot: Dictionary in unit.get("slots", []):
+			if (
+				slot.get("ingredient_id", &"") == ingredient_id
+				and int(slot.get("quantity", 0)) > 0
+			):
+				return true
+	return false
+
+
+func _consume_one_raw_from_storage(ingredient_id: StringName) -> bool:
+	var unit_ids: Array[StringName] = []
+	for uid: StringName in _storage_units:
+		unit_ids.append(uid)
+	unit_ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+	for uid in unit_ids:
+		var unit: Dictionary = _storage_units[uid]
+		var slots: Array = unit.get("slots", [])
+		for slot: Dictionary in slots:
+			if (
+				slot.get("ingredient_id", &"") == ingredient_id
+				and int(slot.get("quantity", 0)) > 0
+			):
+				var next_qty := int(slot["quantity"]) - 1
+				slot["quantity"] = next_qty
+				if next_qty == 0:
+					slot["ingredient_id"] = &""
+				return true
+	return false
 
 
 func move_cleaned_table_plate_to_washer(table_id: StringName) -> bool:

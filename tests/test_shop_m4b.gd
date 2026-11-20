@@ -109,6 +109,15 @@ func _force_empty_service(service: ServiceController) -> void:
 	service._online_orders_open.clear()
 
 
+func _advance_to_day(game_root: GameRoot, target_day: int) -> void:
+	var service := game_root.get_service_controller() as ServiceController
+	while game_root.get_day_index() < target_day:
+		game_root.start_service_requested()
+		_force_empty_service(service)
+		game_root.request_close_if_drained()
+		game_root.request_continue_from_results()
+
+
 func _test_ingredient_shop_planning_and_validation() -> void:
 	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
 	var game_root := packed.instantiate() as GameRoot
@@ -131,6 +140,20 @@ func _test_ingredient_shop_planning_and_validation() -> void:
 	)
 	_type_word(ui, "beli")
 	await process_frame
+	_check(
+		"Day 1 Belanja Bahan exposes only Day 1 unlocked ingredients (beras, telur)",
+		not ui.get_shop_ingredient_controls(&"beras").is_empty()
+		and not ui.get_shop_ingredient_controls(&"telur").is_empty()
+		and ui.get_shop_ingredient_controls(&"tempe").is_empty()
+		and ui.get_shop_ingredient_controls(&"ayam").is_empty()
+		and ui.get_shop_ingredient_controls(&"sayur").is_empty()
+		and ui.get_shop_ingredient_controls(&"sapi").is_empty()
+	)
+	ui.close_ingredient_shop()
+	_advance_to_day(game_root, 5)
+	_send_left_click(ui, Vector2(256, 52))
+	_type_word(ui, "beli")
+	await process_frame
 	var popup_rect := ui.ingredient_shop_popup.get_global_rect()
 	var beras_row := ui.get_shop_ingredient_controls(&"beras")
 	var sapi_row := ui.get_shop_ingredient_controls(&"sapi")
@@ -148,7 +171,7 @@ func _test_ingredient_shop_planning_and_validation() -> void:
 			sapi_has_fallback = true
 			break
 	_check(
-		"typing beli on storage_box in PLANNING opens centered Belanja Bahan with all 6 ingredients",
+		"typing beli on storage_box in Day 5 PLANNING opens centered Belanja Bahan with all 6 ingredients",
 		ui.is_ingredient_shop_open()
 		and ui.is_modal_blocking()
 		and ui.left_hud_region.visible
@@ -192,14 +215,14 @@ func _test_ingredient_shop_planning_and_validation() -> void:
 		and ui.get_shop_subtotal(&"beras") == 2000
 		and ui.get_shop_total() == 2000
 		and ui.get_shop_remaining_capacity() == 14
-		and int(run.get_run_view()["cash"]) == 100000
+		and int(run.get_run_view()["cash"]) == 92000
 	)
 	ui.shop_cancel_button.pressed.emit()
 	_check(
 		"ga jadi discards basket without mutating cash or stock and closes modal",
 		not ui.is_ingredient_shop_open()
 		and not ui.is_modal_blocking()
-		and int(run.get_run_view()["cash"]) == 100000
+		and int(run.get_run_view()["cash"]) == 92000
 		and int(kitchen.get_storage_unit_view(&"storage_box")["slots"][0]["quantity"]) == 0
 	)
 
@@ -223,13 +246,13 @@ func _test_ingredient_shop_planning_and_validation() -> void:
 		"excessive quantity (16 total) rejected atomically on checkout",
 		not ui.submit_ingredient_shop({ &"beras": 16 })
 		and ui.is_ingredient_shop_open()
-		and int(run.get_run_view()["cash"]) == 100000
+		and int(run.get_run_view()["cash"]) == 92000
 	)
 	_check(
-		"insufficient cash purchase (11 sapi = Rp110000 > Rp100000) rejected atomically",
+		"insufficient cash purchase (11 sapi = Rp110000 > Rp92000) rejected atomically",
 		not ui.submit_ingredient_shop({ &"sapi": 11 })
 		and ui.is_ingredient_shop_open()
-		and int(run.get_run_view()["cash"]) == 100000
+		and int(run.get_run_view()["cash"]) == 92000
 	)
 	ui.adjust_shop_quantity(&"beras", -1)
 	_check(
@@ -251,8 +274,8 @@ func _test_ingredient_shop_planning_and_validation() -> void:
 		"Planning checkout fills storage immediately, updates HUD cash, and blocks duplicate submit",
 		not ui.is_ingredient_shop_open()
 		and not second_checkout
-		and int(run.get_run_view()["cash"]) == 90000
-		and ui.cash_label.text == "Kas: Rp 90k"
+		and int(run.get_run_view()["cash"]) == 82000
+		and ui.cash_label.text == "Kas: Rp 82k"
 		and slots[0]["ingredient_id"] == &"beras"
 		and int(slots[0]["quantity"]) == 2
 		and slots[1]["ingredient_id"] == &"telur"
@@ -302,15 +325,15 @@ func _test_ingredient_shop_serving_live_and_cooking() -> void:
 		and ui.shop_delivery_hint_label.text.contains("100 dtk")
 	)
 
-	# Buy 1 ayam in SERVING -> schedules 100s pending delivery.
+	# Buy 1 telur in SERVING -> schedules 100s pending delivery.
 	var expected_due := game_root.get_service_elapsed() + 100.0
-	ui.adjust_shop_quantity(&"ayam", 1)
+	ui.adjust_shop_quantity(&"telur", 1)
 	ui.shop_checkout_button.pressed.emit()
 	var pending := kitchen.get_pending_delivery_views()
 	_check(
 		"SERVING checkout debits cash and schedules 100s delivery",
 		not ui.is_ingredient_shop_open()
-		and int(run.get_run_view()["cash"]) == 89000
+		and int(run.get_run_view()["cash"]) == 92000
 		and pending.size() == 1
 		and is_equal_approx(float(pending[0]["due_at"]), expected_due)
 	)
@@ -323,19 +346,20 @@ func _test_ingredient_shop_serving_live_and_cooking() -> void:
 	var rem_secs := ceili(float(pending[0]["due_at"]) - game_root.get_service_elapsed())
 	_check(
 		"re-opened shop displays live pending delivery countdown",
-		ui.shop_pending_label.text.contains("Ayam x1")
+		ui.shop_pending_label.text.contains("Telur x1")
 		and ui.shop_pending_label.text.contains("%d dtk" % rem_secs)
 	)
 	game_root._process(50.0)
 	ui._process(0.016)
-	var third_slot_lbl := ui.shop_slots_row.get_child(2).get_child(0) as Label
+	var second_slot := ui.shop_slots_row.get_child(1)
+	var second_slot_lbl := second_slot.get_meta(&"slot_label_ref", null) as Label
 	_check(
 		"shop refreshes live when 100s delivery arrives while open",
 		kitchen.get_pending_delivery_views().is_empty()
 		and not ui.shop_pending_label.visible
 		and ui.shop_pending_label.text == ""
-		and third_slot_lbl != null
-		and third_slot_lbl.text == "Ayam 1/5"
+		and second_slot_lbl != null
+		and second_slot_lbl.text == "Telur 2/5"
 	)
 
 	# Cancel closes shop keeping player at storage_box so kitchen cooking works end-to-end.
@@ -398,43 +422,44 @@ func _test_transaction_hardening_and_atomic_rollback() -> void:
 		kitchen.receive_stock(&"pur_plan_pin", &"beras", 2, &"storage_box")
 	)
 
-	# 2. SERVING shipment: reject early receipt, reject wrong container, block delivered refund.
+	# 2. SERVING shipment: advance to Day 3 so ayam is unlocked, then reject early/wrong container.
+	_advance_to_day(game_root, 3)
 	game_root.start_service_requested()
 	_check(
-		"SERVING purchase 2 beras (4000) schedules pur_1_0001 at due=100",
+		"SERVING purchase 2 beras (4000) schedules pur_3_0001 at due=100",
 		run.request_ingredient_purchase(&"beras", 2, &"storage_box")
-		and int(run.get_run_view()["cash"]) == 96000
+		and int(run.get_run_view()["cash"]) == 92000
 	)
 	game_root._process(50.0)
 	var early_res: Dictionary = kitchen.get_storage_unit_view(&"storage_box")["reservations"]
 	_check(
 		"early receive_stock at t=50 rejected and preserves reservation",
-		not kitchen.receive_stock(&"pur_1_0001", &"beras", 2, &"storage_box")
-		and not kitchen.is_purchase_delivered(&"pur_1_0001")
-		and early_res.has(&"pur_1_0001")
+		not kitchen.receive_stock(&"pur_3_0001", &"beras", 2, &"storage_box")
+		and not kitchen.is_purchase_delivered(&"pur_3_0001")
+		and early_res.has(&"pur_3_0001")
 	)
-	var early_ref: Array[StringName] = [&"pur_1_0001"]
+	var early_ref: Array[StringName] = [&"pur_3_0001"]
 	run.refund_canceled_deliveries_once(early_ref)
 	_check(
 		"early refund attempt while shipment still PENDING rejected",
-		int(run.get_run_view()["cash"]) == 96000
+		int(run.get_run_view()["cash"]) == 92000
 	)
-	# Advance to due time 100s -> pur_1_0001 delivers cleanly and cannot be refunded after delivery.
+	# Advance to due time 100s -> pur_3_0001 delivers cleanly and cannot be refunded after delivery.
 	game_root._process(50.0)
 	run.refund_canceled_deliveries_once(early_ref)
 	_check(
-		"delivered pur_1_0001 cannot be refunded directly via refund_canceled_deliveries_once",
-		int(run.get_run_view()["cash"]) == 96000
-		and kitchen.is_purchase_delivered(&"pur_1_0001")
-		and run.get_purchase_record(&"pur_1_0001").get("status", &"") == &"DELIVERED"
-		and not kitchen.receive_stock(&"pur_1_0001", &"beras", 2, &"storage_box")
+		"delivered pur_3_0001 cannot be refunded directly via refund_canceled_deliveries_once",
+		int(run.get_run_view()["cash"]) == 92000
+		and kitchen.is_purchase_delivered(&"pur_3_0001")
+		and run.get_purchase_record(&"pur_3_0001").get("status", &"") == &"DELIVERED"
+		and not kitchen.receive_stock(&"pur_3_0001", &"beras", 2, &"storage_box")
 	)
 
 	# Multiple concurrent pending shipments + exact wrong-container at/after due_at check:
 	_check(
 		"purchase 2 eggs and 3 ayam while t=100 -> due=200",
 		run.request_ingredient_basket_purchase({ &"telur": 2, &"ayam": 3 }, &"storage_box")
-		and int(run.get_run_view()["cash"]) == 72000
+		and int(run.get_run_view()["cash"]) == 68000
 		and kitchen.get_pending_delivery_views().size() == 2
 	)
 	# Manually check wrong container at/after due_at using beras (fits alongside existing 2 beras):
@@ -459,12 +484,12 @@ func _test_transaction_hardening_and_atomic_rollback() -> void:
 	# Drain service before t=200 -> remaining 2 pending deliveries (24000) refunded exact once.
 	_force_empty_service(service)
 	game_root.request_close_if_drained()
-	# cash: 72000 + 24000 refund - 2000 rice_cooker electricity = 94000
-	var ids_after: Array[StringName] = [&"pur_1_0002", &"pur_1_0003"]
+	# cash: 68000 + 24000 refund - 2000 rice_cooker electricity = 90000
+	var ids_after: Array[StringName] = [&"pur_3_0002", &"pur_3_0003"]
 	run.refund_canceled_deliveries_once(ids_after)
 	_check(
-		"canceled pending basket refunded once (94000) and delivered pur_1_0001 not refunded",
-		int(run.get_run_view()["cash"]) == 94000
+		"canceled pending basket refunded once (90000) and delivered pur_3_0001 not refunded",
+		int(run.get_run_view()["cash"]) == 90000
 	)
 
 	game_root.free()
@@ -543,8 +568,9 @@ func _test_planning_basket_atomicity_and_failure() -> void:
 		and run_signals["count"] == 0
 	)
 
-	# Subsequent valid PLANNING basket succeeds after failure and emits kitchen_state_changed once
+	# Subsequent valid PLANNING basket succeeds on Day 3 after failure and emits kitchen_state_changed once
 	# with complete committed inventory visible to observers.
+	_advance_to_day(root_fail, 3)
 	kitchen_fail.fail_second_line = false
 	var observed_at_signal := { "slots_count": 0, "has_all_3": false }
 	kitchen_fail.kitchen_state_changed.connect(
@@ -560,26 +586,28 @@ func _test_planning_basket_atomicity_and_failure() -> void:
 				and int(view_now[2].get("quantity", 0)) == 3
 			)
 	)
+	var pre_ok_sig_kitchen := int(kitchen_signals["count"])
+	var pre_ok_sig_run := int(run_signals["count"])
 	var success_ok := run_fail.request_ingredient_basket_purchase(
 		{ &"ayam": 1, &"beras": 2, &"telur": 3 },
 		&"storage_box"
 	)
 	var box_after_ok := kitchen_fail.get_storage_unit_view(&"storage_box")
-	var rec_ayam := run_fail.get_purchase_record(&"pur_1_0003")
-	var rec_beras := run_fail.get_purchase_record(&"pur_1_0004")
-	var rec_telur := run_fail.get_purchase_record(&"pur_1_0005")
+	var rec_ayam := run_fail.get_purchase_record(&"pur_3_0003")
+	var rec_beras := run_fail.get_purchase_record(&"pur_3_0004")
+	var rec_telur := run_fail.get_purchase_record(&"pur_3_0005")
 	_check(
 		"PLANNING multi-item basket commits atomically once with complete signal state",
 		success_ok
 		and observed_at_signal["slots_count"] == 1
 		and observed_at_signal["has_all_3"]
-		and kitchen_signals["count"] == 1
-		and run_signals["count"] == 1
+		and int(kitchen_signals["count"]) - pre_ok_sig_kitchen == 1
+		and int(run_signals["count"]) - pre_ok_sig_run == 1
 		and (box_after_ok["reservations"] as Dictionary).is_empty()
-		and kitchen_fail.is_purchase_delivered(&"pur_1_0003")
-		and kitchen_fail.is_purchase_delivered(&"pur_1_0004")
-		and kitchen_fail.is_purchase_delivered(&"pur_1_0005")
-		and int(run_fail.get_run_view()["cash"]) == 81000
+		and kitchen_fail.is_purchase_delivered(&"pur_3_0003")
+		and kitchen_fail.is_purchase_delivered(&"pur_3_0004")
+		and kitchen_fail.is_purchase_delivered(&"pur_3_0005")
+		and int(run_fail.get_run_view()["cash"]) == 77000
 		and rec_ayam.get("status", &"") == &"DELIVERED"
 		and rec_beras.get("status", &"") == &"DELIVERED"
 		and rec_telur.get("status", &"") == &"DELIVERED"
@@ -638,6 +666,7 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
 	var ui := game_root.get_node("UI") as GameUI
+	_advance_to_day(game_root, 3)
 
 	_send_left_click(ui, Vector2(256, 52))
 	_type_word(ui, "beli")
@@ -763,6 +792,7 @@ func _test_purchased_ingredients_processing_and_delivery() -> void:
 	var k2 := g2.get_kitchen_controller() as KitchenController
 	var w2 := g2.get_node("World") as WorldMap
 	var u2 := g2.get_node("UI") as GameUI
+	_advance_to_day(g2, 3)
 
 	_type_word(u2, "buka")
 	_send_left_click(u2, Vector2(256, 52))

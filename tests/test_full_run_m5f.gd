@@ -173,8 +173,12 @@ func _test_full_7_day_won_run() -> void:
 	await process_frame
 	ui.get_edit_menu_preview_button(&"nasi_telor").pressed.emit()
 	_check(
-		"Edit Menu displays Nasi Telor details cleanly before Day 1 service",
-		ui.get_edit_menu_detail_lines() == PackedStringArray(["Beras", "Telur"])
+		"Edit Menu displays Nasi Telur details cleanly before Day 1 service",
+		ui.get_edit_menu_detail_lines() == PackedStringArray([
+			"Cuci dan masak beras, goreng telur, lalu sajikan bersama nasi.",
+			"Beras",
+			"Telur",
+		])
 		and ui.get_pending_menu_selection() == [&"nasi_telor"]
 	)
 	_send_key(ui, 0, KEY_ESCAPE)
@@ -290,12 +294,12 @@ func _test_full_7_day_won_run() -> void:
 	_type_word(ui, "saji")
 	_check("serving Customer 2 on dining_table_01 brings cash to 147k (cooker 2 portions left)", int(run.get_run_view()["cash"]) == 147000 and int(kitchen.get_cooker_output_view(&"rice_cooker")["portions"]) == 2)
 
-	# Advance to t=130s (Customer 3 expires at t=160s -> single miss debt), order 1 sayur (due t=230s) while shop keeps clock running.
+	# Advance to t=130s (Customer 3 expires at t=160s -> single miss debt), order 1 beras (due t=230s) while shop keeps clock running.
 	game_root._process(88.0)
 	_click_object(ui, world, &"storage_box")
 	_type_word(ui, "beli")
 	await process_frame
-	ui.adjust_shop_quantity(&"sayur", 1)
+	ui.adjust_shop_quantity(&"beras", 1)
 	ui.shop_checkout_button.pressed.emit()
 	_check(
 		"SERVING pending purchase debits 2k and schedules due_at = now + 100s",
@@ -314,7 +318,7 @@ func _test_full_7_day_won_run() -> void:
 		and int(d1_settle["electricity_charge"]) == 2000
 		and int(d1_settle["end_cash"]) == 145000
 		and int(d1_settle["penalty_debt_after"]) in [1, 2]
-		and ui.result_title_label.text == "Hasil Hari 1"
+		and ui.result_title_label.text == "Hari 1 selesai"
 	)
 	# Idempotent settlement guard before Continue.
 	_check(
@@ -326,12 +330,12 @@ func _test_full_7_day_won_run() -> void:
 
 	# --- DAY 2 PLANNING: unlock check, buy fridge, fridge stock carryover, edit menu, online driver ---
 	_check(
-		"Day 2 starts PLANNING with box cleared, nasi_ayam unlocked & NOT auto-selected",
+		"Day 2 starts PLANNING with box cleared, nasi_tempe unlocked & NOT auto-selected",
 		game_root.get_day_index() == 2
 		and game_root.get_phase() == SharedTypes.Phase.PLANNING
 		and kitchen.get_cooker_output_view(&"rice_cooker").is_empty()
 		and kitchen.get_storage_remaining_capacity(&"storage_box") == 15
-		and run.get_run_view()["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_ayam"]
+		and run.get_run_view()["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_tempe"]
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
 
@@ -348,12 +352,12 @@ func _test_full_7_day_won_run() -> void:
 		and run.get_daily_electricity_estimate() == 6000
 	)
 
-	# Buy beras x2 + sayur x1 into fridge_01 (6k -> stays for Day 3!), and beras x1 + telur x1 into box (5k).
+	# Buy beras x2 + tempe x1 into fridge_01 (6k -> stays for Day 3!), and beras x1 + telur x1 into box (5k).
 	_click_object(ui, world, &"fridge_01")
 	_type_word(ui, "beli")
 	await process_frame
 	ui.adjust_shop_quantity(&"beras", 2)
-	ui.adjust_shop_quantity(&"sayur", 1)
+	ui.adjust_shop_quantity(&"tempe", 1)
 	ui.shop_checkout_button.pressed.emit()
 	_click_object(ui, world, &"storage_box")
 	_type_word(ui, "beli")
@@ -402,44 +406,46 @@ func _test_full_7_day_won_run() -> void:
 	ui.continue_button.pressed.emit()
 	await process_frame
 
-	# --- DAY 3 PLANNING -> SERVING: nasi_komplit unlocked, fridge persistence, potong chop & plate ---
+	# --- DAY 3 PLANNING -> SERVING: Day 3 unlocks, fridge persistence, 3-part nasi_telur_tempe ---
 	var fridge_slots_d3: Array = kitchen.get_storage_unit_view(&"fridge_01")["slots"]
 	_check(
-		"Day 3 starts PLANNING with nasi_komplit unlocked unchecked & fridge_01 stock preserved",
+		"Day 3 starts PLANNING with Day 3 recipes unlocked unchecked & fridge_01 stock preserved",
 		game_root.get_day_index() == 3
-		and run.get_run_view()["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"]
+		and run.get_run_view()["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_tempe", &"nasi_ayam", &"nasi_telur_tempe"]
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 		and fridge_slots_d3[0]["ingredient_id"] == &"beras"
 		and int(fridge_slots_d3[0]["quantity"]) == 2
-		and fridge_slots_d3[1]["ingredient_id"] == &"sayur"
+		and fridge_slots_d3[1]["ingredient_id"] == &"tempe"
 		and int(fridge_slots_d3[1]["quantity"]) == 1
 	)
 
-	# Enable all 3 recipes via Edit Menu & confirm.
+	# Enable 3 recipes via Edit Menu & confirm.
 	ui.open_edit_menu()
 	await process_frame
-	ui.get_edit_menu_preview_button(&"nasi_komplit").pressed.emit()
+	ui.get_edit_menu_preview_button(&"nasi_telur_tempe").pressed.emit()
 	_check(
-		"Day 3 Edit Menu shows Sayur (potong) in detail panel",
-		ui.get_edit_menu_detail_lines() == PackedStringArray(["Beras", "Ayam", "Tempe", "Sayur (potong)", "Telur"])
+		"Day 3 Edit Menu shows description and parts for nasi_telur_tempe in detail panel",
+		ui.get_edit_menu_detail_lines() == PackedStringArray([
+			"Masak nasi, goreng telur dan tempe, lalu satukan.",
+			"Beras",
+			"Telur",
+			"Tempe",
+		])
 	)
 	ui.get_edit_menu_recipe_button(&"nasi_ayam").button_pressed = true
-	ui.get_edit_menu_recipe_button(&"nasi_komplit").button_pressed = true
+	ui.get_edit_menu_recipe_button(&"nasi_telur_tempe").button_pressed = true
 	ui.edit_menu_confirm_button.pressed.emit()
 	_check("Edit Menu confirm enables 3-dish menu cleanly", run.get_run_view()["selected_recipe_ids"].size() == 3)
 
-	# Buy ayam/tempe/telur into box (11k -> 14k) and assemble a full real nasi_komplit using fridge + box + chop!
+	# Buy telur x1 into box and assemble a full 3-part nasi_telur_tempe using fridge + box + stove + cooker!
 	_click_object(ui, world, &"storage_box")
 	_type_word(ui, "beli")
 	await process_frame
-	ui.adjust_shop_quantity(&"ayam", 1)
-	ui.adjust_shop_quantity(&"tempe", 1)
 	ui.adjust_shop_quantity(&"telur", 1)
 	ui.shop_checkout_button.pressed.emit()
 
 	_send_left_click(ui, Vector2(352, 276))
 	_type_word(ui, "buka")
-	# Cook rice from fridge_01 + chop sayur from fridge_01 + cook box items -> assemble nasi_komplit!
 	_click_object(ui, world, &"fridge_01")
 	_type_word(ui, "beras")
 	_click_object(ui, world, &"washer")
@@ -452,21 +458,20 @@ func _test_full_7_day_won_run() -> void:
 	_click_object(ui, world, &"work_table_stage")
 
 	_click_object(ui, world, &"fridge_01")
-	_type_word(ui, "sayur")
-	_click_object(ui, world, &"work_table_chop")
-	_type_word(ui, "potong")
+	_type_word(ui, "tempe")
+	_click_object(ui, world, &"stove")
+	_type_word(ui, "goreng")
 	_click_object(ui, world, &"work_table_stage")
 
-	for ing: String in ["ayam", "tempe", "telur"]:
-		_click_object(ui, world, &"storage_box")
-		_type_word(ui, ing)
-		_click_object(ui, world, &"stove")
-		_type_word(ui, "goreng")
-		_click_object(ui, world, &"work_table_stage")
+	_click_object(ui, world, &"storage_box")
+	_type_word(ui, "telur")
+	_click_object(ui, world, &"stove")
+	_type_word(ui, "goreng")
+	_click_object(ui, world, &"work_table_stage")
 
 	_check(
-		"full 5-part nasi_komplit assembled order-independently across fridge, box, chop, stove, cooker",
-		kitchen.get_work_table_view(&"work_table").get("matched_recipe_id", &"") == &"nasi_komplit"
+		"full 3-part nasi_telur_tempe assembled order-independently across fridge, box, stove, cooker",
+		kitchen.get_work_table_view(&"work_table").get("matched_recipe_id", &"") == &"nasi_telur_tempe"
 	)
 
 	_check("Day 3 auto-closes via natural _process drain", await _drain_day_via_process(game_root, service, 20.0, 60))
@@ -474,17 +479,49 @@ func _test_full_7_day_won_run() -> void:
 	ui.continue_button.pressed.emit()
 	await process_frame
 
-	# --- DAYS 4, 5, 6: sequentially verify zero skipped/duplicated days and stable unlocks ---
+	# --- DAYS 4, 5, 6: sequentially verify Day 4 Sayur (potong) + egg_salad, zero skipped days & scaling unlocks ---
+	var expected_unlock_counts := {4: 6, 5: 8, 6: 10}
 	for expected_day: int in [4, 5, 6]:
 		_check(
-			"Day %d starts PLANNING sequentially with preserved 3-recipe catalog" % expected_day,
+			"Day %d starts PLANNING sequentially with expected recipe catalog" % expected_day,
 			game_root.get_day_index() == expected_day
 			and game_root.get_phase() == SharedTypes.Phase.PLANNING
 			and ui.day_label.text == "Hari %d/7" % expected_day
-			and run.get_run_view()["unlocked_recipe_ids"].size() == 3
+			and run.get_run_view()["unlocked_recipe_ids"].size() == int(expected_unlock_counts[expected_day])
 		)
+		if expected_day == 4:
+			ui.open_edit_menu()
+			await process_frame
+			ui.get_edit_menu_preview_button(&"egg_salad").pressed.emit()
+			_check(
+				"Day 4 Edit Menu shows Sayur (potong) for egg_salad in detail panel",
+				ui.get_edit_menu_detail_lines() == PackedStringArray([
+					"Goreng telur, potong sayur, lalu sajikan tanpa nasi.",
+					"Telur",
+					"Sayur (potong)",
+				])
+			)
+			ui.close_edit_menu()
+			run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
+			run.request_ingredient_purchase(&"telur", 1, &"storage_box")
 		_send_left_click(ui, Vector2(352, 276))
 		_type_word(ui, "buka")
+		if expected_day == 4:
+			_click_object(ui, world, &"storage_box")
+			_type_word(ui, "sayur")
+			_click_object(ui, world, &"work_table_chop")
+			_type_word(ui, "potong")
+			_click_object(ui, world, &"plate_rack")
+			_click_object(ui, world, &"work_table_stage")
+			_click_object(ui, world, &"storage_box")
+			_type_word(ui, "telur")
+			_click_object(ui, world, &"stove")
+			_type_word(ui, "goreng")
+			_click_object(ui, world, &"work_table_stage")
+			_check(
+				"Day 4 chop sayur + fried telur assembles egg_salad cleanly without rice",
+				kitchen.get_work_table_view(&"work_table").get("matched_recipe_id", &"") == &"egg_salad"
+			)
 		_check("Day %d enters SERVING" % expected_day, game_root.is_serving())
 		_check("Day %d auto-closes cleanly" % expected_day, await _drain_day_via_process(game_root, service, 20.0, 60))
 		_check(
@@ -500,7 +537,7 @@ func _test_full_7_day_won_run() -> void:
 	ui.open_edit_menu()
 	await process_frame
 	ui.get_edit_menu_recipe_button(&"nasi_ayam").button_pressed = false
-	ui.get_edit_menu_recipe_button(&"nasi_komplit").button_pressed = false
+	ui.get_edit_menu_recipe_button(&"nasi_telur_tempe").button_pressed = false
 	ui.edit_menu_confirm_button.pressed.emit()
 	# Set pre-serve cash on Day 7 Planning to target + electricity (6k) - 1 dine-in nasi_telor (20k) + 5k ingredients = 691,000,
 	# and reset accumulated unserved-day debt so Day 7 spawns Customer 0 for real dish service.
@@ -533,7 +570,7 @@ func _test_full_7_day_won_run() -> void:
 		and int(run.get_run_view()["cash"]) == 700000
 		and int(d7_settle["day7_outcome"]) == SharedTypes.DayOutcome.WON
 		and ui.day_result_side_panel.visible
-		and ui.result_title_label.text == "Hari 7 — Berhasil!"
+		and ui.result_title_label.text == "Target tercapai!"
 		and not ui.continue_button.visible
 		and ui.continue_button.disabled
 		and ui.extra_mode_button.visible
@@ -608,7 +645,7 @@ func _test_full_7_day_lost_boundary_and_negative_cash() -> void:
 		and int(d7_lost["end_cash"]) == 699999
 		and int(run.get_run_view()["cash"]) == 699999
 		and int(d7_lost["day7_outcome"]) == SharedTypes.DayOutcome.LOST
-		and ui.result_title_label.text == "Hari 7 — Belum cukup uang"
+		and ui.result_title_label.text == "Belum tercapai"
 		and not ui.continue_button.visible
 		and ui.continue_button.disabled
 		and not ui.extra_mode_button.visible

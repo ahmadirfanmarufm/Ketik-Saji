@@ -96,9 +96,9 @@ func _cook_plated_nasi_telor(kitchen: KitchenController) -> void:
 	kitchen.on_interactable_clicked(&"work_table_stage")
 
 
-func _cook_loose_sayur(kitchen: KitchenController) -> void:
+func _cook_loose_telur(kitchen: KitchenController) -> void:
 	kitchen.on_interactable_clicked(&"storage_box")
-	for ch in ["s", "a", "y", "u", "r"]:
+	for ch in ["t", "e", "l", "u", "r"]:
 		kitchen.accept_typed_character(ch)
 	kitchen.on_interactable_clicked(&"stove")
 	for ch in ["g", "o", "r", "e", "n", "g"]:
@@ -124,13 +124,6 @@ func _cook_plated_nasi_ayam(kitchen: KitchenController) -> void:
 	kitchen.on_interactable_clicked(&"work_table_stage")
 	kitchen.on_interactable_clicked(&"storage_box")
 	for ch in ["a", "y", "a", "m"]:
-		kitchen.accept_typed_character(ch)
-	kitchen.on_interactable_clicked(&"stove")
-	for ch in ["g", "o", "r", "e", "n", "g"]:
-		kitchen.accept_typed_character(ch)
-	kitchen.on_interactable_clicked(&"work_table_stage")
-	kitchen.on_interactable_clicked(&"storage_box")
-	for ch in ["t", "e", "m", "p", "e"]:
 		kitchen.accept_typed_character(ch)
 	kitchen.on_interactable_clicked(&"stove")
 	for ch in ["g", "o", "r", "e", "n", "g"]:
@@ -739,8 +732,7 @@ func _serve_day1_four_diners(
 
 
 func _test_multi_overflow_reindex_and_different_recipe_delivery() -> void:
-	# Transition Day 1 -> Day 2 via real GameRoot so Day 2 unlocks both nasi_telor & nasi_ayam
-	# and provides day_queue_initial = 10 (0 debt after serving all 4 Day 1 diners cleanly):
+	# Transition Day 1 -> Day 3 via real GameRoot so Day 3 unlocks both nasi_telor & nasi_ayam:
 	var packed := load("res://scenes/main/game_root.tscn") as PackedScene
 	var game_root := packed.instantiate() as GameRoot
 	root.add_child(game_root)
@@ -754,12 +746,18 @@ func _test_multi_overflow_reindex_and_different_recipe_delivery() -> void:
 	game_root.start_service_requested()
 	_serve_day1_four_diners(game_root, kitchen, service)
 	game_root.request_continue_from_results()
+	game_root.start_service_requested()
+	service._day_queue_remaining = 0
+	service._outside_dine_in_queue.clear()
+	service._in_shop_dine_in_count = 0
+	service._online_orders_open.clear()
+	game_root.request_close_if_drained()
+	game_root.request_continue_from_results()
 	run.select_daily_menu([&"nasi_telor", &"nasi_ayam"])
 
 	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
 	run.request_ingredient_purchase(&"ayam", 1, &"storage_box")
-	run.request_ingredient_purchase(&"tempe", 1, &"storage_box")
 	service.set_rng_seed(777)
 	game_root.start_service_requested()
 
@@ -800,7 +798,7 @@ func _test_multi_overflow_reindex_and_different_recipe_delivery() -> void:
 			spot_ayam_id = StringName(five_views[i]["driver_id"])
 
 	# Assemble real nasi_ayam once; verify cross-recipe rejection on nasi_telor driver AND real
-	# delivery onto nasi_ayam driver (paying floor(28000 * 70 / 100) = 19600) + FIFO reindex!
+	# delivery onto nasi_ayam driver (paying floor(29000 * 70 / 100) = 20300) + FIFO reindex!
 	if got_telor and got_ayam and spot_telor_id != &"" and spot_ayam_id != &"":
 		_cook_plated_nasi_ayam(kitchen)
 		var ayam_item := StringName(kitchen.get_held_item_view()["item_id"])
@@ -815,9 +813,9 @@ func _test_multi_overflow_reindex_and_different_recipe_delivery() -> void:
 		var second_ov_id := StringName(five_views[4]["driver_id"])
 		var freed_spot := StringName(service.get_driver_view(spot_ayam_id)["spot_id_or_empty"])
 		_check(
-			"same nasi_ayam dish completes matching driver (19600) & reindexes remaining FIFO",
+			"same nasi_ayam dish completes matching driver (20300) & reindexes remaining FIFO",
 			service.try_serve_driver(spot_ayam_id, ayam_item)
-			and int(run.get_run_view()["cash"]) == cash_pre + 19600
+			and int(run.get_run_view()["cash"]) == cash_pre + 20300
 			and kitchen.get_held_item_view().is_empty()
 			and StringName(service.get_driver_view(first_ov_id)["spot_id_or_empty"]) == freed_spot
 			and int(service.get_driver_view(first_ov_id)["queue_index"]) == -1
@@ -844,8 +842,7 @@ func _test_online_delivery_plate_return_payout_and_rejections() -> void:
 
 	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
-	run.request_ingredient_purchase(&"telur", 2, &"storage_box")
-	run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
+	run.request_ingredient_purchase(&"telur", 3, &"storage_box")
 	var cash_before := int(run.get_run_view()["cash"])
 
 	game_root.start_service_requested()
@@ -855,7 +852,7 @@ func _test_online_delivery_plate_return_payout_and_rejections() -> void:
 	var ord_id := StringName(drv_view["order_id"])
 
 	# 1. Unplated / loose food rejected without consuming item or crediting cash:
-	_cook_loose_sayur(kitchen)
+	_cook_loose_telur(kitchen)
 	var loose_id := StringName(kitchen.get_held_item_view()["item_id"])
 	_check(
 		"unplated food rejected by try_serve_driver without mutating hand/order/cash",
@@ -937,16 +934,23 @@ func _test_online_delivery_plate_return_payout_and_rejections() -> void:
 	game_root.free()
 	await process_frame
 
-	# 5. Wrong plated dish (nasi_ayam) against nasi_telor online order rejected cleanly:
+	# 5. Wrong plated dish (nasi_ayam) against nasi_telor online order rejected cleanly (Day 3):
 	var g_wrong := packed.instantiate() as GameRoot
 	root.add_child(g_wrong)
 	await process_frame
 	var kw := g_wrong.get_kitchen_controller() as KitchenController
 	var sw := g_wrong.get_service_controller() as ServiceController
 	var rw := g_wrong.get_run_controller() as RunController
+	for _d in range(1, 3):
+		g_wrong.start_service_requested()
+		sw._day_queue_remaining = 0
+		sw._outside_dine_in_queue.clear()
+		sw._in_shop_dine_in_count = 0
+		sw._online_orders_open.clear()
+		g_wrong.request_close_if_drained()
+		g_wrong.request_continue_from_results()
 	rw.request_ingredient_purchase(&"beras", 1, &"storage_box")
 	rw.request_ingredient_purchase(&"ayam", 1, &"storage_box")
-	rw.request_ingredient_purchase(&"tempe", 1, &"storage_box")
 	var cw := int(rw.get_run_view()["cash"])
 	g_wrong.start_service_requested()
 	g_wrong._process(10.0)
@@ -1249,8 +1253,7 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 	# 2. Prepare ingredients + enter SERVING -> stage empty plate to verify zero side-effects:
 	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.request_ingredient_purchase(&"beras", 4, &"storage_box")
-	run.request_ingredient_purchase(&"telur", 4, &"storage_box")
-	run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
+	run.request_ingredient_purchase(&"telur", 5, &"storage_box")
 	var cash_start := int(run.get_run_view()["cash"])
 	game_root.start_service_requested()
 
@@ -1319,12 +1322,12 @@ func _test_kitchen_online_commands_and_driver_selection_lifecycle() -> void:
 		and kitchen.get_player_tile() == Vector2i(7, 4)
 	)
 
-	# Loose/unplated cooked sayur hides saji on driver and backend rejects wrong_order cleanly:
+	# Loose/unplated cooked telur hides saji on driver and backend rejects wrong_order cleanly:
 	game_root._process(1.0)
-	_cook_loose_sayur(kitchen)
+	_cook_loose_telur(kitchen)
 	_click_canvas_target(ui, world, d1_id)
 	_check(
-		"holding unplated cooked sayur hides saji on in-spot driver",
+		"holding unplated cooked telur hides saji on in-spot driver",
 		kitchen.get_allowed_commands_for_selected_target().is_empty()
 	)
 	_type_chars_on_kitchen(kitchen, "saji")
@@ -1490,7 +1493,7 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		and preview_vis.visible
 		and preview_vis.modulate == Color.WHITE
 		and preview_label != null
-		and preview_label.text == "Nasi Telor"
+		and preview_label.text == "Nasi Telur"
 		and preview_dish != null
 		and preview_dish.get_child_count() > 0
 	)
@@ -1515,7 +1518,7 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		"OnlineStation dialogue shows preview recipe and ready acceptance status",
 		ui.interaction_dialogue.visible
 		and ui.target_title_label.text == "Stasiun Online"
-		and ui.target_status_label.text.begins_with("Tawaran: Nasi Telor (Siap diterima")
+		and ui.target_status_label.text.begins_with("Tawaran: Nasi Telur (Siap diterima")
 		and ui.allowed_commands_label.text == "terima"
 		and ui.prefix_prompt_label.text == "Ketik: terima"
 	)
@@ -1549,7 +1552,7 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		and d1_sprite != null
 		and d1_sprite.modulate == Color.WHITE
 		and d1_label != null
-		and d1_label.text == "Nasi Telor 60s"
+		and d1_label.text == "Nasi Telur 60s"
 		and d1_fill != null
 		and d1_fill.size.x >= 27.5
 	)
@@ -1571,7 +1574,7 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		and d4_sprite != null
 		and d4_sprite.modulate != Color.WHITE
 		and d4_label != null
-		and d4_label.text == "Antre Nasi Telor 60s"
+		and d4_label.text == "Antre Nasi Telur 60s"
 	)
 
 	# Click overflow driver on canvas -> does not move player, shows overflow dialogue & feedback:
@@ -1585,7 +1588,7 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		and ui.get_feedback_code() == &"driver_not_at_pickup"
 		and ui.context_message_label.text == "Pengantar belum mendapatkan tempat pickup."
 		and ui.target_title_label.text == "Pengantar Antrean"
-		and ui.target_status_label.text == "Pesanan: Nasi Telor (60 dtk) — Di antrean luar"
+		and ui.target_status_label.text == "Pesanan: Nasi Telur (60 dtk) — Di antrean luar"
 	)
 
 	# Typing 's' while overflow driver is selected rejects silently with shake (no Huruf tidak cocok):
@@ -1629,11 +1632,11 @@ func _test_online_presentation_overflow_and_game_ui() -> void:
 		and promoted_sprite != null
 		and promoted_sprite.modulate == Color.WHITE
 		and promoted_label != null
-		and promoted_label.text == "Nasi Telor 15s"
+		and promoted_label.text == "Nasi Telur 15s"
 		and kitchen.get_selected_target_id() == d4_id
 		and kitchen.get_allowed_commands_for_selected_target().is_empty()
 		and ui.target_title_label.text == "Pengantar Spot 1"
-		and ui.target_status_label.text == "Pesanan: Nasi Telor (15 dtk) — Di tempat pickup"
+		and ui.target_status_label.text == "Pesanan: Nasi Telur (15 dtk) — Di tempat pickup"
 		and ui.get_feedback_code() != &"driver_not_at_pickup"
 	)
 
@@ -1692,13 +1695,20 @@ func _test_offer_rotation_cutoff_dimming_and_overflow_expiry() -> void:
 	game_root._process(25.0)
 	ui.continue_button.pressed.emit()
 
+	game_root.start_service_requested()
+	service._day_queue_remaining = 0
+	service._outside_dine_in_queue.clear()
+	service._in_shop_dine_in_count = 0
+	service._online_orders_open.clear()
+	game_root.request_close_if_drained()
+	game_root.request_continue_from_results()
+
 	service.set_rng_seed(98765)
 	_use_instant_online_test_config(run, service, kitchen, game_root, 0.0, 0.05, 60.0)
 	run.select_daily_menu([&"nasi_telor", &"nasi_ayam"])
 	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
 	run.request_ingredient_purchase(&"telur", 2, &"storage_box")
 	run.request_ingredient_purchase(&"ayam", 2, &"storage_box")
-	run.request_ingredient_purchase(&"tempe", 2, &"storage_box")
 	game_root.start_service_requested()
 
 	var preview_vis := world.get_online_preview_visual()
@@ -1718,7 +1728,7 @@ func _test_offer_rotation_cutoff_dimming_and_overflow_expiry() -> void:
 			break
 	var rotated_recipe := StringName(service.get_online_offer_view()["preview_recipe_id"])
 	var expected_rotated_label := (
-		"Nasi Ayam" if rotated_recipe == &"nasi_ayam" else "Nasi Telor"
+		"Nasi Ayam" if rotated_recipe == &"nasi_ayam" else "Nasi Telur"
 	)
 	_check(
 		"OnlineStation preview visual and dialogue update on offer rotation",
@@ -1825,7 +1835,7 @@ func _test_offer_rotation_cutoff_dimming_and_overflow_expiry() -> void:
 	_check(
 		"existing dine-in table dialogue remains intact alongside M3.3 online changes",
 		ui_2.target_title_label.text == "Meja Makan 1"
-		and ui_2.context_message_label.text.contains("Nasi Telor")
+		and ui_2.context_message_label.text.contains("Nasi Telur")
 		and not ui_2.target_status_label.visible
 	)
 
@@ -1894,7 +1904,7 @@ func _test_no_pause_modal_overlay_service_clock() -> void:
 		and is_equal_approx(drv_rem_25, 35.0)
 		and is_equal_approx(dinein_rem_25, 75.0)
 		and drv_label != null
-		and drv_label.text == "Nasi Telor 35s"
+		and drv_label.text == "Nasi Telur 35s"
 		and ui.is_modal_blocking()
 	)
 

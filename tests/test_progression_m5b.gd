@@ -68,6 +68,7 @@ func _test_data_driven_ingredient_commands() -> void:
 	await physics_frame
 
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
+	var service := game_root.get_service_controller() as ServiceController
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
 	var empty_units: Dictionary = kitchen._storage_units.duplicate(true)
@@ -94,7 +95,8 @@ func _test_data_driven_ingredient_commands() -> void:
 		]
 	)
 
-	# Stock storage_box with 3 ingredients (unsorted purchase order) and enter SERVING:
+	# Advance to Day 4 so sayur & ayam are unlocked, then stock storage_box with 3 ingredients (unsorted purchase order):
+	_advance_to_day(game_root, service, 4)
 	run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
 	run.request_ingredient_purchase(&"ayam", 1, &"storage_box")
 	run.request_ingredient_purchase(&"beras", 2, &"storage_box")
@@ -291,7 +293,7 @@ func _test_day7_settlement_boundaries() -> void:
 		and int(won_settlement.get("day7_outcome", -1)) == SharedTypes.DayOutcome.WON
 		and int(won_run.get_run_view().get("goal_outcome", -1)) == SharedTypes.DayOutcome.WON
 		and won_ui.day_result_side_panel.visible
-		and won_ui.result_title_label.text == "Hari 7 — Berhasil!"
+		and won_ui.result_title_label.text == "Target tercapai!"
 		and not won_ui.continue_button.visible
 		and won_ui.continue_button.disabled
 		and won_ui.extra_mode_button.visible
@@ -353,7 +355,7 @@ func _test_day7_settlement_boundaries() -> void:
 		and int(lost_settlement.get("day7_outcome", -1)) == SharedTypes.DayOutcome.LOST
 		and int(lost_run.get_run_view().get("goal_outcome", -1)) == SharedTypes.DayOutcome.LOST
 		and lost_ui.day_result_side_panel.visible
-		and lost_ui.result_title_label.text == "Hari 7 — Belum cukup uang"
+		and lost_ui.result_title_label.text == "Belum tercapai"
 		and not lost_ui.continue_button.visible
 		and lost_ui.continue_button.disabled
 		and not lost_ui.extra_mode_button.visible
@@ -437,33 +439,35 @@ func _test_day7_terminal_extra_mode_and_day9_continuation() -> void:
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
 
-	# Advance to Day 2: nasi_ayam unlocks but is NOT auto-selected.
+	# Advance to Day 2: nasi_tempe unlocks but is NOT auto-selected.
 	_advance_to_day(game_root, service, 2)
 	_check(
-		"Day 2 unlocks nasi_ayam without auto-selecting it",
-		run.get_run_view()["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_ayam"]
+		"Day 2 unlocks nasi_tempe without auto-selecting it",
+		run.get_run_view()["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_tempe"]
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
 
-	# Advance to Day 3: nasi_komplit unlocks but is NOT auto-selected.
+	# Advance to Day 3: nasi_ayam & nasi_telur_tempe unlock without auto-selecting them.
 	_advance_to_day(game_root, service, 3)
 	_check(
-		"Day 3 unlocks nasi_komplit without auto-selecting it",
+		"Day 3 unlocks nasi_ayam and nasi_telur_tempe without auto-selecting them",
 		run.get_run_view()["unlocked_recipe_ids"] == [
 			&"nasi_telor",
+			&"nasi_tempe",
 			&"nasi_ayam",
-			&"nasi_komplit",
+			&"nasi_telur_tempe",
 		]
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
 
-	# Advance Days 3 -> 7 and verify start_new_run() idempotency on progressed run.
+	# Advance Days 3 -> 7 and verify all 13 recipes unlocked + start_new_run() idempotency on progressed run.
 	_advance_to_day(game_root, service, 7)
 	var cash_before_reinit: int = int(run.get_run_view().get("cash", 0))
 	run.start_new_run()
 	_check(
 		"start_new_run on Day 7 progressed run does not reset day or cash",
 		game_root.get_day_index() == 7
+		and run.get_run_view()["unlocked_recipe_ids"].size() == 13
 		and int(run.get_run_view().get("cash", 0)) == cash_before_reinit
 	)
 
@@ -492,11 +496,7 @@ func _test_day7_terminal_extra_mode_and_day9_continuation() -> void:
 		and game_root.get_day_index() == 8
 		and ui.day_label.text == "Hari 8"
 		and not ui.day_result_side_panel.visible
-		and run.get_run_view()["unlocked_recipe_ids"] == [
-			&"nasi_telor",
-			&"nasi_ayam",
-			&"nasi_komplit",
-		]
+		and run.get_run_view()["unlocked_recipe_ids"].size() == 13
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 		and not game_root.request_extra_mode()
 		and run.advance_to_next_planning() == 8
@@ -516,7 +516,7 @@ func _test_day7_terminal_extra_mode_and_day9_continuation() -> void:
 		and int(d8_settlement.get("day7_outcome", -1)) == SharedTypes.DayOutcome.WON
 		and int(run.get_run_view().get("goal_outcome", -1)) == SharedTypes.DayOutcome.WON
 		and ui.day_result_side_panel.visible
-		and ui.result_title_label.text == "Hasil Hari 8"
+		and ui.result_title_label.text == "Hari 8 selesai"
 		and ui.continue_button.visible
 		and not ui.continue_button.disabled
 		and not ui.extra_mode_button.visible
@@ -536,11 +536,7 @@ func _test_day7_terminal_extra_mode_and_day9_continuation() -> void:
 		and ui.day_label.text == "Hari 9"
 		and not ui.day_result_side_panel.visible
 		and int(run.get_run_view().get("goal_outcome", -1)) == SharedTypes.DayOutcome.WON
-		and run.get_run_view()["unlocked_recipe_ids"] == [
-			&"nasi_telor",
-			&"nasi_ayam",
-			&"nasi_komplit",
-		]
+		and run.get_run_view()["unlocked_recipe_ids"].size() == 13
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
 

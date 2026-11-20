@@ -189,68 +189,249 @@ static func get_day_7_epilogue(goal_outcome: int) -> Dictionary:
 	}
 
 
+static func get_tutorial_chapters() -> Array[Dictionary]:
+	return [
+		{
+			"id": &"ch1_intro",
+			"number": 1,
+			"title": "Kenalan dengan Warung",
+			"step_ids": [&"ch1_objective", &"ch1_move"],
+		},
+		{
+			"id": &"ch2_planning",
+			"number": 2,
+			"title": "Persiapan Warung",
+			"step_ids": [&"ch2_edit_menu", &"ch2_buy_ingredients", &"ch2_open_service"],
+		},
+		{
+			"id": &"ch3_cooking",
+			"number": 3,
+			"title": "Mulai Memasak",
+			"step_ids": [&"ch3_take_rice", &"ch3_wash_rice", &"ch3_cook_rice", &"ch3_cook_egg"],
+		},
+		{
+			"id": &"ch4_dine_in",
+			"number": 4,
+			"title": "Layani Pelanggan",
+			"step_ids": [&"ch4_assemble", &"ch4_serve_dinein", &"ch4_clean_and_wash"],
+		},
+		{
+			"id": &"ch5_online",
+			"number": 5,
+			"title": "Pesanan Online",
+			"step_ids": [&"ch5_accept_online", &"ch5_serve_online"],
+		},
+		{
+			"id": &"ch6_employees",
+			"number": 6,
+			"title": "Kelola Pegawai",
+			"step_ids": [&"ch6_employee_overview"],
+		},
+		{
+			"id": &"ch7_finances",
+			"number": 7,
+			"title": "Atur Keuangan",
+			"step_ids": [&"ch7_review_results"],
+		},
+		{
+			"id": &"ch8_challenge",
+			"number": 8,
+			"title": "Selesaikan Tantangan",
+			"step_ids": [&"ch8_ready"],
+		},
+	]
+
+
 static func get_tutorial_steps() -> Array[Dictionary]:
 	return [
 		{
-			"id": &"step_01_objective",
-			"title": "1/9 — Pahami Tujuan Warung",
-			"body": "Kamu mewarisi warung kecil (Rp 100k, menu Nasi Telor). Kelola stok, waktu, dan fokus untuk bertahan hingga Hari 7. Klik Lanjut untuk menyiapkan bahan!",
+			"id": &"ch1_objective",
+			"chapter": 1,
+			"chapter_title": "Kenalan dengan Warung",
+			"title": "Bab 1/8 · Selamat Datang!",
+			"body": (
+				"Kelola warungmu selama 7 hari & capai kas Rp 700.000 di Hari ke-7! "
+				+ "Santai saja, semua langkahnya kita pelajari satu per satu."
+			),
 			"allow_next": true,
 			"next_label": "Lanjut",
 		},
 		{
-			"id": &"step_02_prepare_ingredients",
-			"title": "2/9 — Siapkan Bahan",
-			"body": "Pertama, kita butuh bahan untuk memasak. Klik Kotak Bahan untuk belanja (`beli` beras & telur), buka warung (`buka`), lalu ketik 'beras' untuk mengambil beras (nanti ambil 'telur' dengan cara yang sama).",
+			"id": &"ch1_move",
+			"chapter": 1,
+			"chapter_title": "Kenalan dengan Warung",
+			"title": "Bab 1/8 · Pindah & Arahkan",
+			"body": (
+				"Klik petak lantai kosong untuk berpindah. Saat berjualan nanti, klik objek "
+				+ "akan langsung membawamu ke sebelah objek tersebut."
+			),
 			"allow_next": false,
+		},
+		{
+			"id": &"ch2_edit_menu",
+			"chapter": 2,
+			"chapter_title": "Persiapan Warung",
+			"title": "Bab 2/8 · Atur Menu Warung",
+			"body": (
+				"Yuk, siapkan warungmu! Klik 'Edit menu' untuk cek hidangan aktif & resepnya, "
+				+ "lalu klik 'Simpan'."
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch2_buy_ingredients",
+			"chapter": 2,
+			"chapter_title": "Persiapan Warung",
+			"title": "Bab 2/8 · Beli Bahan Pokok",
+			"body": (
+				"Klik Kotak Bahan, lalu ketik 'beli' (tanpa Enter!). Beli minimal 1 Beras "
+				+ "& 1 Telur agar siap memasak."
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch2_open_service",
+			"chapter": 2,
+			"chapter_title": "Persiapan Warung",
+			"title": "Bab 2/8 · Buka Warung",
+			"body": (
+				"Bahan siap! Jika objek terpilih, klik lantai/ESC dulu, lalu ketik 'buka' "
+				+ "untuk mulai menerima pelanggan."
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch3_take_rice",
+			"chapter": 3,
+			"chapter_title": "Mulai Memasak",
+			"title": "Bab 3/8 · Ambil Beras",
+			"body": (
+				"Klik Kotak Bahan di dapur lalu ketik 'beras' (atau klik kata perintahnya) "
+				+ "untuk mengambil beras mentah."
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch3_wash_rice",
+			"chapter": 3,
+			"chapter_title": "Mulai Memasak",
+			"title": "Bab 3/8 · Cuci Beras",
+			"body": (
+				"Beras mentah harus dicuci dulu! Klik Wastafel, lalu ketik 'cuci'."
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch3_cook_rice",
+			"chapter": 3,
+			"chapter_title": "Mulai Memasak",
+			"title": "Bab 3/8 · Masak Nasi",
+			"body": (
+				"Klik Penanak Nasi lalu ketik 'masak'. Sekali masak menghasilkan 5 porsi "
+				+ "nasi matang!"
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch3_cook_egg",
+			"chapter": 3,
+			"chapter_title": "Mulai Memasak",
+			"title": "Bab 3/8 · Goreng Telur",
+			"body": (
+				"Ambil telur di Kotak Bahan ('telur'), lalu klik Kompor dan ketik 'goreng'."
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch4_assemble",
+			"chapter": 4,
+			"chapter_title": "Layani Pelanggan",
+			"title": "Bab 4/8 · Rakit Nasi Telor",
+			"body": (
+				"Ambil piring di Rak Piring, ambil nasi di Penanak Nasi ('nasi'), lalu "
+				+ "gabung dengan telur di tangan/Meja Kerja!"
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch4_serve_dinein",
+			"chapter": 4,
+			"chapter_title": "Layani Pelanggan",
+			"title": "Bab 4/8 · Sajikan ke Meja",
+			"body": (
+				"Pesanan sudah siap! Klik meja pelanggan yang menunggu di area makan, "
+				+ "lalu ketik 'saji'."
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch4_clean_and_wash",
+			"chapter": 4,
+			"chapter_title": "Layani Pelanggan",
+			"title": "Bab 4/8 · Bereskan & Cuci",
+			"body": (
+				"Setelah tamu selesai makan (~20 dtk), klik meja kotor → 'bersihkan', "
+				+ "lalu kosongkan tangan & 'cuci' piring di Wastafel."
+			),
+			"allow_next": false,
+		},
+		{
+			"id": &"ch7_review_results",
+			"chapter": 7,
+			"chapter_title": "Atur Keuangan",
+			"title": "Bab 7/8 · Atur Keuangan",
+			"body": (
+				"Warung yang ramai belum tentu untung besar. Setiap bahan, alat, dan pegawai "
+				+ "butuh uang! Cek laporan lalu klik 'Lanjut'."
+			),
+			"allow_next": true,
 			"next_label": "Lanjut",
 		},
 		{
-			"id": &"step_03_wash_rice",
-			"title": "3/9 — Cuci Beras",
-			"body": "Beras harus dicuci terlebih dahulu. Klik Wastafel, lalu ketik 'cuci'.",
+			"id": &"ch6_employee_overview",
+			"chapter": 6,
+			"chapter_title": "Kelola Pegawai",
+			"title": "Bab 6/8 · Kenali Pegawai",
+			"body": (
+				"Buka tombol 'Pegawai'! Pegawai membantu tugas tertentu (bukan merakit "
+				+ "piring), namun terlalu banyak pegawai (>2) justru bikin sesak & boros gaji."
+			),
 			"allow_next": false,
-			"next_label": "Lanjut",
+			"next_label": "Mengerti",
 		},
 		{
-			"id": &"step_04_cook_rice",
-			"title": "4/9 — Masak Nasi",
-			"body": "Masukkan beras yang sudah dicuci ke Penanak Nasi. Klik Penanak Nasi lalu ketik 'masak' (1x masak = 5 porsi nasi!).",
+			"id": &"ch5_accept_online",
+			"chapter": 5,
+			"chapter_title": "Pesanan Online",
+			"title": "Bab 5/8 · Terima Order Online",
+			"body": (
+				"Tawaran online muncul berkala di Meja Online! Klik Meja Online saat "
+				+ "aktif lalu ketik 'terima' (batas 60 dtk)."
+			),
 			"allow_next": false,
-			"next_label": "Lanjut",
+			"next_label": "Lewati Bab",
 		},
 		{
-			"id": &"step_05_cook_egg",
-			"title": "5/9 — Goreng Telur",
-			"body": "Satu kali memasak menghasilkan 5 porsi nasi! Sekarang ambil 'telur' di Kotak Bahan, lalu bawa ke Kompor dan ketik 'goreng' hingga matang.",
+			"id": &"ch5_serve_online",
+			"chapter": 5,
+			"chapter_title": "Pesanan Online",
+			"title": "Bab 5/8 · Serahkan ke Pengantar",
+			"body": (
+				"Masak pesanannya, lalu klik pengantar di spot pickup kanan (bukan di "
+				+ "antrean jalan) & ketik 'saji'."
+			),
 			"allow_next": false,
-			"next_label": "Lanjut",
+			"next_label": "Lewati Bab",
 		},
 		{
-			"id": &"step_06_assemble_dish",
-			"title": "6/9 — Rakit Nasi Telor",
-			"body": "Gabungkan nasi matang dan telur matang di atas piring bersih (klik Rak Piring / Meja Kerja dan ambil 'nasi' di Penanak Nasi—urutan boleh dibalik!) sampai menjadi Nasi Telor.",
-			"allow_next": false,
-			"next_label": "Lanjut",
-		},
-		{
-			"id": &"step_07_serve_customer",
-			"title": "7/9 — Sajikan Pelanggan",
-			"body": "Pesanan sudah siap! Pilih meja pelanggan yang memesan, lalu ketik 'saji' untuk menyajikan makanan.",
-			"allow_next": false,
-			"next_label": "Lanjut",
-		},
-		{
-			"id": &"step_08_clean_and_wash",
-			"title": "8/9 — Bersihkan Meja & Cuci Piring",
-			"body": "Setelah pelanggan selesai makan, klik meja kotor -> ketik 'bersihkan'. Lalu dengan tangan kosong, klik Wastafel -> ketik 'cuci' untuk mencuci piring kotor.",
-			"allow_next": false,
-			"next_label": "Lanjut",
-		},
-		{
-			"id": &"step_09_finish_day",
-			"title": "9/9 — Akhiri Hari Pertama",
-			"body": "Lanjutkan pelayanan hingga tutup hari, lalu tinjau Pendapatan, Belanja, Listrik, Penalti Permintaan, dan Kas Akhir. Semakin banyak menu belum tentu semakin banyak keuntungan. Kelola bahan, waktu, dan pelayanan dengan baik.",
+			"id": &"ch8_ready",
+			"chapter": 8,
+			"chapter_title": "Selesaikan Tantangan",
+			"title": "Bab 8/8 · Siap Berjualan!",
+			"body": (
+				"Kamu siap menjalankan warung! Tambah alat lewat 'Beli alat' (+Alat/+Meja) "
+				+ "seperlunya, jaga ritme, & capai Rp 700k di Hari ke-7."
+			),
 			"allow_next": true,
 			"next_label": "Selesai",
 		},
@@ -262,69 +443,230 @@ static func get_feature_discovery_tip(tip_id: StringName) -> Dictionary:
 		&"online_offer":
 			return {
 				"id": &"online_offer",
-				"title": "Tip: Tawaran Online",
-				"body": "Tawaran ojol muncul berkala di Stasiun Online. Klik Stasiun Online lalu ketik 'terima' untuk mengambilnya (berhenti saat antrean datang <= 2 atau batas order penuh).",
+				"title": "Tip · Order Online",
+				"body": (
+					"Ada tawaran online di Meja Online! Klik Meja Online → 'terima' jika "
+					+ "sanggup mengejar batas waktu 60 detik."
+				),
 			}
 		&"first_driver_pickup":
 			return {
 				"id": &"first_driver_pickup",
-				"title": "Tip: Antar ke Driver",
-				"body": "Driver online sudah di spot pickup! Masak pesanannya, pegang hidangan, klik driver tersebut, lalu ketik 'saji'. Piring langsung kembali bersih!",
+				"title": "Tip · Spot Pickup",
+				"body": (
+					"Pengantar sudah di spot! Siapkan hidangan, klik pengantarnya, lalu "
+					+ "ketik 'saji'. Piring langsung kembali bersih."
+				),
 			}
 		&"driver_overflow":
 			return {
 				"id": &"driver_overflow",
-				"title": "Tip: Antrean Driver Penuh",
-				"body": "Hanya ada 3 spot pickup aktif! Driver di luar antrean belum bisa menerima 'saji' sampai salah satu spot di dalam kosong.",
-			}
-		&"recipe_unlock":
-			return {
-				"id": &"recipe_unlock",
-				"title": "Tip: Resep Baru Terbuka",
-				"body": "Resep baru terbuka, tetapi baru muncul di pesanan jika kamu memilihnya di Edit Menu. Terlalu banyak menu aktif justru memperberat dapur!",
+				"title": "Tip · Antrean Jalan",
+				"body": (
+					"3 spot pickup penuh sehingga pengantar menunggu di jalan. Antarkan "
+					+ "dulu yang ada di spot pickup!"
+				),
 			}
 		&"potong_veggie":
 			return {
 				"id": &"potong_veggie",
-				"title": "Tip: Potong Sayur",
-				"body": "Sayur segar perlu dibawa ke Talenan (Meja Kerja) lalu ketik 'potong' sebelum digoreng atau dirakit ke piring.",
+				"title": "Tip · Potong Sayur",
+				"body": (
+					"Resep baru memakai sayur! Ambil sayur mentah lalu bawa ke talenan "
+					+ "Meja Kerja dan ketik 'potong'."
+				),
 			}
 		&"serving_belanja":
 			return {
 				"id": &"serving_belanja",
-				"title": "Tip: Belanja Saat Buka",
-				"body": "Belanja saat jam buka dikirim ~100 detik ke tempat penyimpanan terpilih tanpa menghentikan waktu layanan; kiriman tertunda saat tutup hari di-refund penuh.",
+				"title": "Tip · Pengiriman 100 dtk",
+				"body": (
+					"Belanja bahan saat warung buka akan tiba 100 detik lagi. Jika hari "
+					+ "tutup duluan, uang dikembalikan penuh!"
+				),
 			}
-		&"fridge_and_power":
+		&"recipe_unlock":
 			return {
-				"id": &"fridge_and_power",
-				"title": "Tip: Kulkas & Listrik",
-				"body": "Kulkas (+Rp 4k listrik/hari) menyimpan stok bahan mentah melewati malam, berbeda dengan Kotak Bahan yang stoknya habis saat tutup hari.",
+				"id": &"recipe_unlock",
+				"title": "Tip · Resep Baru",
+				"body": (
+					"Resep baru terbuka di 'Edit menu'! Tapi ingat: terlalu banyak menu "
+					+ "aktif membuat stok & piring lebih cepat kewalahan."
+				),
 			}
 		&"demand_and_debt":
 			return {
 				"id": &"demand_and_debt",
-				"title": "Tip: Penalti Permintaan",
-				"body": "Pesanan yang gagal/kedaluwarsa meninggalkan utang reputasi yang langsung mengurangi kuota pelanggan pada hari berikutnya.",
+				"title": "Tip · Pelanggan Berkurang",
+				"body": (
+					"Ada pesanan terlewat kemarin sehingga tamu hari ini berkurang. "
+					+ "Hari sempurna tanpa gagal akan memulihkannya!"
+				),
+			}
+		&"fixture_shop_tip":
+			return {
+				"id": &"fixture_shop_tip",
+				"title": "Tip · Tambah Alat & Ruang",
+				"body": (
+					"Pertimbangkan ruang dapur & biaya listrik harian! Kulkas & Penanak "
+					+ "Nasi menambah listrik tiap malam."
+				),
+			}
+		&"employee_hired":
+			return {
+				"id": &"employee_hired",
+				"title": "Tip · Komitmen Pegawai",
+				"body": (
+					"Pegawai membantumu sesuai perannya, tetapi Gaji Harian dipotong tiap "
+					+ "malam & lebih dari 2 pegawai membuat dapur semakin sesak!"
+				),
 			}
 		_:
 			return {}
 
 
+static func get_cara_main_sections() -> Array[Dictionary]:
+	return [
+		{
+			"heading": "1. TUJUAN PERMAINAN",
+			"bullets": [
+				"Kelola warung makan selama 7 hari dari modal awal Rp 100k.",
+				"Kumpulkan kas bersih minimal [color=#9e2508]Rp 700.000[/color] di akhir Hari ke-7 (setelah listrik & gaji).",
+			],
+		},
+		{
+			"heading": "2. ALUR SATU HARI",
+			"bullets": [
+				"Setiap hari berjalan berurutan: Persiapan (Planning) → Layanan (Serving) → Tutup Otomatis → Hasil Hari.",
+				"Warung baru tutup otomatis saat semua tamu antrean, tamu di meja, dan order online aktif selesai.",
+			],
+		},
+		{
+			"heading": "3. KONTROL DAN PERINTAH",
+			"bullets": [
+				"Klik lantai untuk berpindah; klik alat/meja/pengantar untuk mendekat & memilihnya langsung.",
+				"Ketik huruf perintah Indonesia yang muncul di balon dialog — selesai kata langsung jalan [color=#9e2508]tanpa Enter[/color]!",
+				"Salah huruf bergetar; Backspace hapus 1 huruf; klik lantai atau tekan ESC membatalkan pilihan/ketikan.",
+				"Kamu juga bisa langsung mengklik kata perintah di balon dialog.",
+			],
+		},
+		{
+			"heading": "4. PERSIAPAN WARUNG",
+			"bullets": [
+				"Saat Persiapan: atur menu, beli bahan, pasang alat/meja, dan kelola pegawai (belum bisa memasak).",
+				"Kosongkan pilihan objek lalu ketik [color=#9e2508]buka[/color] untuk mulai berjualan.",
+			],
+		},
+		{
+			"heading": "5. BELI BAHAN",
+			"bullets": [
+				"Pilih Kotak Bahan atau Kulkas lalu ketik [color=#9e2508]beli[/color].",
+				"Kotak Bahan (3 slot × 5): gratis listrik, tetapi [color=#9e2508]stok hangus setiap malam[/color].",
+				"Kulkas (2 slot × 3): listrik Rp 4k/hari, stok bahan mentah bertahan antar hari.",
+				"Belanja saat Persiapan langsung masuk; saat Layanan tiba dalam 100 detik (uang kembali jika keburu tutup).",
+			],
+		},
+		{
+			"heading": "6. BELI DAN PASANG ALAT",
+			"bullets": [
+				"Saat Persiapan, klik [color=#9e2508]Beli alat[/color] atau slot hijau +Alat/+Meja di dapur/area makan.",
+				"Peralatan langsung terpasang! Penanak Nasi kena listrik Rp 2k/hari; Kulkas Rp 4k/hari.",
+			],
+		},
+		{
+			"heading": "7. EDIT MENU",
+			"bullets": [
+				"Saat Persiapan, klik [color=#9e2508]Edit menu[/color] untuk memilih resep aktif (minimal 1) lalu Simpan.",
+				"Panel Resep di kanan menampilkan rincian bahan dan harga jualnya.",
+			],
+		},
+		{
+			"heading": "8. MEMASAK DAN MENYIAPKAN BAHAN",
+			"bullets": [
+				"Kamu hanya bisa memegang 1 bahan atau 1 piring rakitan.",
+				"Kotak/Kulkas: ketik nama bahan mentah ([color=#9e2508]beras, telur, tempe, ayam, sayur, sapi[/color]).",
+				"Beras: Wastafel ([color=#9e2508]cuci[/color]) → Penanak Nasi ([color=#9e2508]masak[/color], 1x jadi 5 porsi).",
+				"Telur/Tempe/Ayam/Sapi: Kompor ([color=#9e2508]goreng[/color]). Sayur: Talenan ([color=#9e2508]potong[/color], lalu goreng jika perlu).",
+			],
+		},
+		{
+			"heading": "9. MERAKIT DAN MENYAJIKAN PESANAN",
+			"bullets": [
+				"Ambil piring di Rak Piring (4 piring per rak), isi nasi ([color=#9e2508]nasi[/color]), lalu gabung di tangan/Meja Kerja/Konter (urutan bebas).",
+				"Salah rakit? Klik Tempat Sampah untuk membuang isi tanpa membuang piring bersih.",
+				"Pilih meja tamu atau pengantar di spot pickup lalu ketik [color=#9e2508]saji[/color].",
+			],
+		},
+		{
+			"heading": "10. PELANGGAN DINE-IN",
+			"bullets": [
+				"Tamu datang tiap 20 detik, antre di luar, dengan batas kesabaran 100 detik sejak datang.",
+				"Setelah disaji, tamu makan 20 detik lalu meninggalkan meja kotor.",
+				"Pilih meja kotor → ketik [color=#9e2508]bersihkan[/color], lalu kosongkan tangan & cuci piring di Wastafel ([color=#9e2508]cuci[/color]).",
+			],
+		},
+		{
+			"heading": "11. PESANAN ONLINE",
+			"bullets": [
+				"Penawaran muncul berkala di Meja Online. Pilih Meja Online → ketik [color=#9e2508]terima[/color].",
+				"Pengantar punya batas 60 detik di 3 spot pickup (antre jalan tidak bisa disaji sebelum masuk spot).",
+				"Sajikan hidangan ([color=#9e2508]saji[/color]) ke pengantar di spot: bayar 70%, piring langsung kembali bersih!",
+			],
+		},
+		{
+			"heading": "12. PEGAWAI",
+			"bullets": [
+				"Kelola di tombol [color=#9e2508]Pegawai[/color] saat Persiapan (Koki, Kasir, Pelayan).",
+				"Koki mencuci piring wastafel, mengisi Penanak Nasi, menuntaskan bahan, & menggoreng bahan pesanan ke konter kanan.",
+				"Kasir memperpanjang kesabaran tamu (+12 dtk) & menerima online otomatis saat spot kosong.",
+				"Pelayan membersihkan meja kotor & mengantar hidangan jadi dari Meja Kerja/Konter ke meja tamu.",
+				"Pegawai tidak merakit hidangan jadi — kamu tetap penanggung jawab utama dapur!",
+			],
+		},
+		{
+			"heading": "13. GAJI DAN PENGELOLAAN UANG",
+			"bullets": [
+				"Biaya Rekrutmen dibayar langsung & [color=#9e2508]tidak kembali[/color] bila dipecat.",
+				"Gaji Harian pegawai + biaya listrik dipotong setiap akhir hari sebelum laporan hasil.",
+			],
+		},
+		{
+			"heading": "14. PRINSIP WARUNG: SEDIKIT LEBIH BAIK",
+			"bullets": [
+				"Warung yang ramai belum tentu untung besar! Terlalu banyak menu bikin stok & piring kewalahan.",
+				"Lebih dari 2 pegawai membuat dapur sesak, kerja melambat, & biaya koordinasi melonjak.",
+			],
+		},
+		{
+			"heading": "15. PERGANTIAN HARI DAN TARGET AKHIR",
+			"bullets": [
+				"Setiap malam stok Kotak Bahan hangus, piring & meja kembali rapi, lalu hasil bersih dihitung.",
+				"Pesanan gagal mengurangi jumlah tamu esok hari; hari sempurna tanpa gagal memulihkannya.",
+				"Capai minimal [color=#9e2508]Rp 700.000[/color] setelah biaya Hari ke-7 untuk menang!",
+			],
+		},
+	]
+
+
+static func get_cara_main_bbcode() -> String:
+	var parts: PackedStringArray = []
+	for sec: Dictionary in get_cara_main_sections():
+		parts.append("[color=#6e220b]%s[/color]" % str(sec.get("heading", "")))
+		for b: String in sec.get("bullets", []):
+			parts.append("- " + b)
+		parts.append("")
+	parts.append("[color=#5a1e09]Selamat berjualan, semoga nggak ikut matang![/color]")
+	return "\n".join(parts)
+
+
 static func get_reference_summary_text() -> String:
-	return (
-		"ALUR HARIAN:\n"
-		+ "- PLANNING: Pilih menu (Edit Menu), cek/beli bahan & kulkas, masak nasi lebih awal, lalu klik Buka Warung.\n"
-		+ "- SERVING: Masak, potong, rakit, saji pesanan meja & ojol, lalu bersihkan meja dan cuci piring kotor.\n"
-		+ "- RESULTS: Tinjau omzet, biaya belanja, listrik, dan lanjut ke hari berikutnya.\n\n"
-		+ "PERINTAH KETIK INTI:\n"
-		+ "- Kotak Bahan / Kulkas: ketik 'beras', 'telur', 'ayam', 'tempe', 'sapi', 'sayur'\n"
-		+ "- Wastafel: bawa beras -> 'cuci' | tangan kosong -> 'cuci' piring kotor (piring bersih kembali ke tangan)\n"
-		+ "- Penanak Nasi: bawa beras cuci -> 'masak' (5 porsi) | ambil porsi -> 'nasi'\n"
-		+ "- Kompor: bawa bahan mentah/sayur potong -> 'goreng'\n"
-		+ "- Talenan & Meja Kerja: bawa sayur -> 'potong' | klik Rak Piring & Meja Kerja untuk merakit hidangan\n"
-		+ "- Sajikan & Bersihkan: klik meja/driver -> 'saji'; meja kotor -> 'bersihkan'\n"
-		+ "- Stasiun Online: 'terima' | Tempat Sampah: 'buang'\n\n"
-		+ "PRINSIP WARUNG:\n"
-		+ "Less is More, More is Worse — lebih banyak menu atau alat berarti lebih banyak kebutuhan bahan, kerja dapur, dan tagihan listrik."
-	)
+	var lines: PackedStringArray = ["CARA MAIN", ""]
+	var tag_strip := RegEx.new()
+	tag_strip.compile("\\[/?color[^\\]]*\\]")
+	for sec: Dictionary in get_cara_main_sections():
+		lines.append(str(sec.get("heading", "")))
+		for b: String in sec.get("bullets", []):
+			lines.append("- " + tag_strip.sub(b, "", true))
+		lines.append("")
+	lines.append("Selamat berjualan, semoga nggak ikut matang!")
+	return "\n".join(lines)

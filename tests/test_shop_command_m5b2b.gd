@@ -216,7 +216,7 @@ func _test_planning_beli_flow_and_safety() -> void:
 		and ui.get_shop_remaining_capacity() == 6
 		and ui.shop_target_label.text == "Kulkas"
 	)
-	ui.adjust_shop_quantity(&"sayur", 1)
+	ui.adjust_shop_quantity(&"telur", 1)
 	ui.shop_checkout_button.pressed.emit()
 	_check(
 		"fridge_01 purchase updates fridge_01 without spilling into storage_box",
@@ -348,13 +348,13 @@ func _test_serving_beli_retrieval_and_revalidation() -> void:
 		and kitchen.get_held_item_view() == partial_plate
 	)
 	var cash_before_serv_buy := int(run.get_run_view()["cash"])
-	var ayam_price := run.economy_config.get_ingredient_price(&"ayam")
-	ui.adjust_shop_quantity(&"ayam", 1)
+	var telur_price := run.economy_config.get_ingredient_price(&"telur")
+	ui.adjust_shop_quantity(&"telur", 1)
 	ui.shop_checkout_button.pressed.emit()
 	_check(
 		"SERVING checkout via beli schedules 100s delivery and syncs dialogue",
 		not ui.is_ingredient_shop_open()
-		and int(run.get_run_view()["cash"]) == cash_before_serv_buy - ayam_price
+		and int(run.get_run_view()["cash"]) == cash_before_serv_buy - telur_price
 		and kitchen.get_pending_delivery_views().size() == 1
 		and ui.interaction_dialogue.visible
 	)

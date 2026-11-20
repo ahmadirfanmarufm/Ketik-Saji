@@ -155,12 +155,14 @@ func _test_dialogue_click_blocking_and_command_execution() -> void:
 	_type_word(ui, "buka")
 	_check("keyboard buka enters SERVING", game_root.is_serving())
 
-	# Explicit world-target overlap test: storage_box dialogue overlaps work_table_stage (251, 116).
-	# Clicking (251, 116) while dialogue is visible must NOT switch target to work_table_stage.
+	# Explicit world-target overlap test: storage_box dialogue overlaps work_table_stage (251, 102..130).
+	# Pick a point inside both work_table_stage's hitbox and InteractionDialogue (below AllowedCommandsLabel)
+	# so clicking it tests world target-switch blocking rather than executing a command link.
 	_send_left_click(ui, Vector2(256, 52))
 	await process_frame
-	if ui.interaction_dialogue.get_global_rect().has_point(Vector2(251, 116)):
-		_send_left_click(ui, Vector2(251, 116))
+	var stage_overlap_pt := Vector2(251, 126) if ui.allowed_commands_label.get_global_rect().has_point(Vector2(251, 116)) else Vector2(251, 116)
+	if ui.interaction_dialogue.get_global_rect().has_point(stage_overlap_pt):
+		_send_left_click(ui, stage_overlap_pt)
 		_check(
 			"clicking work_table_stage covered by visible InteractionDialogue does not switch target",
 			kitchen.get_selected_target_id() == &"storage_box"

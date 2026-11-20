@@ -110,6 +110,10 @@ var _customer_target_positions: Dictionary[StringName, Vector2] = {}
 var _customer_tweens: Dictionary[StringName, Tween] = {}
 var _departing_visuals: Array[Node2D] = []
 var _departing_tweens: Array[Tween] = []
+var _employee_visual_nodes: Dictionary[StringName, Node2D] = {}
+var _employee_visual_states: Dictionary[StringName, Dictionary] = {}
+var _employee_visual_container: Node2D = null
+var _employee_anim_clock: float = 0.0
 var _last_online_preview_key: String = ""
 
 @onready var floor_layer: TileMapLayer = $FloorTiles
@@ -159,6 +163,15 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	_clear_all_visual_tweens()
+
+
+func _process(delta: float) -> void:
+	if delta <= 0.0 or _employee_visual_nodes.is_empty():
+		return
+	if is_inside_tree() and get_tree() != null and get_tree().paused:
+		return
+	_employee_anim_clock += delta
+	_step_employee_visual_animations(delta)
 
 
 func _notification(what: int) -> void:
@@ -917,6 +930,441 @@ func sync_placement_slot_visuals(
 
 func get_driver_visual_node(driver_id: StringName) -> Node2D:
 	return _driver_visual_nodes.get(driver_id, null)
+
+
+func get_employee_visual_count() -> int:
+	return _employee_visual_nodes.size()
+
+
+func get_employee_visual_node(employee_id: StringName) -> Node2D:
+	return _employee_visual_nodes.get(employee_id, null)
+
+
+func get_employee_visual_state(employee_id: StringName) -> int:
+	var st: Variant = _employee_visual_states.get(employee_id, {})
+	if st is Dictionary:
+		return int((st as Dictionary).get("state", SharedTypes.EmployeeAnimState.IDLE))
+	return SharedTypes.EmployeeAnimState.IDLE
+
+
+func get_employee_visual_fx_active(employee_id: StringName) -> bool:
+	var node := get_employee_visual_node(employee_id)
+	if node == null or not is_instance_valid(node):
+		return false
+	var steam := node.get_node_or_null("SteamFx") as Node2D
+	var prop := node.get_node_or_null("WorkProp") as Node2D
+	return (steam != null and steam.visible) or (prop != null and prop.visible)
+
+
+## Synchronizes passive employee visuals and state-driven animations from
+## `RunController.get_hired_employees()` and live controller worker states.
+## Does not register into WorldGrid or WorldRegistry so player teleport & hitboxes stay intact.
+func sync_employee_visuals(
+	employees: Array[Dictionary],
+	worker_views: Array[Dictionary] = [],
+	held_textures: Dictionary = {}
+) -> void:
+	if employees.is_empty():
+		for emp_node: Node2D in _employee_visual_nodes.values():
+			if emp_node != null and is_instance_valid(emp_node):
+				if emp_node.get_parent() != null:
+					emp_node.get_parent().remove_child(emp_node)
+				emp_node.free()
+		_employee_visual_nodes.clear()
+		_employee_visual_states.clear()
+		_employee_anim_clock = 0.0
+		if _employee_visual_container != null and is_instance_valid(_employee_visual_container):
+			if _employee_visual_container.get_parent() != null:
+				_employee_visual_container.get_parent().remove_child(_employee_visual_container)
+			_employee_visual_container.free()
+		_employee_visual_container = null
+		return
+
+	if _employee_visual_container == null or not is_instance_valid(_employee_visual_container):
+		_employee_visual_container = Node2D.new()
+		_employee_visual_container.name = "EmployeeVisuals"
+		_employee_visual_container.z_index = 2
+		_employee_visual_container.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		add_child(_employee_visual_container)
+
+	var seen_ids: Dictionary[StringName, bool] = {}
+	for rec: Dictionary in employees:
+		var emp_id := StringName(rec.get("employee_id", &""))
+		if emp_id != &"":
+			seen_ids[emp_id] = true
+
+	for old_id: StringName in _employee_visual_nodes.keys():
+		if not seen_ids.has(old_id):
+			var old_node := _employee_visual_nodes[old_id]
+			_employee_visual_nodes.erase(old_id)
+			_employee_visual_states.erase(old_id)
+			if old_node != null and is_instance_valid(old_node):
+				if old_node.get_parent() != null:
+					old_node.get_parent().remove_child(old_node)
+				old_node.free()
+
+	var workers_by_id: Dictionary[StringName, Dictionary] = {}
+	for wv: Dictionary in worker_views:
+		var w_id := StringName(wv.get("employee_id", &""))
+		if w_id != &"":
+			workers_by_id[w_id] = wv
+
+	var role_counts: Dictionary[StringName, int] = {}
+	for rec: Dictionary in employees:
+		var emp_id := StringName(rec.get("employee_id", &""))
+		var role_id := StringName(rec.get("role_id", &""))
+		var display_name := String(rec.get("display_name", ""))
+		if emp_id == &"" or role_id == &"":
+			continue
+		var slot_idx := int(role_counts.get(role_id, 0))
+		role_counts[role_id] = slot_idx + 1
+
+		var is_new := not _employee_visual_nodes.has(emp_id)
+		var vis_node := _ensure_employee_visual_node(emp_id, role_id, display_name)
+		var role_lbl := vis_node.get_node_or_null("RoleLabel") as Label
+		if role_lbl != null and not display_name.is_empty():
+			role_lbl.text = display_name
+
+		var home_cell := _resolve_employee_home_cell(role_id, slot_idx)
+		var home_pos := _resolve_employee_local_pos(role_id, slot_idx)
+		if is_new:
+			vis_node.position = home_pos
+
+		var wv: Dictionary = workers_by_id.get(emp_id, {})
+		var next_state := int(wv.get("state", SharedTypes.EmployeeAnimState.IDLE))
+		var target_id := StringName(wv.get("target_id", &""))
+		var hold_ing := StringName(wv.get("hold_ingredient_id", &""))
+		var hold_rec := StringName(wv.get("hold_recipe_id", &""))
+		var hold_tex: Texture2D = null
+		if hold_rec != &"" and held_textures.has(hold_rec):
+			hold_tex = held_textures[hold_rec] as Texture2D
+		elif hold_ing != &"" and held_textures.has(hold_ing):
+			hold_tex = held_textures[hold_ing] as Texture2D
+
+		var prev_st: Dictionary = _employee_visual_states.get(emp_id, {})
+		var prev_target := StringName(prev_st.get("target_id", &""))
+		var prev_state := int(prev_st.get("state", -1))
+
+		var dest_cell := home_cell
+		var dest_pos := home_pos
+		if next_state != SharedTypes.EmployeeAnimState.IDLE and target_id != &"":
+			var from_cell := _local_pos_to_grid_cell(vis_node.position)
+			var adj := find_nearest_free_neighbor(target_id, from_cell)
+			if adj != INVALID_CELL:
+				dest_cell = adj
+				dest_pos = _cell_to_local_center(dest_cell)
+
+		var waypoints: Array = []
+		var raw_wp: Variant = prev_st.get("waypoints", [])
+		if raw_wp is Array:
+			waypoints = (raw_wp as Array).duplicate()
+		if (
+			is_new
+			or prev_target != target_id
+			or (
+				next_state == SharedTypes.EmployeeAnimState.IDLE
+				and prev_state != SharedTypes.EmployeeAnimState.IDLE
+			)
+		):
+			if next_state == SharedTypes.EmployeeAnimState.IDLE:
+				waypoints = _build_safe_floor_waypoints(vis_node.position, home_cell, home_pos)
+			else:
+				waypoints = _build_safe_floor_waypoints(vis_node.position, dest_cell, dest_pos)
+
+		_employee_visual_states[emp_id] = {
+			"role_id": role_id,
+			"state": next_state,
+			"target_id": target_id,
+			"home_pos": home_pos,
+			"dest_pos": dest_pos,
+			"waypoints": waypoints,
+			"hold_texture": hold_tex,
+			"hold_ing": hold_ing,
+		}
+	_apply_employee_frame_pose_all()
+
+
+func _ensure_employee_visual_node(
+	employee_id: StringName,
+	role_id: StringName,
+	display_name: String = ""
+) -> Node2D:
+	if _employee_visual_nodes.has(employee_id):
+		var existing := _employee_visual_nodes[employee_id]
+		if existing != null and is_instance_valid(existing):
+			return existing
+
+	var host := Node2D.new()
+	host.name = String(employee_id)
+	host.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	host.set_meta(&"employee_id", employee_id)
+	host.set_meta(&"role_id", role_id)
+
+	var shadow := Polygon2D.new()
+	shadow.name = "FootShadow"
+	shadow.polygon = PackedVector2Array([
+		Vector2(-5, 9),
+		Vector2(5, 9),
+		Vector2(6, 11),
+		Vector2(-6, 11),
+	])
+	shadow.color = Color(0.06, 0.04, 0.03, 0.35)
+	host.add_child(shadow)
+
+	var sprite := Sprite2D.new()
+	sprite.name = "Sprite2D"
+	sprite.texture = employee_texture
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.position = Vector2(0, -4)
+	host.add_child(sprite)
+
+	var prop := Node2D.new()
+	prop.name = "WorkProp"
+	prop.visible = false
+	prop.position = Vector2(7, -2)
+	prop.z_index = 1
+	prop.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var pan := Polygon2D.new()
+	pan.name = "PanVisual"
+	pan.polygon = PackedVector2Array([
+		Vector2(-3, 0),
+		Vector2(4, 0),
+		Vector2(4, 2),
+		Vector2(-3, 2),
+	])
+	pan.color = Color(0.24, 0.25, 0.30, 1.0)
+	pan.visible = false
+	prop.add_child(pan)
+	var item_spr := Sprite2D.new()
+	item_spr.name = "ItemSprite"
+	item_spr.position = Vector2(0, -3)
+	item_spr.scale = Vector2(0.45, 0.45)
+	item_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	prop.add_child(item_spr)
+	host.add_child(prop)
+
+	var steam := Node2D.new()
+	steam.name = "SteamFx"
+	steam.visible = false
+	steam.position = Vector2(0, -14)
+	steam.z_index = 2
+	for i in range(3):
+		var puff := Polygon2D.new()
+		puff.name = "Puff%d" % i
+		puff.polygon = PackedVector2Array([
+			Vector2(-1, -1),
+			Vector2(2, -1),
+			Vector2(2, 1),
+			Vector2(-1, 1),
+		])
+		puff.color = Color(0.98, 0.96, 0.90, 0.85)
+		steam.add_child(puff)
+	host.add_child(steam)
+
+	var role_lbl := Label.new()
+	role_lbl.name = "RoleLabel"
+	role_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	role_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	role_lbl.position = Vector2(-26, -29)
+	role_lbl.size = Vector2(52, 12)
+	role_lbl.add_theme_font_size_override("font_size", 8)
+	role_lbl.add_theme_constant_override("outline_size", 3)
+	role_lbl.add_theme_color_override("font_outline_color", Color(0.10, 0.06, 0.03, 0.95))
+	match role_id:
+		&"cook":
+			role_lbl.text = display_name if not display_name.is_empty() else "Koki"
+			role_lbl.add_theme_color_override("font_color", Color(1.0, 0.86, 0.45, 1.0))
+		&"cashier":
+			role_lbl.text = display_name if not display_name.is_empty() else "Kasir"
+			role_lbl.add_theme_color_override("font_color", Color(0.65, 0.92, 1.0, 1.0))
+		_:
+			role_lbl.text = display_name if not display_name.is_empty() else "Pelayan"
+			role_lbl.add_theme_color_override("font_color", Color(0.72, 1.0, 0.72, 1.0))
+	host.add_child(role_lbl)
+
+	_employee_visual_container.add_child(host)
+	_employee_visual_nodes[employee_id] = host
+	return host
+
+
+func _step_employee_visual_animations(delta: float) -> void:
+	var move_speed := 84.0
+	for emp_id: StringName in _employee_visual_nodes:
+		var host := _employee_visual_nodes[emp_id]
+		if host == null or not is_instance_valid(host):
+			continue
+		var st: Dictionary = _employee_visual_states.get(emp_id, {})
+		var waypoints: Array = st.get("waypoints", [])
+		var moving := false
+		if not waypoints.is_empty():
+			var next_pt := waypoints[0] as Vector2
+			var diff := next_pt - host.position
+			var dist := diff.length()
+			if dist <= move_speed * delta + 0.5:
+				host.position = Vector2(roundf(next_pt.x), roundf(next_pt.y))
+				waypoints.remove_at(0)
+			else:
+				var step_pos := host.position + diff.normalized() * move_speed * delta
+				host.position = step_pos
+				moving = true
+			st["waypoints"] = waypoints
+		_apply_employee_frame_pose(emp_id, host, st, moving)
+
+
+func _apply_employee_frame_pose_all() -> void:
+	for emp_id: StringName in _employee_visual_nodes:
+		var host := _employee_visual_nodes[emp_id]
+		if host == null or not is_instance_valid(host):
+			continue
+		var st: Dictionary = _employee_visual_states.get(emp_id, {})
+		_apply_employee_frame_pose(emp_id, host, st, false)
+
+
+func _apply_employee_frame_pose(
+	emp_id: StringName,
+	host: Node2D,
+	st: Dictionary,
+	moving: bool
+) -> void:
+	var sprite := host.get_node_or_null("Sprite2D") as Sprite2D
+	var prop := host.get_node_or_null("WorkProp") as Node2D
+	var pan := host.get_node_or_null("WorkProp/PanVisual") as Polygon2D
+	var item_spr := host.get_node_or_null("WorkProp/ItemSprite") as Sprite2D
+	var steam := host.get_node_or_null("SteamFx") as Node2D
+	if sprite == null:
+		return
+
+	var role_id := StringName(st.get("role_id", &""))
+	var state := int(st.get("state", SharedTypes.EmployeeAnimState.IDLE))
+	var phase := _employee_anim_clock + float(abs(emp_id.hash()) % 17) * 0.13
+	var hold_tex := st.get("hold_texture", null) as Texture2D
+
+	if moving or state == SharedTypes.EmployeeAnimState.WALK:
+		var step_bob := roundf(absf(sin(phase * 14.0)) * -1.0)
+		sprite.position = Vector2(0.0, -4.0 + step_bob)
+		if prop != null:
+			prop.visible = hold_tex != null and state == SharedTypes.EmployeeAnimState.SERVE
+			if prop.visible and item_spr != null:
+				item_spr.texture = hold_tex
+			if pan != null:
+				pan.visible = false
+		if steam != null:
+			steam.visible = false
+		return
+
+	match state:
+		SharedTypes.EmployeeAnimState.WORK:
+			var work_bob := roundf(absf(sin(phase * 9.0)) * -1.0)
+			var hand_shift := roundf(sin(phase * 9.0) * 1.0)
+			sprite.position = Vector2(0.0, -4.0 + work_bob)
+			if prop != null:
+				prop.visible = true
+				prop.position = Vector2(6.0 + hand_shift, -2.0 + work_bob)
+			if pan != null:
+				pan.visible = (role_id == &"cook")
+			if item_spr != null:
+				item_spr.texture = hold_tex
+				item_spr.visible = (hold_tex != null)
+			if steam != null:
+				var is_cooking := (role_id == &"cook")
+				steam.visible = is_cooking
+				if is_cooking:
+					for i in range(3):
+						var puff := steam.get_node_or_null("Puff%d" % i) as Polygon2D
+						if puff == null:
+							continue
+						var life := fmod(phase * 1.3 + float(i) * 0.33, 1.0)
+						puff.position = Vector2(
+							roundf(float((i - 1) * 4) + sin((phase + float(i)) * 4.0) * 1.5),
+							roundf(-life * 10.0)
+						)
+						puff.color.a = clampf((1.0 - life) * 0.9, 0.0, 0.9)
+		SharedTypes.EmployeeAnimState.CLEAN:
+			var scrub_x := roundf(sin(phase * 11.0) * 1.0)
+			sprite.position = Vector2(scrub_x, -4.0)
+			if prop != null:
+				prop.visible = false
+			if steam != null:
+				steam.visible = false
+		SharedTypes.EmployeeAnimState.SERVE:
+			var serve_bob := roundf(absf(sin(phase * 7.0)) * -1.0)
+			sprite.position = Vector2(0.0, -4.0 + serve_bob)
+			if prop != null:
+				prop.visible = (hold_tex != null)
+				prop.position = Vector2(6.0, -4.0 + serve_bob)
+			if pan != null:
+				pan.visible = false
+			if item_spr != null:
+				item_spr.texture = hold_tex
+				item_spr.visible = (hold_tex != null)
+			if steam != null:
+				steam.visible = false
+		_:
+			sprite.position = Vector2(0.0, -4.0)
+			if prop != null:
+				prop.visible = false
+			if steam != null:
+				steam.visible = false
+
+
+func _local_pos_to_grid_cell(local_pos: Vector2) -> Vector2i:
+	return Vector2i(
+		clampi(int(floor(local_pos.x / float(tile_size.x))), 0, grid_size.x - 1),
+		clampi(int(floor(local_pos.y / float(tile_size.y))), 0, grid_size.y - 1)
+	)
+
+
+func _cell_to_local_center(cell: Vector2i) -> Vector2:
+	return (Vector2(cell) + Vector2(0.5, 0.5)) * Vector2(tile_size)
+
+
+func _build_safe_floor_waypoints(
+	from_pos: Vector2,
+	dest_cell: Vector2i,
+	dest_pos: Vector2
+) -> Array[Vector2]:
+	var pts: Array[Vector2] = []
+	var start_cell := _local_pos_to_grid_cell(from_pos)
+	var in_kitchen := start_cell.y <= 3
+	var dst_kitchen := dest_cell.y <= 3
+	var portal := Vector2i(7, 4)
+	var portal_pos := _cell_to_local_center(portal)
+
+	if in_kitchen and not dst_kitchen:
+		pts.append(_cell_to_local_center(Vector2i(7, start_cell.y)))
+		pts.append(portal_pos)
+		pts.append(_cell_to_local_center(Vector2i(7, dest_cell.y)))
+	elif not in_kitchen and dst_kitchen:
+		pts.append(_cell_to_local_center(Vector2i(7, start_cell.y)))
+		pts.append(portal_pos)
+		pts.append(_cell_to_local_center(Vector2i(7, dest_cell.y)))
+	elif start_cell.x != dest_cell.x and start_cell.y != dest_cell.y:
+		var mid_y := 1 if dst_kitchen else 6
+		pts.append(_cell_to_local_center(Vector2i(start_cell.x, mid_y)))
+		pts.append(_cell_to_local_center(Vector2i(dest_cell.x, mid_y)))
+	pts.append(dest_pos)
+	return pts
+
+
+func _resolve_employee_home_cell(role_id: StringName, slot_idx: int) -> Vector2i:
+	var anchors: Array[Vector2i] = []
+	match role_id:
+		&"cook":
+			anchors = [Vector2i(1, 1), Vector2i(4, 1), Vector2i(6, 1)]
+		&"cashier":
+			anchors = [Vector2i(5, 3), Vector2i(6, 2), Vector2i(7, 3)]
+		_:
+			anchors = [Vector2i(1, 6), Vector2i(3, 6), Vector2i(6, 6)]
+	return anchors[slot_idx % anchors.size()]
+
+
+func _resolve_employee_local_pos(role_id: StringName, slot_idx: int) -> Vector2:
+	var base_cell := _resolve_employee_home_cell(role_id, slot_idx)
+	var stack_tier := int(slot_idx / 3)
+	var cell_center := (Vector2(base_cell) + Vector2(0.5, 0.5)) * Vector2(tile_size)
+	var offset_x := float((stack_tier % 3) * 8 - (4 if stack_tier > 0 else 0))
+	var offset_y := float(int(stack_tier / 3) * 6)
+	return cell_center + Vector2(offset_x, offset_y)
 
 
 ## Synchronizes runtime delivery driver visuals under `DriverObjects` from

@@ -59,6 +59,18 @@ func _cook_plated_nasi_telor(kitchen: KitchenController, ui: GameUI) -> void:
 	kitchen.on_interactable_clicked(&"work_table_stage")
 
 
+func _advance_to_day(game_root: GameRoot, target_day: int) -> void:
+	var service := game_root.get_service_controller() as ServiceController
+	while game_root.get_day_index() < target_day:
+		game_root.start_service_requested()
+		service._day_queue_remaining = 0
+		service._outside_dine_in_queue.clear()
+		service._in_shop_dine_in_count = 0
+		service._online_orders_open.clear()
+		game_root.request_close_if_drained()
+		game_root.request_continue_from_results()
+
+
 func _cook_plated_nasi_ayam(kitchen: KitchenController, ui: GameUI) -> void:
 	if kitchen.get_cooker_output_view(&"rice_cooker").is_empty():
 		kitchen.on_interactable_clicked(&"storage_box")
@@ -74,11 +86,6 @@ func _cook_plated_nasi_ayam(kitchen: KitchenController, ui: GameUI) -> void:
 	kitchen.on_interactable_clicked(&"work_table_stage")
 	kitchen.on_interactable_clicked(&"storage_box")
 	_type_word(ui, "ayam")
-	kitchen.on_interactable_clicked(&"stove")
-	_type_word(ui, "goreng")
-	kitchen.on_interactable_clicked(&"work_table_stage")
-	kitchen.on_interactable_clicked(&"storage_box")
-	_type_word(ui, "tempe")
 	kitchen.on_interactable_clicked(&"stove")
 	_type_word(ui, "goreng")
 	kitchen.on_interactable_clicked(&"work_table_stage")
@@ -107,14 +114,15 @@ func _test_storage_and_station_eligibility() -> void:
 		kitchen.get_allowed_commands_for_selected_target().is_empty()
 	)
 
-	# Stock only sayur (1), telur (2), beras (2) -> 3 distinct slots in starter storage_box.
+	# Stock only sayur (1), telur (2), beras (2) -> 3 distinct slots in starter storage_box (Day 4+ for sayur).
+	_advance_to_day(game_root, 4)
 	_check(
 		"stock storage_box in PLANNING",
 		run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
 		and run.request_ingredient_purchase(&"telur", 2, &"storage_box")
 		and run.request_ingredient_purchase(&"beras", 2, &"storage_box")
 	)
-	_check("start Day 1 SERVING", game_root.start_service_requested())
+	_check("start Day 4 SERVING", game_root.start_service_requested())
 
 	# 1. Storage exposes beli + stocked ingredients alphabetically when hand is empty.
 	kitchen.on_interactable_clicked(&"storage_box")
@@ -392,7 +400,9 @@ func _test_online_dining_and_driver_eligibility() -> void:
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
 
-	# Buy extra box so we can stock both nasi_telor AND nasi_ayam (wrong dish) ingredients!
+	# Advance to Day 3 so ayam is unlocked; keep menu on nasi_telor while preparing wrong dish nasi_ayam.
+	_advance_to_day(game_root, 3)
+	run.select_daily_menu([&"nasi_telor"])
 	_check("buy box_01", run.request_fixture_purchase(&"box", &"slot_utility_01"))
 	var fast_cfg := service._economy_config.duplicate(true) as EconomyConfig
 	fast_cfg.online_offer_initial_delay_seconds = 0.0
@@ -403,9 +413,8 @@ func _test_online_dining_and_driver_eligibility() -> void:
 		run.request_ingredient_purchase(&"beras", 4, &"storage_box")
 		and run.request_ingredient_purchase(&"telur", 2, &"storage_box")
 		and run.request_ingredient_purchase(&"ayam", 2, &"box_01")
-		and run.request_ingredient_purchase(&"tempe", 2, &"box_01")
 	)
-	_check("start Day 1 SERVING", game_root.start_service_requested())
+	_check("start Day 3 SERVING", game_root.start_service_requested())
 
 	# 1. Online station eligibility: active -> ["terima"]; cap 4 -> []; cutoff -> [].
 	kitchen.on_interactable_clicked(&"online_station")
@@ -479,11 +488,6 @@ func _test_online_dining_and_driver_eligibility() -> void:
 	kitchen.on_interactable_clicked(&"work_table_stage")
 	kitchen.on_interactable_clicked(&"box_01")
 	_type_word(ui, "ayam")
-	kitchen.on_interactable_clicked(&"stove")
-	_type_word(ui, "goreng")
-	kitchen.on_interactable_clicked(&"work_table_stage")
-	kitchen.on_interactable_clicked(&"box_01")
-	_type_word(ui, "tempe")
 	kitchen.on_interactable_clicked(&"stove")
 	_type_word(ui, "goreng")
 	kitchen.on_interactable_clicked(&"work_table_stage")

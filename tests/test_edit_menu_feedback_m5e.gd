@@ -135,105 +135,118 @@ func _test_edit_menu_detail_panel_and_unlocks() -> void:
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
 
-	# Day 1: only nasi_telor unlocked & checked; detail panel starts in no-selection state.
+	# Day 1: only nasi_telor unlocked & checked; detail panel sits to the right in no-selection state.
 	ui.edit_menu_button.pressed.emit()
 	await process_frame
-	var body_row := ui.edit_menu_recipe_list.get_parent().get_parent() as HBoxContainer
-	var scroll_ctrl := ui.edit_menu_recipe_list.get_parent() as Control
+	var p_rect_day1 := ui.edit_menu_popup.get_global_rect()
 	var detail_rect := ui.recipe_detail_panel.get_global_rect()
-	var scroll_rect := scroll_ctrl.get_global_rect()
 	_check(
-		"EditMenu opens in PLANNING with 0-gap detail panel on the right and no-selection state",
+		"EditMenu opens in PLANNING with right-side Resep panel and no-selection state",
 		ui.is_edit_menu_open()
-		and body_row != null
-		and int(body_row.get_theme_constant("separation")) == 0
-		and is_equal_approx(detail_rect.position.x - scroll_rect.end.x, 0.0)
+		and ui.recipe_detail_panel.get_parent() == ui.edit_menu_overlay
+		and detail_rect.position.x >= p_rect_day1.end.x + 4.0
+		and is_equal_approx(detail_rect.position.y, p_rect_day1.position.y)
 		and ui.get_previewed_edit_menu_recipe_id() == &""
-		and ui.recipe_detail_title_label.text == "Detail Resep"
+		and ui.recipe_detail_title_label.text == "Resep"
 		and ui.get_edit_menu_recipe_button(&"nasi_telor").button_pressed
-		and ui.get_edit_menu_preview_button(&"nasi_telor").text == "Nasi Telor: Rp 20k"
+		and ui.get_edit_menu_preview_button(&"nasi_telor").text == "Nasi Telur: Rp 20k"
 		and ui.get_edit_menu_recipe_button(&"nasi_ayam") == null
 		and not ui.preview_edit_menu_recipe(&"nasi_ayam")
 	)
 
-	# Clicking Nasi Telor preview shows implicit cooked parts without changing enabled state.
+	# Clicking Nasi Telur preview shows description + implicit cooked parts without changing enabled state.
 	ui.get_edit_menu_preview_button(&"nasi_telor").pressed.emit()
 	await process_frame
 	var telor_lines := ui.get_edit_menu_detail_lines()
 	_check(
-		"previewing Nasi Telor displays dish title and implicit cooked ingredients",
+		"previewing Nasi Telur displays dish title, description, and implicit cooked ingredients",
 		ui.get_previewed_edit_menu_recipe_id() == &"nasi_telor"
-		and ui.recipe_detail_title_label.text == "Nasi Telor"
-		and telor_lines == PackedStringArray(["Beras", "Telur"])
+		and ui.recipe_detail_title_label.text == "Nasi Telur"
+		and telor_lines == PackedStringArray([
+			"Cuci dan masak beras, goreng telur, lalu sajikan bersama nasi.",
+			"Beras",
+			"Telur",
+		])
 		and ui.get_pending_menu_selection() == [&"nasi_telor"]
 	)
 
-	# Re-clicking already previewed Nasi Telor deselects back to no-selection state.
+	# Re-clicking already previewed Nasi Telur deselects back to no-selection state.
 	ui.get_edit_menu_preview_button(&"nasi_telor").pressed.emit()
 	await process_frame
 	_check(
 		"clicking already-previewed dish deselects detail panel cleanly",
 		ui.get_previewed_edit_menu_recipe_id() == &""
-		and ui.recipe_detail_title_label.text == "Detail Resep"
+		and ui.recipe_detail_title_label.text == "Resep"
 	)
 	ui.close_edit_menu()
 
-	# Advance to Day 2: nasi_ayam unlocks UNCHECKED; previewing does not auto-enable it.
+	# Advance to Day 2: nasi_tempe unlocks UNCHECKED; previewing does not auto-enable it.
 	if not await _advance_to_day(game_root, service, 2):
 		game_root.free()
 		await process_frame
 		return
 	ui.open_edit_menu()
 	await process_frame
-	var ayam_toggle := ui.get_edit_menu_recipe_button(&"nasi_ayam")
-	var ayam_preview := ui.get_edit_menu_preview_button(&"nasi_ayam")
-	ayam_preview.pressed.emit()
+	var tempe_toggle := ui.get_edit_menu_recipe_button(&"nasi_tempe")
+	var tempe_preview := ui.get_edit_menu_preview_button(&"nasi_tempe")
+	tempe_preview.pressed.emit()
 	await process_frame
 	_check(
-		"Day 2 newly unlocked nasi_ayam is unchecked and previewing keeps it disabled",
-		not ayam_toggle.button_pressed
-		and ayam_preview.text == "Nasi Ayam: Rp 28k"
-		and ui.get_previewed_edit_menu_recipe_id() == &"nasi_ayam"
-		and ui.recipe_detail_title_label.text == "Nasi Ayam"
-		and ui.get_edit_menu_detail_lines() == PackedStringArray(["Beras", "Ayam", "Tempe"])
+		"Day 2 newly unlocked nasi_tempe is unchecked and previewing keeps it disabled",
+		not tempe_toggle.button_pressed
+		and tempe_preview.text == "Nasi Tempe: Rp 18k"
+		and ui.get_previewed_edit_menu_recipe_id() == &"nasi_tempe"
+		and ui.recipe_detail_title_label.text == "Nasi Tempe"
+		and ui.get_edit_menu_detail_lines() == PackedStringArray([
+			"Masak nasi, goreng tempe, lalu satukan di piring.",
+			"Beras",
+			"Tempe",
+		])
 		and ui.get_pending_menu_selection() == [&"nasi_telor"]
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
 	ui.close_edit_menu()
 
-	# Reopen resets preview to no-selection; advance to Day 3 and inspect nasi_komplit + Sayur (potong).
+	# Reopen resets preview to no-selection; advance to Day 4 and inspect egg_salad + Sayur (potong).
 	ui.open_edit_menu()
 	_check("reopening Edit Menu starts cleanly in no-selection state", ui.get_previewed_edit_menu_recipe_id() == &"")
 	ui.close_edit_menu()
 
-	if not await _advance_to_day(game_root, service, 3):
+	if not await _advance_to_day(game_root, service, 4):
 		game_root.free()
 		await process_frame
 		return
 	ui.open_edit_menu()
 	await process_frame
-	var komplit_toggle := ui.get_edit_menu_recipe_button(&"nasi_komplit")
-	var komplit_preview := ui.get_edit_menu_preview_button(&"nasi_komplit")
-	komplit_preview.pressed.emit()
+	var salad_toggle := ui.get_edit_menu_recipe_button(&"egg_salad")
+	var salad_preview := ui.get_edit_menu_preview_button(&"egg_salad")
+	salad_preview.pressed.emit()
 	await process_frame
 	_check(
-		"Day 3 nasi_komplit unlocked unchecked, preview shows Sayur (potong) without auto-enabling",
-		not komplit_toggle.button_pressed
-		and ui.get_previewed_edit_menu_recipe_id() == &"nasi_komplit"
-		and ui.recipe_detail_title_label.text == "Nasi Komplit"
-		and ui.get_edit_menu_detail_lines()
-			== PackedStringArray(["Beras", "Ayam", "Tempe", "Sayur (potong)", "Telur"])
+		"Day 4 egg_salad unlocked unchecked, preview shows Sayur (potong) without auto-enabling",
+		not salad_toggle.button_pressed
+		and ui.get_previewed_edit_menu_recipe_id() == &"egg_salad"
+		and ui.recipe_detail_title_label.text == "Egg Salad"
+		and ui.get_edit_menu_detail_lines() == PackedStringArray([
+			"Goreng telur, potong sayur, lalu sajikan tanpa nasi.",
+			"Telur",
+			"Sayur (potong)",
+		])
 		and ui.get_pending_menu_selection() == [&"nasi_telor"]
 	)
 
-	# Switch preview back to Nasi Telor while toggling Nasi Ayam via checkmark -> confirm updates Run.
+	# Switch preview back to Nasi Telur while toggling Nasi Ayam via checkmark -> confirm updates Run.
 	ui.get_edit_menu_preview_button(&"nasi_telor").pressed.emit()
 	ui.get_edit_menu_recipe_button(&"nasi_ayam").button_pressed = true
 	await process_frame
 	_check(
 		"switching preview updates detail panel without disturbing checkmark selection",
-		ui.recipe_detail_title_label.text == "Nasi Telor"
-		and ui.get_edit_menu_detail_lines() == PackedStringArray(["Beras", "Telur"])
+		ui.recipe_detail_title_label.text == "Nasi Telur"
+		and ui.get_edit_menu_detail_lines() == PackedStringArray([
+			"Cuci dan masak beras, goreng telur, lalu sajikan bersama nasi.",
+			"Beras",
+			"Telur",
+		])
 		and ui.get_pending_menu_selection() == [&"nasi_telor", &"nasi_ayam"]
 	)
 	ui.edit_menu_confirm_button.pressed.emit()
@@ -241,8 +254,8 @@ func _test_edit_menu_detail_panel_and_unlocks() -> void:
 		"confirm persists newly toggled menu into RunController and updates forecast",
 		not ui.is_edit_menu_open()
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor", &"nasi_ayam"]
-		and ui.potential_demand_label.text == "Potensi Tamu: 19"
-		and ui.forecast_quota_label.text == "Target Tamu: 15"
+		and ui.potential_demand_label.text == "Potensi Tamu: 18"
+		and ui.forecast_quota_label.text == "Target Tamu: 18"
 	)
 
 	game_root.free()
@@ -359,7 +372,7 @@ func _test_edit_menu_modal_pause_dialogue_and_responsive() -> void:
 	var tile_before := kitchen.get_player_tile()
 	ui.open_edit_menu()
 	await process_frame
-	ui.get_edit_menu_preview_button(&"nasi_komplit").pressed.emit()
+	ui.get_edit_menu_preview_button(&"nasi_ayam").pressed.emit()
 	ui.get_edit_menu_recipe_button(&"nasi_ayam").button_pressed = true
 	await process_frame
 
@@ -383,12 +396,17 @@ func _test_edit_menu_modal_pause_dialogue_and_responsive() -> void:
 		"Resume from Pause restores Edit Menu, checkmark toggle, and previewed dish",
 		not ui.is_pause_open()
 		and ui.is_edit_menu_open()
-		and ui.get_previewed_edit_menu_recipe_id() == &"nasi_komplit"
+		and ui.get_previewed_edit_menu_recipe_id() == &"nasi_ayam"
 		and ui.get_pending_menu_selection() == [&"nasi_telor", &"nasi_ayam"]
 	)
 
-	# Responsive fit at 640x360 and 480x270.
-	for sz: Vector2i in [Vector2i(640, 360), Vector2i(480, 270)]:
+	# Responsive fit across 480x270, 640x360, 1280x720, and 1600x900.
+	for sz: Vector2i in [
+		Vector2i(640, 360),
+		Vector2i(480, 270),
+		Vector2i(1280, 720),
+		Vector2i(1600, 900),
+	]:
 		root.content_scale_size = sz
 		root.size = sz
 		ui._on_viewport_size_changed()
@@ -401,12 +419,13 @@ func _test_edit_menu_modal_pause_dialogue_and_responsive() -> void:
 		var cancel_rect := ui.edit_menu_cancel_button.get_global_rect()
 		var confirm_rect := ui.edit_menu_confirm_button.get_global_rect()
 		_check(
-			"Edit Menu + detail panel fit inside world_visible_rect with 0 gap at %dx%d" % [sz.x, sz.y],
+			"Edit Menu + right-side Resep panel fit cleanly inside world_visible_rect at %dx%d" % [sz.x, sz.y],
 			ui.world_visible_rect.encloses(p_rect)
+			and ui.world_visible_rect.encloses(detail_rect)
 			and not hud_rect.intersects(p_rect)
-			and p_rect.encloses(detail_rect)
+			and not hud_rect.intersects(detail_rect)
+			and detail_rect.position.x >= p_rect.end.x + 4.0
 			and p_rect.encloses(list_scroll_rect)
-			and is_equal_approx(detail_rect.position.x - list_scroll_rect.end.x, 0.0)
 			and p_rect.encloses(cancel_rect)
 			and p_rect.encloses(confirm_rect)
 		)

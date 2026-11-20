@@ -479,14 +479,14 @@ func _test_chronological_shop_contracts() -> void:
 	k1.clear_selected_target()
 	gr1.start_service_requested()
 
-	# Advance to t=9.0s -> open SERVING shop for 2x ayam (0.75 + 2*0.25 + 0.50 = 1.75s -> t=10.75s).
+	# Advance to t=9.0s -> open SERVING shop for 2x telur (0.75 + 2*0.25 + 0.50 = 1.75s -> t=10.75s).
 	# Verifies Customer 1 patience shrinks during shop AND periodic online offer opens at t=10.0s.
 	_advance_clock_and_poll(gr1, s1, 9.0, tr1)
 	var ord1 := StringName(s1.get_table_view(&"dining_table_01")["order_id_or_empty"])
 	var rem_before_shop := float(s1.get_order_view(ord1)["seconds_remaining"])
 	var cash_before_srv_shop := int(r1.get_run_view()["cash"])
 	var srv_shop := _execute_shop_basket_interaction(
-		gr1, k1, s1, r1, ui1, &"storage_box", { &"ayam": 2 }, false, tr1
+		gr1, k1, s1, r1, ui1, &"storage_box", { &"telur": 2 }, false, tr1
 	)
 	var bought_at := gr1.get_service_elapsed()
 	var rem_after_shop := float(s1.get_order_view(ord1)["seconds_remaining"])
@@ -494,12 +494,12 @@ func _test_chronological_shop_contracts() -> void:
 
 	# Advance +99.75s from checkout (delivery MUST still be pending, not arrived early).
 	_advance_clock_and_poll(gr1, s1, 99.75, tr1)
-	var ayam_before_due := _count_ingredient(k1, [&"storage_box"], &"ayam")
-	var pending_before_due := _count_pending(k1, &"ayam")
+	var telur_before_due := _count_ingredient(k1, [&"storage_box"], &"telur")
+	var pending_before_due := _count_pending(k1, &"telur")
 	# Advance final +0.25s -> exact 100.0s delay -> delivery commits!
 	_advance_clock_and_poll(gr1, s1, 0.25, tr1)
-	var ayam_at_due := _count_ingredient(k1, [&"storage_box"], &"ayam")
-	var pending_at_due := _count_pending(k1, &"ayam")
+	var telur_at_due := _count_ingredient(k1, [&"storage_box"], &"telur")
+	var pending_at_due := _count_pending(k1, &"telur")
 
 	# Attempt invalid box / over-capacity purchase during SERVING -> no cash or stock mutation.
 	var cash_pre_bad := int(r1.get_run_view()["cash"])
@@ -514,12 +514,12 @@ func _test_chronological_shop_contracts() -> void:
 		and int(offer_after_shop.get("offer_state", -1))
 		== ServiceController.OnlineOfferState.AVAILABLE
 		and int(tr1["presented"]) == 1
-		and int(r1.get_run_view()["cash"]) == cash_before_srv_shop - 12000
-		and ayam_before_due == 0 and pending_before_due == 2
-		and ayam_at_due == 2 and pending_at_due == 0
+		and int(r1.get_run_view()["cash"]) == cash_before_srv_shop - 6000
+		and telur_before_due == 2 and pending_before_due == 2
+		and telur_at_due == 4 and pending_at_due == 0
 		and not bool(bad_box["committed"])
 		and int(r1.get_run_view()["cash"]) == cash_pre_bad
-		and _count_ingredient(k1, [&"storage_box"], &"ayam") == 2
+		and _count_ingredient(k1, [&"storage_box"], &"telur") == 4
 	)
 	gr1.free()
 	await process_frame
@@ -564,7 +564,7 @@ func _test_chronological_shop_contracts() -> void:
 	var din4_pre_status := int(s2.get_order_view(din4_ord_id).get("status", -1))
 	var cash_pre_close_shop := int(r2.get_run_view()["cash"])
 	var shop_at_close := _execute_shop_basket_interaction(
-		gr2, k2, s2, r2, ui2, &"storage_box", { &"ayam": 2 }, false, tr2
+		gr2, k2, s2, r2, ui2, &"storage_box", { &"beras": 2 }, false, tr2
 	)
 	var report2: Dictionary = r2.get_day_settlement_view(1)
 	_check(
@@ -849,12 +849,12 @@ func _run_p5g_fair_matrix() -> void:
 			"target_boxes_by_day": { 1: 1, 2: 2, 3: 2, 4: 2, 5: 2, 6: 2, 7: 2 },
 			"target_recipes_by_day": {
 				1: [&"nasi_telor"],
-				2: [&"nasi_telor", &"nasi_ayam"],
-				3: [&"nasi_telor", &"nasi_ayam"],
-				4: [&"nasi_telor", &"nasi_ayam"],
-				5: [&"nasi_telor", &"nasi_ayam"],
-				6: [&"nasi_telor", &"nasi_ayam"],
-				7: [&"nasi_telor", &"nasi_ayam"],
+				2: [&"nasi_telor", &"nasi_tempe"],
+				3: [&"nasi_telor", &"nasi_tempe"],
+				4: [&"nasi_telor", &"nasi_tempe"],
+				5: [&"nasi_telor", &"nasi_tempe"],
+				6: [&"nasi_telor", &"nasi_tempe"],
+				7: [&"nasi_telor", &"nasi_tempe"],
 			},
 			"accept_online": true,
 			"noise": false,
@@ -863,15 +863,15 @@ func _run_p5g_fair_matrix() -> void:
 		{
 			"id": "C",
 			"name": "C_three_recipes_constrained_storage",
-			"target_boxes_by_day": { 1: 1, 2: 2, 3: 2, 4: 2, 5: 2, 6: 2, 7: 2 },
+			"target_boxes_by_day": { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1 },
 			"target_recipes_by_day": {
 				1: [&"nasi_telor"],
-				2: [&"nasi_telor", &"nasi_ayam"],
-				3: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				4: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				5: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				6: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				7: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
+				2: [&"nasi_telor", &"nasi_tempe"],
+				3: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				4: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				5: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				6: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				7: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
 			},
 			"accept_online": true,
 			"noise": false,
@@ -883,12 +883,12 @@ func _run_p5g_fair_matrix() -> void:
 			"target_boxes_by_day": { 1: 1, 2: 2, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3 },
 			"target_recipes_by_day": {
 				1: [&"nasi_telor"],
-				2: [&"nasi_telor", &"nasi_ayam"],
-				3: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				4: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				5: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				6: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				7: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
+				2: [&"nasi_telor", &"nasi_tempe"],
+				3: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				4: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				5: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				6: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				7: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
 			},
 			"accept_online": true,
 			"noise": false,
@@ -900,12 +900,12 @@ func _run_p5g_fair_matrix() -> void:
 			"target_boxes_by_day": { 1: 1, 2: 2, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3 },
 			"target_recipes_by_day": {
 				1: [&"nasi_telor"],
-				2: [&"nasi_telor", &"nasi_ayam"],
-				3: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				4: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				5: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				6: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				7: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
+				2: [&"nasi_telor", &"nasi_tempe"],
+				3: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				4: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				5: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				6: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				7: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
 			},
 			"accept_online": true,
 			"noise": true,
@@ -918,12 +918,12 @@ func _run_p5g_fair_matrix() -> void:
 			"target_boxes_by_day": { 1: 1, 2: 2, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3 },
 			"target_recipes_by_day": {
 				1: [&"nasi_telor"],
-				2: [&"nasi_telor", &"nasi_ayam"],
-				3: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				4: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				5: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				6: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
-				7: [&"nasi_telor", &"nasi_ayam", &"nasi_komplit"],
+				2: [&"nasi_telor", &"nasi_tempe"],
+				3: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				4: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				5: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				6: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
+				7: [&"nasi_telor", &"nasi_tempe", &"nasi_ayam"],
 			},
 			"accept_online": false,
 			"noise": false,
@@ -1103,11 +1103,11 @@ func _run_p5g_fair_matrix() -> void:
 	var sc_ctrl: Dictionary = results_by_id["F_CTRL"]
 
 	_check(
-		"P5-G2A Day 3 gross Potential Demand rises monotonically 1->2->3 recipes (15 < 19 < 22)",
-		int(sc_a["days"][2]["potential_demand"]) == 15
-		and int(sc_b["days"][2]["potential_demand"]) == 19
-		and int(sc_c["days"][2]["potential_demand"]) == 22
-		and int(sc_d["days"][2]["potential_demand"]) == 22
+		"P5-G2A Day 3 gross Potential Demand rises monotonically 1->2->3 recipes (12 < 15 < 17)",
+		int(sc_a["days"][2]["potential_demand"]) == 12
+		and int(sc_b["days"][2]["potential_demand"]) == 15
+		and int(sc_c["days"][2]["potential_demand"]) == 17
+		and int(sc_d["days"][2]["potential_demand"]) == 17
 	)
 	_check(
 		"P5-G2A Adequate storage (D) cuts unique stockouts & earns more than constrained (C)",

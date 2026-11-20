@@ -82,7 +82,10 @@ var _demand_penalty_debt: int = 0
 var _day_7_outcome: SharedTypes.DayOutcome = SharedTypes.DayOutcome.UNDECIDED
 var _extra_mode_active: bool = false
 var _frozen_service_plan: Dictionary = {}
+var _employees: Dictionary[StringName, Dictionary] = {}
+var _role_hire_sequences: Dictionary[StringName, int] = {}
 var _next_purchase_seq: int = 0
+var _next_employee_seq: int = 0
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
@@ -149,6 +152,34 @@ func get_fixture_instance(instance_id: StringName) -> Dictionary:
 	return _fixture_instances[instance_id].duplicate(true)
 
 
+func is_run_started() -> bool:
+	return _run_started
+
+
+func reset_to_idle() -> void:
+	_run_started = false
+	_rng.seed = 1337
+	_ensure_resources_loaded()
+	_day_index = 1
+	_cash = economy_config.starting_cash if economy_config != null else 0
+	_begin_day_cash = _cash
+	_demand_penalty_debt = 0
+	_day_7_outcome = SharedTypes.DayOutcome.UNDECIDED
+	_extra_mode_active = false
+	_unlocked_recipe_ids.clear()
+	_selected_recipe_ids.clear()
+	_fixture_instances.clear()
+	_purchase_ledger.clear()
+	_credited_order_ids.clear()
+	_settled_days.clear()
+	_frozen_service_plan.clear()
+	_employees.clear()
+	_role_hire_sequences.clear()
+	_next_purchase_seq = 0
+	_next_employee_seq = 0
+	run_state_changed.emit()
+
+
 func reset_for_new_run() -> void:
 	_run_started = false
 	_rng.seed = 1337
@@ -176,7 +207,10 @@ func start_new_run() -> void:
 	_credited_order_ids.clear()
 	_settled_days.clear()
 	_frozen_service_plan.clear()
+	_employees.clear()
+	_role_hire_sequences.clear()
 	_next_purchase_seq = 0
+	_next_employee_seq = 0
 
 	_bind_starter_fixtures()
 	_run_started = true
@@ -239,6 +273,172 @@ func get_fixture_daily_electricity_cost(utility_id: StringName, kind: int = -1) 
 
 func get_daily_electricity_estimate() -> int:
 	return _compute_daily_electricity_charge()
+
+
+func get_employee_role_ids() -> Array[StringName]:
+	_ensure_resources_loaded()
+	if economy_config == null:
+		return []
+	return economy_config.get_employee_role_ids()
+
+
+func get_employee_role_def(role_id: StringName) -> Dictionary:
+	_ensure_resources_loaded()
+	if economy_config == null:
+		return {}
+	return economy_config.get_employee_role_def(role_id)
+
+
+func get_hired_employees() -> Array[Dictionary]:
+	var ids: Array[StringName] = []
+	for emp_id: StringName in _employees:
+		ids.append(emp_id)
+	ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+	var out: Array[Dictionary] = []
+	for emp_id in ids:
+		out.append(_employees[emp_id].duplicate(true))
+	return out
+
+
+func get_employee_count_by_role(role_id: StringName) -> int:
+	var count := 0
+	for rec: Dictionary in _employees.values():
+		if StringName(rec.get("role_id", &"")) == role_id:
+			count += 1
+	return count
+
+
+func get_daily_salary_estimate() -> int:
+	return _compute_daily_salary_charge()
+
+
+func get_workforce_summary() -> Dictionary:
+	_ensure_resources_loaded()
+	var total := _employees.size()
+	var by_role: Dictionary = {}
+	var crowding := (
+		economy_config.compute_crowding_multiplier(total)
+		if economy_config != null
+		else 1.0
+	)
+	for role_id in get_employee_role_ids():
+		var cnt := get_employee_count_by_role(role_id)
+		var def := get_employee_role_def(role_id)
+		var factor := (
+			economy_config.compute_effective_role_factor(cnt, total)
+			if economy_config != null
+			else float(cnt)
+		)
+		var base_interval := float(def.get("base_interval_seconds", 4.0))
+		by_role[role_id] = {
+			"role_id": role_id,
+			"display_name": String(def.get("display_name", String(role_id))),
+			"count": cnt,
+			"hire_cost": int(def.get("hire_cost", 0)),
+			"daily_salary": int(def.get("daily_salary", 0)),
+			"effective_factor": factor,
+			"effective_interval": (base_interval / factor) if factor > 0.0 else 0.0,
+		}
+	var crowding_overhead := (
+		economy_config.compute_crowding_overhead(total)
+		if economy_config != null
+		else 0
+	)
+	return {
+		"total_employees": total,
+		"daily_salary_total": _compute_daily_salary_charge(),
+		"crowding_multiplier": crowding,
+		"crowding_overhead": crowding_overhead,
+		"crowded": (
+			economy_config != null and total > economy_config.employee_crowding_threshold
+		),
+		"by_role": by_role,
+	}
+
+
+func can_hire_employee(role_id: StringName) -> Dictionary:
+	if not _run_started or economy_config == null:
+		return {"ok": false, "reason": &"run_not_started"}
+	if _is_game_paused():
+		return {"ok": false, "reason": &"paused"}
+	if not _is_planning_phase():
+		return {"ok": false, "reason": &"not_planning"}
+	var role_def := economy_config.get_employee_role_def(role_id)
+	if role_def.is_empty():
+		return {"ok": false, "reason": &"invalid_role"}
+	var hire_cost := int(role_def.get("hire_cost", 0))
+	var daily_salary := int(role_def.get("daily_salary", 0))
+	if hire_cost <= 0:
+		return {"ok": false, "reason": &"invalid_role"}
+	if _cash < hire_cost:
+		return {
+			"ok": false,
+			"reason": &"insufficient_funds",
+			"hire_cost": hire_cost,
+			"daily_salary": daily_salary,
+		}
+	return {
+		"ok": true,
+		"reason": &"",
+		"hire_cost": hire_cost,
+		"daily_salary": daily_salary,
+		"role_def": role_def,
+	}
+
+
+func request_employee_hire(role_id: StringName) -> StringName:
+	var check := can_hire_employee(role_id)
+	if not bool(check.get("ok", false)):
+		return &""
+	var role_def: Dictionary = check.get("role_def", {})
+	var hire_cost := int(check.get("hire_cost", 0))
+	var daily_salary := int(check.get("daily_salary", 0))
+
+	_next_employee_seq += 1
+	_next_purchase_seq += 1
+	var role_seq := int(_role_hire_sequences.get(role_id, 0)) + 1
+	_role_hire_sequences[role_id] = role_seq
+	var role_display := String(role_def.get("display_name", String(role_id)))
+	var stable_name := "%s #%d" % [role_display, role_seq]
+	var employee_id := StringName("emp_%04d" % _next_employee_seq)
+	var purchase_id := StringName("pur_%d_%04d" % [_day_index, _next_purchase_seq])
+
+	_cash -= hire_cost
+	_employees[employee_id] = {
+		"employee_id": employee_id,
+		"role_id": role_id,
+		"role_enum": int(role_def.get("role_enum", SharedTypes.EmployeeRole.COOK)),
+		"role_display_name": role_display,
+		"role_number": role_seq,
+		"display_name": stable_name,
+		"hired_day": _day_index,
+		"hire_cost": hire_cost,
+		"daily_salary": daily_salary,
+		"active": true,
+	}
+	_purchase_ledger[purchase_id] = {
+		"purchase_id": purchase_id,
+		"day_index": _day_index,
+		"kind": &"EMPLOYEE_HIRE",
+		"storage_unit_id": &"",
+		"item_or_fixture_id": role_id,
+		"employee_id": employee_id,
+		"quantity": 1,
+		"actual_amount_paid": hire_cost,
+		"status": &"DELIVERED",
+	}
+	run_state_changed.emit()
+	return employee_id
+
+
+func request_employee_dismiss(employee_id: StringName) -> bool:
+	if not _run_started or _is_game_paused() or not _is_planning_phase():
+		return false
+	if employee_id == &"" or not _employees.has(employee_id):
+		return false
+	_employees.erase(employee_id)
+	run_state_changed.emit()
+	return true
 
 
 func get_compatible_empty_slots(utility_id: StringName) -> Array[StringName]:
@@ -661,6 +861,8 @@ func finalize_plan() -> bool:
 		"selected_recipe_ids": _selected_recipe_ids.duplicate(),
 		"dine_in_price_by_recipe": prices,
 		"installed_table_ids": table_ids,
+		"employees": get_hired_employees(),
+		"workforce_summary": get_workforce_summary(),
 	}
 	return true
 
@@ -754,7 +956,8 @@ func settle_day_once(report: Dictionary) -> Dictionary:
 		return {}
 
 	var electricity := _compute_daily_electricity_charge()
-	_cash -= electricity
+	var employee_salary := _compute_daily_salary_charge()
+	_cash -= electricity + employee_salary
 
 	var debt_before := _demand_penalty_debt
 	var failed_ids: Array = []
@@ -791,6 +994,9 @@ func settle_day_once(report: Dictionary) -> Dictionary:
 		"order_revenue_online": int(finance["order_revenue_online"]),
 		"refund_total": int(finance["refund_total"]),
 		"electricity_charge": electricity,
+		"employee_hire_total": int(finance["employee_hire_total"]),
+		"employee_salary_total": employee_salary,
+		"active_employee_count": _employees.size(),
 		"end_cash": _cash,
 		"completed_dinein_count": int(report.get("completed_dine_in_count", 0)),
 		"completed_online_count": int(report.get("completed_online_count", 0)),
@@ -839,6 +1045,10 @@ func get_run_view() -> Dictionary:
 		"demand_penalty_debt": _demand_penalty_debt,
 		"potential_demand": int(demand["potential_demand"]),
 		"planned_dinein_quota": int(demand["planned_dinein_quota"]),
+		"employee_count": _employees.size(),
+		"daily_salary_estimate": _compute_daily_salary_charge(),
+		"hired_employees": get_hired_employees(),
+		"workforce_summary": get_workforce_summary(),
 	}
 
 
@@ -1046,10 +1256,24 @@ func _compute_daily_electricity_charge() -> int:
 	return total
 
 
+func _compute_daily_salary_charge() -> int:
+	var total := 0
+	var active_count := 0
+	for rec: Dictionary in _employees.values():
+		if not bool(rec.get("active", true)):
+			continue
+		active_count += 1
+		total += maxi(0, int(rec.get("daily_salary", 0)))
+	if economy_config != null:
+		total += economy_config.compute_crowding_overhead(active_count)
+	return total
+
+
 func _compute_day_ledger_totals(day: int) -> Dictionary:
 	var ingredient_total := 0
 	var fixture_buy_total := 0
 	var fixture_sale_total := 0
+	var employee_hire_total := 0
 	var refund_total := 0
 	for rec: Dictionary in _purchase_ledger.values():
 		if int(rec.get("day_index", -1)) != day:
@@ -1063,6 +1287,8 @@ func _compute_day_ledger_totals(day: int) -> Dictionary:
 				refund_total += paid
 		elif kind == &"FIXTURE":
 			fixture_buy_total += paid
+		elif kind == &"EMPLOYEE_HIRE":
+			employee_hire_total += paid
 
 	var dinein_revenue := 0
 	var online_revenue := 0
@@ -1080,6 +1306,7 @@ func _compute_day_ledger_totals(day: int) -> Dictionary:
 		"ingredient_purchase_total": ingredient_total,
 		"fixture_purchase_total": fixture_buy_total,
 		"fixture_sale_total": fixture_sale_total,
+		"employee_hire_total": employee_hire_total,
 		"order_revenue_dinein": dinein_revenue,
 		"order_revenue_online": online_revenue,
 		"refund_total": refund_total,

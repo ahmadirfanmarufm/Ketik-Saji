@@ -103,16 +103,18 @@ func _test_planning_hud_presentation_and_stubs() -> void:
 		and not ui.day_result_side_panel.visible
 	)
 
-	# Stub Menu/Exit buttons block world clicks and do not navigate away from PLANNING.
+	# Menu stub blocks world clicks; Exit stub opens ExitConfirmOverlay without mutating phase.
 	var tile_before := kitchen.get_player_tile()
 	_send_left_click(ui, ui.menu_stub_button.get_global_rect().get_center())
 	ui.menu_stub_button.pressed.emit()
 	ui.exit_stub_button.pressed.emit()
 	_check(
-		"Menu and Exit stubs preserve UI click blocking without phase change",
+		"Menu and Exit buttons preserve UI click blocking and open ExitConfirm without phase change",
 		game_root.get_phase() == SharedTypes.Phase.PLANNING
 		and kitchen.get_player_tile() == tile_before
+		and ui.is_exit_confirm_open()
 	)
+	ui.exit_confirm_cancel_button.pressed.emit()
 
 	# RunController cash change updates Planning HUD cash and percentage automatically.
 	_check("buy 1 telur updates cash", run.request_ingredient_purchase(&"telur", 1, &"storage_box"))
@@ -139,16 +141,16 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
 
-	# Advance to Day 2 so 2 recipes are unlocked (nasi_telor active, nasi_ayam newly unlocked).
+	# Advance to Day 2 so 2 recipes are unlocked (nasi_telor active, nasi_tempe newly unlocked).
 	_advance_to_day(game_root, service, 2)
 	_check(
-		"Day 2 PLANNING starts with forecast 8 for active nasi_telor while nasi_ayam is unlocked",
+		"Day 2 PLANNING starts with forecast 8 for active nasi_telor while nasi_tempe is unlocked",
 		game_root.get_day_index() == 2
 		and ui.day_label.text == "Hari 2/7"
-		and ui.potential_demand_label.text == "Potensi Tamu: 10"
+		and ui.potential_demand_label.text == "Potensi Tamu: 8"
 		and ui.forecast_quota_label.text == "Target Tamu: 8"
-		and int(run.get_run_view().get("potential_demand", 0)) == 10
-		and run.get_run_view()["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_ayam"]
+		and int(run.get_run_view().get("potential_demand", 0)) == 8
+		and run.get_run_view()["unlocked_recipe_ids"] == [&"nasi_telor", &"nasi_tempe"]
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
 
@@ -157,10 +159,10 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 	ui.edit_menu_button.pressed.emit()
 	await process_frame
 	var telor_btn := ui.get_edit_menu_recipe_button(&"nasi_telor")
-	var ayam_btn := ui.get_edit_menu_recipe_button(&"nasi_ayam")
-	var komplit_btn := ui.get_edit_menu_recipe_button(&"nasi_komplit")
+	var tempe_btn := ui.get_edit_menu_recipe_button(&"nasi_tempe")
+	var gila_btn := ui.get_edit_menu_recipe_button(&"nasi_gila")
 	var telor_preview_btn := ui.get_edit_menu_preview_button(&"nasi_telor")
-	var ayam_preview_btn := ui.get_edit_menu_preview_button(&"nasi_ayam")
+	var tempe_preview_btn := ui.get_edit_menu_preview_button(&"nasi_tempe")
 	var popup_rect := ui.edit_menu_popup.get_global_rect()
 	_check(
 		"Edit Menu popup opens centered in world area with checkmark toggles and colon price format",
@@ -168,14 +170,14 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 		and ui.is_modal_blocking()
 		and ui.world_visible_rect.encloses(popup_rect)
 		and telor_btn != null
-		and ayam_btn != null
-		and komplit_btn == null
+		and tempe_btn != null
+		and gila_btn == null
 		and telor_btn.button_pressed
-		and not ayam_btn.button_pressed
+		and not tempe_btn.button_pressed
 		and telor_preview_btn != null
-		and ayam_preview_btn != null
-		and telor_preview_btn.text == "Nasi Telor: Rp 20k"
-		and ayam_preview_btn.text == "Nasi Ayam: Rp 28k"
+		and tempe_preview_btn != null
+		and telor_preview_btn.text == "Nasi Telur: Rp 20k"
+		and tempe_preview_btn.text == "Nasi Tempe: Rp 18k"
 		and not telor_btn.text.contains("[Aktif]")
 		and not telor_preview_btn.text.contains("[Aktif]")
 	)
@@ -194,13 +196,13 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 		and game_root.get_phase() == SharedTypes.Phase.PLANNING
 	)
 
-	# Toggle on nasi_ayam temporarily -> RunController unchanged until confirmation (10->14 / 8->11).
-	ayam_btn.button_pressed = true
+	# Toggle on nasi_tempe temporarily -> RunController unchanged until confirmation (8->11).
+	tempe_btn.button_pressed = true
 	_check(
-		"temporary toggle adds nasi_ayam in UI without mutating RunController before confirmation",
+		"temporary toggle adds nasi_tempe in UI without mutating RunController before confirmation",
 		run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
-		and ui.get_pending_menu_selection() == [&"nasi_telor", &"nasi_ayam"]
-		and ui.edit_menu_forecast_label.text == "Potensi Tamu: 14 | Target Tamu: 11"
+		and ui.get_pending_menu_selection() == [&"nasi_telor", &"nasi_tempe"]
+		and ui.edit_menu_forecast_label.text == "Potensi Tamu: 11 | Target Tamu: 11"
 	)
 
 	var state_changes := { "count": 0 }
@@ -209,34 +211,34 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 	# Attempt duplicate second submit in same sequence -> rejected cleanly.
 	var second_submit := ui.submit_edit_menu([&"nasi_telor"])
 	_check(
-		"confirm adds nasi_ayam in RunController, refreshes forecast to 11, blocks double-submit",
+		"confirm adds nasi_tempe in RunController, refreshes forecast to 11, blocks double-submit",
 		not ui.is_edit_menu_open()
 		and not ui.is_modal_blocking()
 		and not second_submit
 		and state_changes["count"] == 1
-		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor", &"nasi_ayam"]
-		and int(run.get_run_view().get("potential_demand", 0)) == 14
-		and ui.potential_demand_label.text == "Potensi Tamu: 14"
+		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor", &"nasi_tempe"]
+		and int(run.get_run_view().get("potential_demand", 0)) == 11
+		and ui.potential_demand_label.text == "Potensi Tamu: 11"
 		and ui.forecast_quota_label.text == "Target Tamu: 11"
 	)
 
-	# Re-open Edit Menu, deselect nasi_ayam, and confirm -> forecast drops back from 11 to 8.
+	# Re-open Edit Menu, deselect nasi_tempe, and confirm -> forecast drops back from 11 to 8.
 	ui.edit_menu_button.pressed.emit()
-	ui.get_edit_menu_recipe_button(&"nasi_ayam").button_pressed = false
+	ui.get_edit_menu_recipe_button(&"nasi_tempe").button_pressed = false
 	ui.edit_menu_confirm_button.pressed.emit()
 	_check(
 		"deselecting recipe and confirming refreshes forecast back to 8",
 		not ui.is_edit_menu_open()
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
-		and int(run.get_run_view().get("potential_demand", 0)) == 10
-		and ui.potential_demand_label.text == "Potensi Tamu: 10"
+		and int(run.get_run_view().get("potential_demand", 0)) == 8
+		and ui.potential_demand_label.text == "Potensi Tamu: 8"
 		and ui.forecast_quota_label.text == "Target Tamu: 8"
 	)
 
 	# Re-open Edit Menu and verify Cancel discards temporary toggles and restores buka typing.
 	ui.edit_menu_button.grab_focus()
 	ui.edit_menu_button.pressed.emit()
-	ui.get_edit_menu_recipe_button(&"nasi_ayam").button_pressed = true
+	ui.get_edit_menu_recipe_button(&"nasi_tempe").button_pressed = true
 	ui.edit_menu_cancel_button.pressed.emit()
 	_check(
 		"Cancel closes popup, releases button focus, and keeps active menu unchanged",
@@ -266,7 +268,7 @@ func _test_edit_menu_lifecycle_and_validation() -> void:
 		and run.get_run_view()["selected_recipe_ids"] == [&"nasi_telor"]
 	)
 
-	var locked_ok := ui.submit_edit_menu([&"nasi_komplit"])
+	var locked_ok := ui.submit_edit_menu([&"nasi_gila"])
 	_check(
 		"locked recipe ID rejected cleanly without changing active menu",
 		not locked_ok

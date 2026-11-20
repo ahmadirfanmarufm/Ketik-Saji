@@ -1,62 +1,72 @@
-# Ketik Saji | Status pengembangan
+# Project status
 
-**Untuk developer/Claude Code.** Isi laporan ini dari branch dan build yang sedang dikerjakan. Perbarui snapshot sebelum push berikutnya, lalu segarkan dan sertakan file ini pada **setiap push pengembangan** agar koordinator dapat memeriksa kondisi kode, error, dan hasil validasi langsung di `/docs/PROJECT_STATUS.md`. Gunakan `docs/PROGRESS.md` untuk histori milestone yang lebih panjang.
+Updated: 2026-11-20 12:15 +07:00 (WIB) · Antigravity Developer Agent
+Branch / tested baseline: `main` @ `15d5cfc` + local uncommitted `docs_2/` recovery, Main Menu/Display fixes, M8 Employee Hiring System & M9 Tutorial/Modal/Typography Polish
+Build / platform: Godot Engine `4.7.2.stable.official.ed1daf0bf` · Windows 11 (`x86_64`) · GL Compatibility renderer
 
-## Snapshot terbaru
+---
 
-| Field | Nilai aktual saat ini |
-| --- | --- |
-| Tanggal/jam, WIB | 18 November 2026 · 22:08 WIB |
-| Branch dan commit sumber yang diuji | `main` @ `489f15d` (`feat: implement M5-A1 world layout`) + implementasi lokal **M5-A2 (Customer Seating)** (belum di-stage/commit) |
-| Lingkungan yang diuji | Godot `4.7.2.stable.official.ed1daf0bf` · Windows · headless (`10/10` suite, `935/935` cek) & GUI (`640×360` / `1280×720` window & `480×270`) |
-| Status lokal sebelum push | Milestone **M5-A (M5-A1 World Layout `12×9` + M5-A2 Customer Seating)** selesai diimplementasikan dan lulus seluruh `10` suite headless (`935/935` PASS, exit `0`) serta verifikasi GUI di `640×360` dan `480×270`. Permukaan meja makan masih memakai placeholder sementara `TabletopPlaceholder` sambil menunggu sprite meja khusus dari tim artist; loop 7 hari (`M5-B+`) masih pending. |
-| Ringkasan | Meja makan starter (`dining_table_01..02`) dan dinamis M4-C (`dining_table_03+` via `WorldMap.spawn_placed_fixture()`) kini memakai scene bersama `scenes/world/dining_table.tscn` (`TabletopPlaceholder`, `ChairVisual` `Sprite2D` di sisi selatan memakai `Rect2(416, 160, 32, 32)`, `SeatAnchor` `Marker2D` di `(0, 16)`, `TableHitbox` `28×28`, dan `ChairHitbox` `22×12` di `(0, 18)`). Pelanggan `SEATED_WAITING` dan `EATING` menempati `SeatAnchor.global_position` (bukan di atas permukaan meja), klik kursi memilih meja induk, dan sel lantai selatan tetap walkable serta dapat diklik untuk teleport. |
+## Current playable state
 
-Saat mengisi, catat branch, SHA **kode yang benar-benar diuji**, dan apakah perubahan lokal ikut diuji. Jika suite belum dijalankan lagi setelah perubahan terakhir, beri tanggal/SHA hasil lama dan tandai hasil build sekarang sebagai **BELUM DIUJI**.
+**Ketik Saji launches directly to the Main Menu (without starting a run or Story prematurely), applies live Windowed/Fullscreen/Resolution/VSync display settings via `DisplayServer` + `Window` with read-back verification and `user://settings.cfg` persistence, includes the M8 + M8.1 Employee Hiring & Workforce System (`Koki`, `Kasir`, `Pelayan`) with unified `KetikUiArt` `GrapeSoda.ttf` Employee UI typography, isolates `Cara Main` from `PauseOverlay` (`Escape` / outside-click / `Pause -> Cara Main -> Pause` round-trip), provides the 15-section `Cara Main` reference and 8-chapter interactive guided tutorial + 9 contextual feature tips with `[tutorial]` persistence in `GameAudio`, and passes all `27/27` automated headless suites (`fails=0`) plus GL visual verification (`480x270`–`1600x900`).**
 
-### Yang berubah dan dapat dimainkan
+- **Initial Main Menu Flow (`GameRoot` + `RunController` + `GameUI`):** Fixed `_is_app_main_scene_boot()` so real `project.godot` boots (`get_tree().current_scene` still `null` inside `Main::start()` `_ready()`) and `change_scene_to_file()` launches set `_in_main_menu = true` **before** `_wire_controllers()`, keeping `RunController._run_started == false`, `MainMenuOverlay.visible = true`, `LeftHUDRegion` hidden, and Opening Story stopped until the player explicitly selects `Play`. `request_start_play_from_menu()` runs `_reset_run_world_and_controllers(true)` so both initial `Play` and returning via `Menu utama` -> `Play` start a fresh Day 1 run with zero stale cash/day state.
+- **Functional Display Mode, Resolution & VSync (`GameAudio` + `SettingsOverlay`):** `DisplayModeButton` (`Berjendela` / `Layar Penuh`), `ResolutionOptionButton` (`480x270`, `640x360`, `1280x720`, `1600x900`), `VsyncToggleButton` (`Aktif` / `Mati`), and `SettingsResetButton` call real `DisplayServer` + `Window` APIs (`window_set_mode`, `window_set_flag`, `window_set_size`, screen-bounds clamping + centered positioning, deferred fullscreen-exit bounds enforcement, `window_set_vsync_mode`), verify read-back `window_get_mode()` / `window_get_size()` / `window_get_vsync_mode()`, and update `DisplayStatusLabel` (`Aktif: Layar Penuh (1920x1080) · Resolusi jendela (...)` or `Aktif: Berjendela · WxH · VSync ...`) rather than displaying unverified requested values.
+- **Audio, Settings, Exit Confirmation & Gameplay:** Retains `Backsound.ogg` (`193.85s` imported), 3 `AudioServer` buses (`Master`, `Music`, `SFX`), `191.392s` loop, `5.0s` fade, `ConfigFile` (`user://settings.cfg`) persistence, `ExitConfirmOverlay`, `LeftHUDRegion` (`136px`), `Edit menu` + `Resep`, `Belanja Bahan`, 3-tile counter slots, and `CARA MAIN`.
 
-| Area | Status | Bukti atau langkah verifikasi |
+---
+
+## Requirement status
+
+| Area / request | Status | Evidence and remaining work |
 | --- | --- | --- |
-| Boot, interaksi dapur (M1), dine-in (M2) | **SELESAI & LULUS HEADLESS** | Boot ke Planning, seluruh alur ambil bahan/cuci/masak/potong/rak/meja/sampah (`114/114` di `tests/test_game_ui_m1.gd`), serta spawn, FIFO, patience `100s`, makan `20s`, `saji`, dan `bersihkan` (`51/51` di `tests/test_service_m2.gd`). |
-| Online delivery (M3) | **SELESAI & LULUS HEADLESS** | Preview offer di `OnlineStation`, `terima`, cutoff kuota `<= 2`, cap `day_queue_initial`, 3 pickup spot + overflow FIFO, deadline `60s`, `saji` driver, dan drain otomatis (`98/98` di `tests/test_service_m3.gd`). |
-| Planning HUD, Edit Menu, `buka` (M4-A) | **SELESAI & LULUS HEADLESS** | HUD `persiapan sebelum buka`, `Hari X/7`, persentase target Hari 7, tombol `Edit Menu` & `Beli Alat`, stub `Menu`/`Exit`, modal `Edit Menu` dengan `RunController.select_daily_menu()` + guard ganda, dan `buka` tanpa Enter (`26/26` di `tests/test_planning_m4a.gd`). |
-| Belanja Bahan UI, Hardening Transaksi & Usability (M4-B) | **SELESAI & LULUS HEADLESS** | Klik penyimpanan (`storage_box` / `fridge_01`) di `PLANNING`/`SERVING` membuka `Belanja Bahan`, tombol `Ambil Bahan` & `ESC` di `SERVING`, pemisahan hitbox `WorkTable` (`StagingTarget` vs `ChoppingTarget`), pergerakan halus (`PlayerVisual` & NPC/driver tween), dan `DayResultSidePanel` dengan `ResultSummaryScroll` + `ResultFooter` (`55/55` di `tests/test_shop_m4b.gd`). |
-| Belanja Peralatan & Placement System (M4-C) | **SELESAI & LULUS HEADLESS + GUI** | Klik tombol `Beli Alat` atau klik `PlacementSlots` kosong di `PLANNING` membuka `Belanja Peralatan` yang responsif di `640x360` (`1280x720`) maupun `480x270` dengan ke-`11` tombol slot (`slot_utility_01..05`, `slot_table_01..06`) muat di dalam popup (`104/104` di `tests/test_fixture_m4c.gd`). |
-| World Layout `12×9` (M5-A1) | **SELESAI & LULUS HEADLESS + GUI (`640×360` & `480×270`)** | Grid `12×9` (`32×32` px, `108` sel `FloorTiles`), posisi starter fixture sesuai spesifikasi, `5` slot utilitas + `6` slot meja (`8` total meja), antrean dine-in di kolom `9` (`4` anchor), pickup spot non-walkable di `(7,5)..(7,7)`, `driver_overflow` di `(11,7)`, dekorasi pasif meja panjang (`(0..5,4)`) & dinding (`(8,0..4 & 8)`), pintu `(8,5..7)`, posisi awal pemain `(6,3)`, serta verifikasi keterjangkauan kardinal saat ke-11 slot penuh (`208/208` di `tests/test_world_hierarchy.gd`, total `913/913` di 10 suite). |
-| Customer Seating (M5-A2: `ChairVisual`, `SeatAnchor` & Placeholder Meja) | **SELESAI & LULUS HEADLESS + GUI (`640×360` & `480×270`)** | Scene bersama `scenes/world/dining_table.tscn` dipakai oleh `dining_table_01..02` dan `dining_table_03+` (`WorldMap.spawn_placed_fixture()`). `ChairVisual` (`Rect2(416,160,32,32)`) dan `SeatAnchor` (`(0, 16)`) tidak terdaftar di `WorldRegistry`/`WorldGrid`; `WorldMap._resolve_customer_visual_position()` memakai `SeatAnchor.global_position`; klik `ChairHitbox` memilih meja untuk `saji`/`bersihkan` tanpa mengganggu klik lantai sel selatan (`219/219` di `test_world_hierarchy.gd`, `51/51` di `test_service_m2.gd`, `110/110` di `test_fixture_m4c.gd`). |
-| Loop 7 Hari (`M5-B+`), `M4-D` Resale & Backlog Playtest | **BELUM DIIMPLEMENTASIKAN (PENDING)** | Loop transisi otomatis 7 hari + Mode Ekstra penuh, pipeline resep `nasi_komplit` / Hari 4–7 (`M5-B+`), fitur jual peralatan (`M4-D`), serta item non-layout dari catatan playtest belum dikerjakan. |
-| Aset grafis, font, Audio, dan GUI ekspor | **PARSIAL / TERBLOKIR ASET LANJUTAN** | Tile lantai/jalur/dinding/meja-panjang, kursi meja makan (`416,160,32,32`), player, NPC, gojek, dan sebagian bahan terpasang (`sapi.tres` memakai fallback warna UI; permukaan meja makan memakai `TabletopPlaceholder` sampai sprite meja khusus tersedia). PNG UI (`assets/ui/`), font pilihan, resep Hari 4–7, dan Audio belum tersedia di repo. |
+| Thirteen recipes / `M-01` | **Implemented & verified** | All 13 `.tres` files in `data/recipes/` verified by `tests/test_track_a3.gd` & `tests/test_docs2_final.gd`. |
+| Ingredient unlocks / demand | **Implemented & verified** | `RunController` Day 1–5 ingredient gating (`beras, telur` -> `sapi`), `+3/+2/+1` additive arrivals (`tests/test_track_a3.gd`, `tests/test_p5_simulation.gd`, `tests/test_p5g_fair_economy.gd`). |
+| Main menu & startup flow / `UI-01` | **Implemented & verified** | Real `main_scene` boot opens `MainMenuOverlay` with `_run_started == false` and zero story/HUD started; Settings/Cancel preserve MainMenu; `Play` starts clean Day 1 run + story (`tests/test_main_menu_and_display_m7.gd`, `tests/test_story_tutorial.gd`, `01_boot_main_menu.png`). |
+| HUD and typing | **Implemented & verified** | Left HUD `136px`, `paper-calendar` `32px`, typing/command rects (`tests/test_hud_pause_m5c.gd`, `tests/test_dialogue_click_m5b3.gd`, `03_sidebar_planning_640.png`). |
+| Sidebar Exit & Exit Confirm | **Implemented & verified** | `ExitStubButton` -> `ExitConfirmOverlay` (`"Keluar Game?"`), `MenuStubButton` -> `Cara Main`, `PauseButton` -> `PauseOverlay`; `Pause` & `Main Menu` unified (`tests/test_audio_settings_exit_m6.gd`, `tests/test_hud_pause_m5c.gd`, `tests/test_planning_m4a.gd`, `04_exit_confirm_*.png`). |
+| Edit Menu, shops & 3-tile counters | **Implemented & verified** | `tests/test_edit_menu_feedback_m5e.gd`, `tests/test_shop_m4b.gd`, `tests/test_shop_ui_m5d.gd`, `tests/test_fixture_m4c.gd`, `tests/test_audio_settings_exit_m6.gd` (interactive mouse/key cooking + `LongCounterLeft01` `DishSprite` + dine-in serve). |
+| Audio `A-01`/`A-02` & BGM `.ogg` | **Implemented & verified (no physical speaker check in CLI)** | `Backsound.ogg` (`193.85s`) imported and playing cleanly (`Main Menu` / `SERVING`), `Master`/`Music`/`SFX` buses + fade-only `BGMPlayer`, `191.392s` loop, `5.0s` fade, click/serve/error SFX (`tests/test_audio_settings_exit_m6.gd`, `tests/test_docs2_final.gd`). **Human speaker listening QA awaits interactive launch.** |
+| Settings `A-03` & Live Display/Reset | **Implemented & verified (headless + non-headless GL)** | `SettingsOverlay` (`AUDIO`, `TAMPILAN`, `LAINNYA`) with `Master`/`Musik`/`SFX`, real `DisplayServer` Fullscreen/Windowed, `[480x270, 640x360, 1280x720, 1600x900]` bounds-clamped sizing, VSync, verified `DisplayStatusLabel`, `Reset Default`, and deferred `user://settings.cfg` startup application (`tests/test_main_menu_and_display_m7.gd`, live captures `02`–`08`). |
+| Results / win / lose `R-01` | **Implemented & verified** | Days 1–6 summary, Day 7 WON (`Lanjut jualan` / `Menu utama`), Day 7 LOST (`Coba lagi` / `Menu utama`) (`tests/test_progression_m5b.gd`, `tests/test_full_run_m5f.gd`). |
+| Grape Soda / 15-Section `CARA MAIN` & Modal Fix | **Implemented & verified** | `GrapeSoda.ttf` applied via `KetikUiArt`; `15`-section `CARA MAIN` fits `480x270`–`1600x900`; `Cara Main` vs `PauseOverlay` mutual exclusion + `PauseReferenceButton` round-trip (`tests/test_story_tutorial.gd`, `tests/test_tutorial_modal_typography_m9.gd`, `tests/test_hud_pause_m5c.gd`). |
+| Interactive 8-Chapter Tutorial & Employee UI Typography / `M9` | **Implemented & verified** | Removed `FontVariation` from `EmployeeOverlay` (unified `KetikUiArt` cream/brown contrast); re-activated 8-chapter (`17`-step) real-action tutorial + `9` contextual tips + Skip/Replay + `GameAudio` `[tutorial]` `ConfigFile` persistence (`tests/test_tutorial_modal_typography_m9.gd`, `9` inspected GL PNGs `480x270`–`1600x900`). |
+| Employee Hiring & Workforce / `M8`+`M8.1` | **Implemented & verified** | `Koki`/`Kasir`/`Pelayan` (`PLANNING`-only hire/dismiss + confirmation), stable sequence names (`Koki #1`..), standardized UI labels (`Kelola Pegawai`, `Biaya Rekrutmen`, `Gaji Harian`, `Total Gaji Harian`, zero `"Upah"`), expanded `Koki` stove cooking onto `long_counter_right_01..03` with station/slot locks, procedural `WALK`/`WORK`+pan/steam/`CLEAN`/`SERVE` animations on `pegawai.png`, `[1.0, 0.75, 0.50, 0.35]` + crowding overhead (`+20k/extra` beyond 2), and 7-day simulations (`tests/test_employees_m8.gd`: `46` PASS; `0`-hire `Rp 1,721,400` WON, `1 Cook` `Rp 1,622,800` WON, bloated 6-crew `Rp 485,400` LOST). |
 
-Pada setiap update, tulis 1–3 perubahan yang masuk push, jalur pemain yang bisa dicoba, serta bagian parsial/placeholder dan dependensinya. Sertakan path scene, fungsi, atau tes yang relevan.
+---
 
-### Tes yang benar-benar dijalankan
+## Validation performed
 
-| Jenis | Hasil aktual (exit code Godot) |
-| --- | --- |
-| Import & Boot headless | `godot --headless --path . --import` (exit `0`) & `godot --headless --path . --quit-after 2` (exit `0`) **LULUS**. |
-| Suite World Hierarchy, M5-A1 & M5-A2 (`tests/test_world_hierarchy.gd`) | **LULUS** — `219/219` PASS (`SUMMARY fails=0`, exit `0`, zero leaks). |
-| Suite M4-C (`tests/test_fixture_m4c.gd`) | **LULUS** — `110/110` PASS (`SUMMARY fails=0`, exit `0`, zero leaks). |
-| Suite M4-B (`tests/test_shop_m4b.gd`) | **LULUS** — `55/55` PASS (`SUMMARY fails=0`, exit `0`, zero leaks). |
-| Suite M4-A (`tests/test_planning_m4a.gd`) | **LULUS** — `26/26` PASS (`SUMMARY fails=0`, exit `0`, zero leaks). |
-| Suite M3 (`tests/test_service_m3.gd`) | **LULUS** — `98/98` PASS (`SUMMARY fails=0`, exit `0`, zero leaks). |
-| Suite M2 (`tests/test_service_m2.gd`) | **LULUS** — `51/51` PASS (`SUMMARY fails=0`, exit `0`, zero leaks). |
-| Suite M1 (`tests/test_game_ui_m1.gd`) | **LULUS** — `114/114` PASS (`SUMMARY fails=0`, exit `0`, zero leaks). |
-| Suite M0 (`tests/test_controllers_m0.gd`), `test_game_root.gd`, `test_track_a3.gd` | **LULUS** — `106/106`, `88/88`, `68/68` (`SUMMARY fails=0`, masing-masing exit `0`, zero leaks; total `935/935` cek di 10 suite). |
-| Verifikasi GUI (`640×360` / `1280×720` window & `480×270`) | **LULUS** — Diuji dengan renderer non-headless Godot 4.7.2: `LeftHUDRegion` tidak menimpa `World`, klik HUD terblokir, popup `Belanja Peralatan` (11 tombol slot) muat penuh di `640×360` & `480×270`, klik `ChairHitbox` meja starter & dinamis memilih meja induk, sel lantai selatan dapat diklik normal, dan visual pelanggan duduk di `SeatAnchor` terverifikasi via render `640×360`. |
-| Tes historis `scratch/test_world_a2.gd` | **TIDAK TERSEDIA** — direktori/file `res://scratch/test_world_a2.gd` tidak ada di workspace saat ini. |
-| UID, format GDScript, `git diff --check` | `.uid` & style (`tabs`, UTF-8, LF, `<=100` kolom) & `git diff --check` **LULUS** (`0` issue). |
+1. **Headless Resource Import & Project Main-Scene Boot:**
+   - `C:\Godot\Godot_v4.7.2-stable_win64.exe --headless --path . --import` -> Exit `0`, zero import/parse/UID errors.
+   - `C:\Godot\Godot_v4.7.2-stable_win64.exe --path . --quit-after 30` -> Exit `0` (direct `project.godot` launch).
+2. **Full Automated Godot Regression Suite (`27/27` suites, headless `--path . -s tests/*.gd`):**
+   - Includes all `26` prior suites plus `tests/test_tutorial_modal_typography_m9.gd`, updated `tests/test_story_tutorial.gd`, and `tests/test_hud_pause_m5c.gd` — **Combined:** `27/27` suites passing (`exit=0`, `SUMMARY fails=0`).
+3. **Live Non-Headless Windows GL Runtime & Visual Verification (`scratch/visual_audit_m9.gd`, `tests/test_main_menu_and_display_m7.gd`):**
+   - Executed M9 tutorial, `Cara Main` vs `PauseOverlay`, and `EmployeeOverlay` typography visual audit across `480x270`, `640x360`, `1280x720`, and `1600x900` (`9` inspected GL PNGs in session scratch dir).
+   - Previously verified `DisplayServer` mode/resolution/VSync transitions (`tests/test_main_menu_and_display_m7.gd`: `23/23` PASS, `SUMMARY fails=0`).
+4. **Audio Listening Check:** **NOT RUN** (CLI environment without live speaker verification).
 
-Untuk update berikutnya, cantumkan command atau langkah manual, hasil **LULUS / GAGAL / BELUM DIUJI / TERBLOKIR**, dan ringkas output yang relevan. Laporkan regresi GUI dan hasil ekspor terpisah dari headless.
+---
 
-### Masalah dan validasi untuk koordinator
+## Known errors, missing assets, and deviations
 
-| Prioritas | Gejala dan langkah reproduksi | Harapan / status |
-| --- | --- | --- |
-| **SELESAI di M5-A2** (`Customer Seating`) | `ChairVisual` (`Rect2(416,160,32,32)`) + `SeatAnchor` (`(0, 16)`) + `ChairHitbox` + `TabletopPlaceholder` terpasang lewat scene bersama `scenes/world/dining_table.tscn` pada meja starter & dinamis M4-C; pelanggan duduk di `SeatAnchor`. | **SELESAI & TERUJI (`test_world_hierarchy.gd`, `test_service_m2.gd`, `test_fixture_m4c.gd`)**. |
-| **SELESAI di M5-A1** (`World Layout 12×9`) | Layout `12×9` (`108` sel), `5` slot utilitas + `6` slot meja, antrean kanan kolom `9`, pickup non-walkable `(7,5)..(7,7)`, overflow jalan kanan `(11,7)`, dekorasi pasif meja panjang & dinding, dan posisi awal pemain `(6,3)` telah diterapkan dan lulus headless + GUI. | **SELESAI & TERUJI (`test_world_hierarchy.gd` & `test_fixture_m4c.gd`)**. |
-| **SELESAI di M4-C** (`KitchenController` & `PlacementSlots`) | `KitchenController` kini memakai resolusi `FixtureKind` dinamis (`register_fixture_kind`, `get_fixture_kind`) dan `PlacementSlots` dapat diklik di `PLANNING` via `WorldMap.hit_test_placement_slot()` sambil tetap bertipe `Marker2D`. | **SELESAI & TERUJI (`test_fixture_m4c.gd`)**. |
-| **SELESAI di Usability Fixes** (`WorkTable`, `PlayerVisual`, `DayResultSidePanel`) | Hitbox `StagingTarget` dan `ChoppingTarget` dipisahkan tanpa overlap, pergerakan karakter/NPC/driver menggunakan tween halus, dan tombol `Lanjut` di `DayResultSidePanel` selalu terlihat di dalam viewport `640x360`. | **SELESAI & TERUJI (`test_world_hierarchy.gd` & `test_shop_m4b.gd`)**. |
-| **SELESAI di M4-B** (`RunController` & `KitchenController` transaksi bahan) | Keranjang `PLANNING` atomik (`receive_stock_basket`), refund pasca-kirim dicegah, dan UX `Ambil Bahan` / `ESC` ditambahkan saat `SERVING`. | **SELESAI & TERUJI (`test_shop_m4b.gd`)**. |
+1. **BGM Source Transcode:** Original `assets/audio/Backsound.opus` is retained alongside transcoded `assets/audio/Backsound.ogg` (produced locally from OBS Studio's FFmpeg 7.x `libopus` -> `libvorbis` libraries at matching `48 kHz` stereo, `9,304,968` samples / `193.85s`) so Godot `4.7.2` imports it natively.
+2. **Headless Audio Teardown Timing Note:** In Godot `4.7.2` `--headless` Dummy audio driver, existing tests that play `.ogg` streams immediately before calling `free(); await process_frame; quit()` may print `ObjectDB instances were leaked` (`AudioStreamPlaybackOggVorbis`) unless `2+` frames run for `AudioServer::update()` to flush stopped playbacks (`test_audio_settings_exit_m6.gd` drains `12` frames and exits cleanly with `0` node/gameplay leaks). Also inside Windows Sandbox Mode, `user://settings.cfg` is read-only unless running unsandboxed or via `set_settings_path_for_test(...)`.
+3. **Asset Path & Role Implementation Notes:** Prompt-referenced `res://assets/art/npc/Pegawai.png` does not exist; existing repository asset `res://assets/art/characters/pegawai.png` (`uid://btbdutwct48ot`, `14×31` static RGBA8 sprite) is used consistently in both `WorldMap` and `EmployeeOverlay`. Equipment selling (`M4-D`) remains unimplemented/excluded and is intentionally omitted from `Cara Main`. When hiring triggers `employee_hired` while `EmployeeOverlay` is open, `FeatureTipPanel` renders behind `WorldDimmer` at top-right until dismissed or the shop closes. Because Ketik Saji credits orders atomically on `saji` without a separate cashier register queue, `Kasir` assists front-of-house online intake (`OnlineStation` at free pickup spots) and guest patience buffers without generating unbacked cash.
+4. **Formatting Check:** `git diff --check` clean (`exit=0`); zero files inside `docs_2/` modified.
 
-Untuk error baru, catat prioritas, langkah reproduksi, hasil yang diharapkan vs yang terjadi, pesan error persis atau lokasi yang relevan, dan status perbaikan. Tandai bug yang baru muncul atau sudah selesai. Cantumkan keputusan/asset yang dibutuhkan dan maksimal tiga hal paling penting untuk koordinator cek pada push tersebut.
+---
+
+## Checks for the coordinator
+
+1. **Audio Listening & Display QA (Windows Desktop Build):** Launch on desktop, verify BGM starts in Main Menu and Serving, loops seamlessly at `191.392s`, fades smoothly over `5.0s` into Planning/Results, responds live to `Master`/`Musik`/`SFX` sliders (`0%` mutes cleanly without affecting sibling buses), verify `Mode Layar`/`Resolusi`/`VSync` & `Reset Default`, and verify settings reload after relaunch (`user://settings.cfg`).
+2. **Interactive Exit & Full Run QA:** Verify sidebar scroll icon opens `Cara Main`, `Exit` icon opens `"Keluar Game?"` confirmation (`Batal`/`Keluar`/`Escape`), `Pause` opens Pause cleanly, and run Day 1 -> Day 7 win/lose playthrough.
+
+---
+
+## Next work
+
+1. Perform interactive desktop speaker QA on `Backsound.ogg`, `Master`/`Music`/`SFX` sliders, `click1..5.ogg`, error SFX, and serve SFX.
+2. Perform interactive relaunch check of `user://settings.cfg` on a non-sandboxed Windows desktop session (saving settings, closing, and reopening the executable).
+3. Export Windows release build (`itch.io` package) with GrapeSoda font attribution on the `itch.io` store page per `F-02`.

@@ -59,6 +59,15 @@ func _force_empty_service(service: ServiceController) -> void:
 		table["order_id_or_empty"] = &""
 
 
+func _advance_to_day(game_root: GameRoot, target_day: int) -> void:
+	var service := game_root.get_service_controller() as ServiceController
+	while game_root.get_day_index() < target_day:
+		game_root.start_service_requested()
+		_force_empty_service(service)
+		game_root.request_close_if_drained()
+		game_root.request_continue_from_results()
+
+
 func _cook_batch_in_cooker(
 	kitchen: KitchenController,
 	ui: GameUI,
@@ -256,6 +265,7 @@ func _test_two_way_plating_directions_and_rejections() -> void:
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
+	_advance_to_day(game_root, 4)
 
 	_check(
 		"stock ingredients for two-way plating tests",
@@ -474,6 +484,7 @@ func _test_reverse_worktable_merge_and_plate_storage_guard() -> void:
 	var kitchen := game_root.get_kitchen_controller() as KitchenController
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
+	_advance_to_day(game_root, 3)
 
 	_check(
 		"stock storage_box for reverse worktable merge and storage guard tests",
@@ -555,15 +566,15 @@ func _test_reverse_worktable_merge_and_plate_storage_guard() -> void:
 	var staged_partial := kitchen.get_work_table_view(&"work_table")
 	var staged_parts: Array = staged_partial.get("parts", [])
 	_check(
-		"loose cooked ayam merges into staged partial plate, keeping plate_id and clearing hand",
-		ui.get_feedback_code() == &"item_merged"
+		"loose cooked ayam merges into staged [COOKED_RICE] plate, keeping plate_id and completing nasi_ayam",
+		ui.get_feedback_code() == &"dish_ready"
 		and kitchen.get_held_item_view().is_empty()
 		and staged_partial.get("plate_id", &"") == known_plate_id
 		and staged_parts.size() == 2
 		and staged_parts[0]["ingredient_id"] == &"beras"
 		and staged_parts[1]["ingredient_id"] == &"ayam"
 		and int(staged_parts[1]["state"]) == SharedTypes.PrepState.COOKED
-		and staged_partial.get("matched_recipe_id", &"") == &""
+		and staged_partial.get("matched_recipe_id", &"") == &"nasi_ayam"
 	)
 
 	# Clear stage, re-stage fresh partial [COOKED_RICE] plate, then extend with COOKED telur -> nasi_telor.
@@ -607,24 +618,21 @@ func _test_recipes_and_serving_compatibility() -> void:
 	var run := game_root.get_run_controller() as RunController
 	var ui := game_root.get_node("UI") as GameUI
 
-	# Advance to Day 3 so nasi_telor, nasi_ayam, and nasi_komplit are all unlocked.
-	for _day in range(1, 3):
-		game_root.start_service_requested()
-		_force_empty_service(service)
-		game_root.request_close_if_drained()
-		game_root.request_continue_from_results()
+	# Advance to Day 7 so nasi_telor, nasi_ayam, and 6-part nasi_gila are all unlocked.
+	_advance_to_day(game_root, 7)
 
 	_check(
-		"select all 3 Day 3 recipes, buy extra box_01, and stock ingredients",
-		run.select_daily_menu([&"nasi_telor", &"nasi_ayam", &"nasi_komplit"])
+		"select 3 unlocked Day 7 recipes, buy extra box_01, and stock ingredients",
+		run.select_daily_menu([&"nasi_telor", &"nasi_ayam", &"nasi_gila"])
 		and run.request_fixture_purchase(&"box", &"slot_utility_01")
 		and run.request_ingredient_purchase(&"beras", 2, &"storage_box")
 		and run.request_ingredient_purchase(&"telur", 2, &"storage_box")
+		and run.request_ingredient_purchase(&"sayur", 1, &"storage_box")
 		and run.request_ingredient_purchase(&"ayam", 2, &"box_01")
-		and run.request_ingredient_purchase(&"tempe", 2, &"box_01")
-		and run.request_ingredient_purchase(&"sayur", 1, &"box_01")
+		and run.request_ingredient_purchase(&"tempe", 1, &"box_01")
+		and run.request_ingredient_purchase(&"sapi", 1, &"box_01")
 	)
-	_check("start Day 3 service", game_root.start_service_requested())
+	_check("start Day 7 service", game_root.start_service_requested())
 	_cook_batch_in_cooker(kitchen, ui, &"rice_cooker")
 
 	# 1. Dine-in nasi_telor via two-way path: PlateRack <- telur, then held plate + cooker nasi.
@@ -684,13 +692,7 @@ func _test_recipes_and_serving_compatibility() -> void:
 	var ayam_plate := StringName(kitchen.get_held_item_view().get("plate_id", &""))
 	kitchen.on_interactable_clicked(&"rice_cooker")
 	_type_word(ui, "nasi") # Held [COOKED_RICE].
-	kitchen.on_interactable_clicked(&"work_table_stage") # Held [COOKED_RICE, COOKED ayam].
-	kitchen.on_interactable_clicked(&"work_table_stage") # Stage partial nasi_ayam plate.
-	_take_raw(kitchen, &"box_01", &"tempe")
-	kitchen.on_interactable_clicked(&"stove")
-	_type_word(ui, "goreng")
-	kitchen.on_interactable_clicked(&"work_table_stage") # Merge COOKED tempe -> nasi_ayam.
-	kitchen.on_interactable_clicked(&"work_table_stage") # Pick up completed nasi_ayam.
+	kitchen.on_interactable_clicked(&"work_table_stage") # Merge COOKED ayam -> completed 2-part nasi_ayam!
 	_check(
 		"two-way plated nasi_ayam matched on plate_id cleanly",
 		kitchen.get_held_item_view().get("plate_id", &"") == ayam_plate
@@ -700,13 +702,13 @@ func _test_recipes_and_serving_compatibility() -> void:
 	kitchen.on_interactable_clicked(drv_id)
 	_type_word(ui, "saji")
 	_check(
-		"two-way plated nasi_ayam serves online driver (+19600) and returns plate to RACK",
+		"two-way plated nasi_ayam serves online driver (+20300) and returns plate to RACK",
 		kitchen.get_held_item_view().is_empty()
-		and int(run.get_run_view().get("cash", 0)) == cash_before_ayam + 19600
+		and int(run.get_run_view().get("cash", 0)) == cash_before_ayam + 20300
 		and kitchen._plate_records[ayam_plate]["location"] == &"RACK"
 	)
 
-	# 3. Dine-in nasi_komplit (5 parts incl. chopped sayur) using 3rd portion from same batch!
+	# 3. Dine-in nasi_gila (6 parts incl. chopped sayur + sapi) using 3rd portion from same batch!
 	service._tables[&"dining_table_02"]["state"] = SharedTypes.TableState.OCCUPIED_WAITING
 	service._tables[&"dining_table_02"]["customer_id_or_empty"] = &"cust_m5b_2"
 	service._tables[&"dining_table_02"]["order_id_or_empty"] = &"ord_m5b_2"
@@ -715,48 +717,48 @@ func _test_recipes_and_serving_compatibility() -> void:
 		"state": SharedTypes.CustomerState.SEATED_WAITING,
 		"table_id": &"dining_table_02",
 		"order_id": &"ord_m5b_2",
-		"recipe_id": &"nasi_komplit",
+		"recipe_id": &"nasi_gila",
 		"eat_until": 0.0,
 	}
 	service._orders[&"ord_m5b_2"] = {
 		"order_id": &"ord_m5b_2",
 		"kind": SharedTypes.OrderKind.DINE_IN,
 		"status": SharedTypes.OrderStatus.OPEN,
-		"recipe_id": &"nasi_komplit",
+		"recipe_id": &"nasi_gila",
 		"deadline_at": 100.0,
 		"table_id_or_empty": &"dining_table_02",
 		"customer_id_or_empty": &"cust_m5b_2",
 	}
 
-	_take_raw(kitchen, &"box_01", &"sayur")
+	_take_raw(kitchen, &"storage_box", &"sayur")
 	kitchen.on_interactable_clicked(&"work_table_chop")
 	_type_word(ui, "potong")
 	kitchen.on_interactable_clicked(&"plate_rack") # CHOPPED sayur -> PlateRack!
 	kitchen.on_interactable_clicked(&"rice_cooker")
 	_type_word(ui, "nasi") # Held [CHOPPED sayur, COOKED_RICE].
-	kitchen.on_interactable_clicked(&"work_table_stage") # Stage partial komplit plate.
+	kitchen.on_interactable_clicked(&"work_table_stage") # Stage partial nasi_gila plate.
 
-	for ing_id: StringName in [&"ayam", &"tempe", &"telur"]:
+	for ing_id: StringName in [&"ayam", &"tempe", &"telur", &"sapi"]:
 		var src_unit := &"storage_box" if ing_id == &"telur" else &"box_01"
 		_take_raw(kitchen, src_unit, ing_id)
 		kitchen.on_interactable_clicked(&"stove")
 		_type_word(ui, "goreng")
 		kitchen.on_interactable_clicked(&"work_table_stage")
 
-	kitchen.on_interactable_clicked(&"work_table_stage") # Pick up 5-part nasi_komplit.
+	kitchen.on_interactable_clicked(&"work_table_stage") # Pick up 6-part nasi_gila.
 	_check(
-		"5-part nasi_komplit assembled across mixed two-way directions (2 cooker portions left)",
-		kitchen.get_held_item_view().get("matched_recipe_id", &"") == &"nasi_komplit"
-		and kitchen.get_held_item_view().get("parts", []).size() == 5
+		"6-part nasi_gila assembled across mixed two-way directions (2 cooker portions left)",
+		kitchen.get_held_item_view().get("matched_recipe_id", &"") == &"nasi_gila"
+		and kitchen.get_held_item_view().get("parts", []).size() == 6
 		and int(kitchen.get_cooker_output_view(&"rice_cooker").get("portions", 0)) == 2
 	)
-	var cash_before_komplit := int(run.get_run_view().get("cash", 0))
+	var cash_before_gila := int(run.get_run_view().get("cash", 0))
 	kitchen.on_interactable_clicked(&"dining_table_02")
 	_type_word(ui, "saji")
 	_check(
-		"two-way plated nasi_komplit serves dine-in table_02 (+36000)",
+		"two-way plated nasi_gila serves dine-in table_02 (+70000)",
 		kitchen.get_held_item_view().is_empty()
-		and int(run.get_run_view().get("cash", 0)) == cash_before_komplit + 36000
+		and int(run.get_run_view().get("cash", 0)) == cash_before_gila + 70000
 	)
 
 	game_root.free()
